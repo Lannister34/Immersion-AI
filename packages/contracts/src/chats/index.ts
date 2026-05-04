@@ -81,3 +81,13 @@ export type UpdateChatGenerationSettingsCommand = z.infer<typeof UpdateChatGener
 
 export const UpdateChatGenerationSettingsResponseSchema = ChatSessionDtoSchema;
 export type UpdateChatGenerationSettingsResponse = z.infer<typeof UpdateChatGenerationSettingsResponseSchema>;
+
+export const UpdateChatMessageCommandSchema = z.object({
+  content: z.string().min(1).max(20_000),
+});
+export type UpdateChatMessageCommand = z.infer<typeof UpdateChatMessageCommandSchema>;
+
+export const ChatMessageMutationResponseSchema = z.object({
+  session: ChatSessionDtoSchema,
+});
+export type ChatMessageMutationResponse = z.infer<typeof ChatMessageMutationResponseSchema>;

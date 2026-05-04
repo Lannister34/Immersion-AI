@@ -10,6 +10,13 @@ export class ChatNotFoundError extends Error {
   }
 }
 
+export class ChatMessageNotFoundError extends Error {
+  constructor(chatId: string, messageIndex: number) {
+    super(`Chat message not found: ${chatId}#${messageIndex}`);
+    this.name = 'ChatMessageNotFoundError';
+  }
+}
+
 export async function appendChatMessages(chatId: string, messages: AppendChatMessageInput[]): Promise<ChatSessionDto> {
   const chatRepository = new FileChatRepository();
   const session = await chatRepository.appendGenericChatMessages(chatId, messages);

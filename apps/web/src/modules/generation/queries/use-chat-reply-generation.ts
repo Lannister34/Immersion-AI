@@ -5,6 +5,7 @@ import { chatListQueryKey } from '../../chats/queries/chat-list-query';
 import { chatSessionQueryKey } from '../../chats/queries/chat-session-query';
 import { appendOptimisticUserMessage } from '../../chats/view-models/optimistic-chat-session';
 import { cancelGenerationJob } from '../api/cancel-generation-job';
+import { regenerateChatReply } from '../api/regenerate-chat-reply';
 import { startChatReplyGenerationJob } from '../api/start-chat-reply-generation-job';
 import {
   getLatestGenerationJob,
@@ -106,6 +107,29 @@ export function useChatReplyGeneration(chatId: string) {
       });
     },
   });
+  const regenerateGenerationMutation = useMutation({
+    mutationFn: () => regenerateChatReply({ chatId }),
+    onSuccess: async (response) => {
+      queryClient.setQueryData(chatSessionQueryKey(chatId), response.session);
+      queryClient.setQueryData<ListGenerationJobsResponse>(chatGenerationJobsQueryKey(chatId), (current) => ({
+        items: upsertGenerationJob(current?.items ?? [], response.job),
+      }));
+      await queryClient.invalidateQueries({
+        queryKey: chatListQueryKey,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: chatReplyPromptPreviewQueryBaseKey(chatId),
+      });
+    },
+    onError: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: chatSessionQueryKey(chatId),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: chatGenerationJobsQueryKey(chatId),
+      });
+    },
+  });
 
   return {
     activeJob: activeGenerationJob,
@@ -116,12 +140,14 @@ export function useChatReplyGeneration(chatId: string) {
         });
       }
     },
-    error: startGenerationMutation.error ?? cancelGenerationMutation.error,
+    error: startGenerationMutation.error ?? cancelGenerationMutation.error ?? regenerateGenerationMutation.error,
     isPending:
       startGenerationMutation.isPending ||
       cancelGenerationMutation.isPending ||
+      regenerateGenerationMutation.isPending ||
       Boolean(activeGenerationJob && isActiveGenerationJob(activeGenerationJob)),
     latestJob: latestGenerationJob,
+    regenerate: () => regenerateGenerationMutation.mutateAsync(),
     start: (message: string) =>
       startGenerationMutation.mutateAsync({
         message,

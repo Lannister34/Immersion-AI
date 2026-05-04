@@ -48,6 +48,11 @@ export const StartChatReplyGenerationCommandSchema = z.object({
 });
 export type StartChatReplyGenerationCommand = z.infer<typeof StartChatReplyGenerationCommandSchema>;
 
+export const RegenerateChatReplyCommandSchema = z.object({
+  chatId: ChatIdSchema,
+});
+export type RegenerateChatReplyCommand = z.infer<typeof RegenerateChatReplyCommandSchema>;
+
 export const ChatReplyGenerationResponseSchema = z.object({
   session: ChatSessionDtoSchema,
 });

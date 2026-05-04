@@ -12,7 +12,7 @@ import {
 import type { FastifyPluginAsync } from 'fastify';
 import { ZodError, z } from 'zod';
 
-import { ChatNotFoundError } from '../../../chats/application/append-chat-messages.js';
+import { ChatMessageNotFoundError, ChatNotFoundError } from '../../../chats/application/append-chat-messages.js';
 import { InvalidChatGenerationSettingsResolutionError } from '../../../prompting/application/resolve-chat-generation-settings.js';
 import { GenerationProviderUnavailableError } from '../../../providers/application/generation-provider.js';
 import { generateChatReply } from '../../application/generate-chat-reply.js';
@@ -20,6 +20,10 @@ import { ChatReplyGenerationFailedError, ProviderGenerationError } from '../../a
 import { ActiveGenerationJobExistsError } from '../../application/generation-job-registry.js';
 import { getGenerationReadiness } from '../../application/get-generation-readiness.js';
 import { previewChatReplyPrompt } from '../../application/preview-chat-reply-prompt.js';
+import {
+  NoAssistantMessageToRegenerateError,
+  regenerateChatReplyJob,
+} from '../../application/regenerate-chat-reply-job.js';
 import { startChatReplyGenerationJob } from '../../application/start-chat-reply-generation-job.js';
 import { InMemoryGenerationJobRegistry } from '../../infrastructure/in-memory-generation-job-registry.js';
 
@@ -48,6 +52,26 @@ function toProblem(error: unknown) {
       body: ApiProblemSchema.parse({
         code: 'chat_not_found',
         message: 'Chat session not found.',
+      }),
+    };
+  }
+
+  if (error instanceof ChatMessageNotFoundError) {
+    return {
+      statusCode: 404,
+      body: ApiProblemSchema.parse({
+        code: 'chat_message_not_found',
+        message: 'Chat message not found.',
+      }),
+    };
+  }
+
+  if (error instanceof NoAssistantMessageToRegenerateError) {
+    return {
+      statusCode: 409,
+      body: ApiProblemSchema.parse({
+        code: 'no_assistant_message_to_regenerate',
+        message: 'There is no assistant message to regenerate in this chat.',
       }),
     };
   }
@@ -169,6 +193,21 @@ export const generationRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(202).send(response);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to start chat reply generation job');
+      const problem = toProblem(error);
+
+      return reply.status(problem.statusCode).send(problem.body);
+    }
+  });
+
+  app.post('/chat-reply-jobs/regenerate', async (request, reply) => {
+    try {
+      const response = await regenerateChatReplyJob(request.body, {
+        generationJobRegistry,
+      });
+
+      return reply.status(202).send(response);
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to regenerate chat reply');
       const problem = toProblem(error);
 
       return reply.status(problem.statusCode).send(problem.body);

@@ -38,6 +38,7 @@ import {
   SlidersIcon,
   SortIcon,
   StopIcon,
+  TrashIcon,
   UploadIcon,
   UserIcon,
   XIcon,
@@ -51,7 +52,9 @@ import {
 } from '../generation';
 import { settingsOverviewQueryOptions } from '../settings';
 import { createChat } from './api/create-chat';
+import { useDeleteChatMessage } from './mutations/use-delete-chat-message';
 import { useUpdateChatGenerationSettings } from './mutations/use-update-chat-generation-settings';
+import { useUpdateChatMessage } from './mutations/use-update-chat-message';
 import { chatListQueryKey, chatListQueryOptions } from './queries/chat-list-query';
 import { chatSessionQueryOptions } from './queries/chat-session-query';
 
@@ -370,6 +373,8 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
       });
     },
   });
+  const updateMessageMutation = useUpdateChatMessage(chatId);
+  const deleteMessageMutation = useDeleteChatMessage(chatId);
   const chatReplyGeneration = useChatReplyGeneration(chatId);
 
   const transcriptRef = useRef<HTMLDivElement | null>(null);
@@ -527,16 +532,43 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                   </p>
                 </div>
               ) : (
-                session.messages.map((message) => (
-                  <BubbleMessage
-                    isUser={message.role === 'user'}
-                    isSystem={message.role === 'system'}
-                    key={message.id}
-                    text={message.content}
-                    time={formatTime(message.createdAt)}
-                    who={message.role === 'user' ? session.userName : characterDisplay}
-                  />
-                ))
+                (() => {
+                  const lastAssistantId = [...session.messages].reverse().find((m) => m.role === 'assistant')?.id;
+                  return session.messages.map((message, index) => {
+                    const messageIndex = index + 1;
+                    const isLastAssistant = message.id === lastAssistantId;
+                    const isMutating =
+                      updateMessageMutation.isPending || deleteMessageMutation.isPending || isStreaming;
+                    return (
+                      <BubbleMessage
+                        canRegenerate={isLastAssistant && !isMutating}
+                        isMutating={isMutating}
+                        isSystem={message.role === 'system'}
+                        isUser={message.role === 'user'}
+                        key={message.id}
+                        onDelete={async () => {
+                          await deleteMessageMutation.mutateAsync({ messageIndex });
+                        }}
+                        onRegenerate={async () => {
+                          try {
+                            await chatReplyGeneration.regenerate();
+                          } catch {
+                            // surface via generationErrorMessage
+                          }
+                        }}
+                        onSave={async (content) => {
+                          await updateMessageMutation.mutateAsync({
+                            command: { content },
+                            messageIndex,
+                          });
+                        }}
+                        text={message.content}
+                        time={formatTime(message.createdAt)}
+                        who={message.role === 'user' ? session.userName : characterDisplay}
+                      />
+                    );
+                  });
+                })()
               )}
               {isStreaming ? (
                 <div
@@ -607,17 +639,92 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
 }
 
 interface BubbleMessageProps {
-  isUser: boolean;
+  canRegenerate: boolean;
+  isMutating: boolean;
   isSystem: boolean;
+  isUser: boolean;
+  onDelete: () => Promise<void>;
+  onRegenerate: () => Promise<void>;
+  onSave: (content: string) => Promise<void>;
   text: string;
   time: string;
   who: string;
 }
 
-function BubbleMessage({ isUser, isSystem, text, time, who }: BubbleMessageProps) {
+function BubbleMessage({
+  canRegenerate,
+  isMutating,
+  isSystem,
+  isUser,
+  onDelete,
+  onRegenerate,
+  onSave,
+  text,
+  time,
+  who,
+}: BubbleMessageProps) {
+  const [mode, setMode] = useState<'view' | 'edit'>('view');
+  const [draft, setDraft] = useState(text);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (mode === 'view') {
+      setDraft(text);
+    }
+  }, [mode, text]);
+
   if (isSystem) {
     return <div className="bubble--system bubble">{text}</div>;
   }
+
+  const handleSave = async () => {
+    const trimmed = draft.trim();
+    if (!trimmed || trimmed === text) {
+      setMode('view');
+      return;
+    }
+    setBusy(true);
+    try {
+      await onSave(trimmed);
+      setMode('view');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setDraft(text);
+    setMode('view');
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // ignore — clipboard restrictions
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    setBusy(true);
+    try {
+      await onDelete();
+    } finally {
+      setBusy(false);
+      setConfirmDelete(false);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    setBusy(true);
+    try {
+      await onRegenerate();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div
       style={{
@@ -649,21 +756,103 @@ function BubbleMessage({ isUser, isSystem, text, time, who }: BubbleMessageProps
           <strong style={{ color: 'var(--text)' }}>{who}</strong>
           <span className="mono">{time}</span>
         </div>
-        <div className={isUser ? 'bubble bubble--user' : 'bubble'}>{text}</div>
-        <div className="row gap-4" style={{ justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
-          <button className="btn btn--xs" type="button">
-            <RefreshIcon size={12} />
-          </button>
-          <button className="btn btn--xs" type="button">
-            <CopyIcon size={12} />
-          </button>
-          <button className="btn btn--xs" type="button">
-            <EditIcon size={12} />
-          </button>
-          <button className="btn btn--xs" type="button">
-            <BranchIcon size={12} />
-          </button>
-        </div>
+        {mode === 'edit' ? (
+          <div className={isUser ? 'bubble bubble--user' : 'bubble'} style={{ display: 'grid', gap: 8, padding: 10 }}>
+            <textarea
+              autoFocus
+              className="textarea"
+              onChange={(event) => setDraft(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  handleCancel();
+                } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                  event.preventDefault();
+                  void handleSave();
+                }
+              }}
+              style={{ minHeight: 80, background: 'transparent', border: '1px solid var(--hairline)' }}
+              value={draft}
+            />
+            <div className="row gap-6" style={{ justifyContent: 'flex-end' }}>
+              <span className="muted" style={{ fontSize: 'var(--fz-2xs)', marginRight: 'auto' }}>
+                <span className="kbd">Ctrl</span>+<span className="kbd">Enter</span> сохранить ·{' '}
+                <span className="kbd">Esc</span> отменить
+              </span>
+              <button className="btn btn--xs btn--ghost-bordered" disabled={busy} onClick={handleCancel} type="button">
+                Отменить
+              </button>
+              <button
+                className="btn btn--xs btn--primary"
+                disabled={busy || draft.trim().length === 0}
+                onClick={() => void handleSave()}
+                type="button"
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className={isUser ? 'bubble bubble--user' : 'bubble'}>{text}</div>
+        )}
+        {mode === 'view' ? (
+          <div className="row gap-4" style={{ justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
+            {canRegenerate ? (
+              <button
+                className="btn btn--xs"
+                disabled={isMutating || busy}
+                onClick={() => void handleRegenerate()}
+                title="Перегенерировать"
+                type="button"
+              >
+                <RefreshIcon size={12} />
+              </button>
+            ) : null}
+            <button className="btn btn--xs" onClick={() => void handleCopy()} title="Копировать" type="button">
+              <CopyIcon size={12} />
+            </button>
+            <button
+              className="btn btn--xs"
+              disabled={isMutating || busy}
+              onClick={() => setMode('edit')}
+              title="Редактировать"
+              type="button"
+            >
+              <EditIcon size={12} />
+            </button>
+            {confirmDelete ? (
+              <>
+                <span className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
+                  удалить это и все следующие?
+                </span>
+                <button
+                  className="btn btn--xs btn--danger"
+                  disabled={busy}
+                  onClick={() => void handleConfirmDelete()}
+                  type="button"
+                >
+                  Да
+                </button>
+                <button className="btn btn--xs" disabled={busy} onClick={() => setConfirmDelete(false)} type="button">
+                  Нет
+                </button>
+              </>
+            ) : (
+              <button
+                className="btn btn--xs"
+                disabled={isMutating || busy}
+                onClick={() => setConfirmDelete(true)}
+                title="Удалить (и все последующие)"
+                type="button"
+              >
+                <TrashIcon size={12} />
+              </button>
+            )}
+            <button className="btn btn--xs" disabled title="Разветвить (скоро)" type="button">
+              <BranchIcon size={12} />
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import { PlaceholderScreen } from '../../shared/ui/placeholder-screen';
 export { cancelGenerationJob } from './api/cancel-generation-job';
 export { generateChatReply } from './api/generate-chat-reply';
 export { previewChatReplyPrompt } from './api/preview-chat-reply-prompt';
+export { regenerateChatReply } from './api/regenerate-chat-reply';
 export { startChatReplyGenerationJob } from './api/start-chat-reply-generation-job';
 export { ChatReplyPromptPreviewPanel } from './components/chat-reply-prompt-preview-panel';
 export {

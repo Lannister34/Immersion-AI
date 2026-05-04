@@ -514,4 +514,83 @@ export class FileChatRepository implements ChatRepository {
       return readChatFile(chatId);
     });
   }
+
+  async updateGenericChatMessage(chatId: string, messageIndex: number, content: string, updatedAt: string) {
+    return withChatWriteQueue(chatId, async () => {
+      const currentSession = await readChatFile(chatId);
+
+      if (!currentSession) {
+        return null;
+      }
+
+      if (messageIndex < 1 || messageIndex > currentSession.messages.length) {
+        return null;
+      }
+
+      const filePath = resolveChatFilePath(chatId);
+      const rawContent = await fs.readFile(filePath, 'utf8');
+      const lines = rawContent
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      const existingHeader = lines[0] ? parseStoredHeaderRecord(lines[0], filePath) : null;
+      const existingMessageLines = existingHeader ? lines.slice(1) : lines;
+      const targetIndex = messageIndex - 1;
+
+      if (!existingMessageLines[targetIndex]) {
+        return null;
+      }
+
+      const targetLine = parseStoredChatLine(existingMessageLines[targetIndex] ?? '', filePath, targetIndex + 2);
+      if (!targetLine) {
+        return null;
+      }
+
+      const updatedLine = {
+        ...targetLine,
+        mes: content,
+      };
+      existingMessageLines[targetIndex] = JSON.stringify(updatedLine);
+      const nextLines = [
+        JSON.stringify(updateHeaderRecord(existingHeader, currentSession, updatedAt)),
+        ...existingMessageLines,
+      ];
+
+      await writeChatFileAtomically(filePath, `${nextLines.join('\n')}\n`);
+
+      return readChatFile(chatId);
+    });
+  }
+
+  async truncateGenericChatMessagesFromIndex(chatId: string, fromIndex: number, updatedAt: string) {
+    return withChatWriteQueue(chatId, async () => {
+      const currentSession = await readChatFile(chatId);
+
+      if (!currentSession) {
+        return null;
+      }
+
+      if (fromIndex < 1 || fromIndex > currentSession.messages.length) {
+        return null;
+      }
+
+      const filePath = resolveChatFilePath(chatId);
+      const rawContent = await fs.readFile(filePath, 'utf8');
+      const lines = rawContent
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      const existingHeader = lines[0] ? parseStoredHeaderRecord(lines[0], filePath) : null;
+      const existingMessageLines = existingHeader ? lines.slice(1) : lines;
+      const keptMessageLines = existingMessageLines.slice(0, fromIndex - 1);
+      const nextLines = [
+        JSON.stringify(updateHeaderRecord(existingHeader, currentSession, updatedAt)),
+        ...keptMessageLines,
+      ];
+
+      await writeChatFileAtomically(filePath, `${nextLines.join('\n')}\n`);
+
+      return readChatFile(chatId);
+    });
+  }
 }

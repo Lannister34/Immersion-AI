@@ -11,9 +11,20 @@ export interface ChatRepository {
   createGenericChat(input: CreateGenericChatInput): Promise<ChatSummaryRecord>;
   getGenericChatSession(chatId: string): Promise<ChatSessionRecord | null>;
   listGenericChats(): Promise<ChatSummaryRecord[]>;
+  truncateGenericChatMessagesFromIndex(
+    chatId: string,
+    fromIndex: number,
+    updatedAt: string,
+  ): Promise<ChatSessionRecord | null>;
   updateGenericChatGenerationSettings(
     chatId: string,
     settings: ChatGenerationSettingsRecord,
+    updatedAt: string,
+  ): Promise<ChatSessionRecord | null>;
+  updateGenericChatMessage(
+    chatId: string,
+    messageIndex: number,
+    content: string,
     updatedAt: string,
   ): Promise<ChatSessionRecord | null>;
 }
