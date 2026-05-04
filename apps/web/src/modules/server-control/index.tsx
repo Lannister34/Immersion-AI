@@ -165,7 +165,7 @@ export function ServerControlScreen() {
             </div>
           </div>
         </div>
-        <div className="page__body" style={{ display: 'grid', gap: 14 }}>
+        <div className="page__body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {activeMode === 'builtin' && overview ? (
             <>
               <section
