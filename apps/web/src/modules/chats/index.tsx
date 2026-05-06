@@ -52,6 +52,7 @@ import {
 } from '../generation';
 import { settingsOverviewQueryOptions } from '../settings';
 import { createChat } from './api/create-chat';
+import { useBranchChat } from './mutations/use-branch-chat';
 import { useDeleteChatMessage } from './mutations/use-delete-chat-message';
 import { useUpdateChatGenerationSettings } from './mutations/use-update-chat-generation-settings';
 import { useUpdateChatMessage } from './mutations/use-update-chat-message';
@@ -361,6 +362,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const deferredDraftMessage = useDeferredValue(draftMessage);
   const [openSection, setOpenSection] = useState<RightPanelSection>('settings');
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const chatSessionQuery = useQuery(chatSessionQueryOptions(chatId));
   const generationReadinessQuery = useQuery(generationReadinessQueryOptions());
@@ -375,6 +377,11 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   });
   const updateMessageMutation = useUpdateChatMessage(chatId);
   const deleteMessageMutation = useDeleteChatMessage(chatId);
+  const branchChatMutation = useBranchChat(chatId, {
+    onSuccess: async (response) => {
+      await navigate({ to: '/chat/$chatId', params: { chatId: response.chat.id } });
+    },
+  });
   const chatReplyGeneration = useChatReplyGeneration(chatId);
 
   const transcriptRef = useRef<HTMLDivElement | null>(null);
@@ -538,7 +545,10 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                     const messageIndex = index + 1;
                     const isLastAssistant = message.id === lastAssistantId;
                     const isMutating =
-                      updateMessageMutation.isPending || deleteMessageMutation.isPending || isStreaming;
+                      updateMessageMutation.isPending ||
+                      deleteMessageMutation.isPending ||
+                      branchChatMutation.isPending ||
+                      isStreaming;
                     return (
                       <BubbleMessage
                         canRegenerate={isLastAssistant && !isMutating}
@@ -546,6 +556,9 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                         isSystem={message.role === 'system'}
                         isUser={message.role === 'user'}
                         key={message.id}
+                        onBranch={async () => {
+                          await branchChatMutation.mutateAsync({ throughMessageIndex: messageIndex });
+                        }}
                         onDelete={async () => {
                           await deleteMessageMutation.mutateAsync({ messageIndex });
                         }}
@@ -643,6 +656,7 @@ interface BubbleMessageProps {
   isMutating: boolean;
   isSystem: boolean;
   isUser: boolean;
+  onBranch: () => Promise<void>;
   onDelete: () => Promise<void>;
   onRegenerate: () => Promise<void>;
   onSave: (content: string) => Promise<void>;
@@ -656,6 +670,7 @@ function BubbleMessage({
   isMutating,
   isSystem,
   isUser,
+  onBranch,
   onDelete,
   onRegenerate,
   onSave,
@@ -720,6 +735,15 @@ function BubbleMessage({
     setBusy(true);
     try {
       await onRegenerate();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleBranch = async () => {
+    setBusy(true);
+    try {
+      await onBranch();
     } finally {
       setBusy(false);
     }
@@ -848,7 +872,13 @@ function BubbleMessage({
                 <TrashIcon size={12} />
               </button>
             )}
-            <button className="btn btn--xs" disabled title="Разветвить (скоро)" type="button">
+            <button
+              className="btn btn--xs"
+              disabled={isMutating || busy}
+              onClick={() => void handleBranch()}
+              title="Разветвить с этой реплики"
+              type="button"
+            >
               <BranchIcon size={12} />
             </button>
           </div>

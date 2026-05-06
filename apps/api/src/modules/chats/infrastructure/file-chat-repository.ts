@@ -18,7 +18,7 @@ import {
   createDefaultChatGenerationSettings,
   createDefaultChatSamplingOverrides,
 } from '../application/chat-records.js';
-import type { ChatRepository } from '../application/chat-repository.js';
+import type { ChatRepository, ForkGenericChatInput } from '../application/chat-repository.js';
 
 // MVP scope: rewrite chats are generic-only until the character-backed slice lands.
 const GENERIC_CHAT_DIRECTORY = '_no_character_';
@@ -432,6 +432,46 @@ export class FileChatRepository implements ChatRepository {
       await writeChatFileAtomically(filePath, `${nextLines.join('\n')}\n`);
 
       return readChatFile(chatId);
+    });
+  }
+
+  async forkGenericChat(input: ForkGenericChatInput): Promise<ChatSummaryRecord | null> {
+    return withChatWriteQueue(input.sourceChatId, async () => {
+      const sourceSession = await readChatFile(input.sourceChatId);
+      if (!sourceSession) {
+        return null;
+      }
+      if (input.throughIndex < 1 || input.throughIndex > sourceSession.messages.length) {
+        return null;
+      }
+
+      const sourceFilePath = resolveChatFilePath(input.sourceChatId);
+      const rawContent = await fs.readFile(sourceFilePath, 'utf8');
+      const lines = rawContent
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      const sourceHeader = lines[0] ? parseStoredHeaderRecord(lines[0], sourceFilePath) : null;
+      const sourceMessageLines = sourceHeader ? lines.slice(1) : lines;
+      const keptMessageLines = sourceMessageLines.slice(0, input.throughIndex);
+      const newHeader: StoredChatHeader = {
+        chat_metadata: {
+          createdAt: input.createdAt,
+          title: input.title,
+          updatedAt: input.createdAt,
+        },
+        character_name: sourceSession.characterName ?? '',
+        generation_settings: serializeGenerationSettings(sourceSession.generationSettings),
+        user_name: sourceSession.userName ?? '',
+      };
+      const nextLines = [JSON.stringify(newHeader), ...keptMessageLines];
+      const newFilePath = resolveChatFilePath(input.newChatId);
+
+      await fs.mkdir(resolveChatsDirectory(), { recursive: true });
+      await writeChatFileAtomically(newFilePath, `${nextLines.join('\n')}\n`);
+
+      const newSession = await readChatFile(input.newChatId);
+      return newSession?.chat ?? null;
     });
   }
 

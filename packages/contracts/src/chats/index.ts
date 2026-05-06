@@ -91,3 +91,14 @@ export const ChatMessageMutationResponseSchema = z.object({
   session: ChatSessionDtoSchema,
 });
 export type ChatMessageMutationResponse = z.infer<typeof ChatMessageMutationResponseSchema>;
+
+export const BranchChatCommandSchema = z.object({
+  throughMessageIndex: z.number().int().positive(),
+  title: z.string().trim().min(1).max(120).optional(),
+});
+export type BranchChatCommand = z.infer<typeof BranchChatCommandSchema>;
+
+export const BranchChatResponseSchema = z.object({
+  chat: ChatSummaryDtoSchema,
+});
+export type BranchChatResponse = z.infer<typeof BranchChatResponseSchema>;

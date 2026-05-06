@@ -1,8 +1,14 @@
-import { ChatIdSchema, CreateChatCommandSchema, UpdateChatMessageCommandSchema } from '@immersion/contracts/chats';
+import {
+  BranchChatCommandSchema,
+  ChatIdSchema,
+  CreateChatCommandSchema,
+  UpdateChatMessageCommandSchema,
+} from '@immersion/contracts/chats';
 import { ApiProblemSchema } from '@immersion/contracts/common';
 import type { FastifyPluginAsync } from 'fastify';
 import { ZodError, z } from 'zod';
 import { ChatMessageNotFoundError, ChatNotFoundError } from '../../application/append-chat-messages.js';
+import { branchChat } from '../../application/branch-chat.js';
 import { createChat } from '../../application/create-chat.js';
 import { getChatSession } from '../../application/get-chat-session.js';
 import { listChats } from '../../application/list-chats.js';
@@ -163,6 +169,26 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return { session };
     } catch (error) {
       request.log.error({ err: error }, 'Failed to truncate chat messages');
+      const problem = toProblem(error);
+
+      return reply.status(problem.statusCode).send(problem.body);
+    }
+  });
+
+  app.post('/:chatId/branch', async (request, reply) => {
+    try {
+      const { chatId } = ChatRouteParamsSchema.parse(request.params);
+      const command = BranchChatCommandSchema.parse(request.body);
+      const chat = await branchChat({
+        now: () => new Date(),
+        sourceChatId: chatId,
+        throughIndex: command.throughMessageIndex,
+        ...(command.title ? { title: command.title } : {}),
+      });
+
+      return reply.status(201).send({ chat });
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to branch chat');
       const problem = toProblem(error);
 
       return reply.status(problem.statusCode).send(problem.body);
