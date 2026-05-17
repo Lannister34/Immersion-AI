@@ -3,7 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  BranchChatResponseSchema,
   ChatListResponseSchema,
+  ChatMessageMutationResponseSchema,
   CreateChatResponseSchema,
   GetChatSessionResponseSchema,
   UpdateChatGenerationSettingsResponseSchema,
@@ -542,6 +544,271 @@ describe('chat routes', () => {
     expect(response.json()).toMatchObject({
       code: 'chat_not_found',
     });
+
+    await app.close();
+  });
+
+  it('patches a single message content and returns the refreshed session', async () => {
+    await writeGenericChatFile('edit-route-chat', [
+      JSON.stringify({
+        chat_metadata: {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          title: 'Edit route',
+          updatedAt: '2026-01-01T00:00:03.000Z',
+        },
+        user_name: 'Тестер',
+        character_name: '',
+      }),
+      JSON.stringify({ is_user: true, mes: 'one', send_date: '2026-01-01T00:00:01.000Z' }),
+      JSON.stringify({ is_user: false, mes: 'two', send_date: '2026-01-01T00:00:02.000Z' }),
+      JSON.stringify({ is_user: true, mes: 'three', send_date: '2026-01-01T00:00:03.000Z' }),
+    ]);
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/chats/edit-route-chat/messages/2',
+      payload: { content: 'two-edited' },
+    });
+    const payload = ChatMessageMutationResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(payload.session.messages.map((message) => message.content)).toEqual(['one', 'two-edited', 'three']);
+    expect(payload.session.messages.map((message) => message.role)).toEqual(['user', 'assistant', 'user']);
+
+    await app.close();
+  });
+
+  it('rejects empty content when patching a message', async () => {
+    await writeGenericChatFile('edit-empty-chat', [
+      JSON.stringify({
+        chat_metadata: {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          title: 'Empty edit',
+          updatedAt: '2026-01-01T00:00:01.000Z',
+        },
+        user_name: 'Тестер',
+        character_name: '',
+      }),
+      JSON.stringify({ is_user: true, mes: 'kept', send_date: '2026-01-01T00:00:01.000Z' }),
+    ]);
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/chats/edit-empty-chat/messages/1',
+      payload: { content: '' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: 'validation_error' });
+
+    await app.close();
+  });
+
+  it('returns 404 when patching a non-existent message index', async () => {
+    await writeGenericChatFile('edit-missing-chat', [
+      JSON.stringify({
+        chat_metadata: {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          title: 'Missing edit',
+          updatedAt: '2026-01-01T00:00:01.000Z',
+        },
+        user_name: 'Тестер',
+        character_name: '',
+      }),
+      JSON.stringify({ is_user: true, mes: 'only', send_date: '2026-01-01T00:00:01.000Z' }),
+    ]);
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/chats/edit-missing-chat/messages/9',
+      payload: { content: 'oops' },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'chat_message_not_found' });
+
+    await app.close();
+  });
+
+  it('truncates messages from the chosen index via DELETE', async () => {
+    await writeGenericChatFile('truncate-route-chat', [
+      JSON.stringify({
+        chat_metadata: {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          title: 'Truncate route',
+          updatedAt: '2026-01-01T00:00:04.000Z',
+        },
+        user_name: 'Тестер',
+        character_name: '',
+      }),
+      JSON.stringify({ is_user: true, mes: 'keep-1', send_date: '2026-01-01T00:00:01.000Z' }),
+      JSON.stringify({ is_user: false, mes: 'keep-2', send_date: '2026-01-01T00:00:02.000Z' }),
+      JSON.stringify({ is_user: true, mes: 'drop-1', send_date: '2026-01-01T00:00:03.000Z' }),
+      JSON.stringify({ is_user: false, mes: 'drop-2', send_date: '2026-01-01T00:00:04.000Z' }),
+    ]);
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/api/chats/truncate-route-chat/messages/3',
+    });
+    const payload = ChatMessageMutationResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(payload.session.messages.map((message) => message.content)).toEqual(['keep-1', 'keep-2']);
+    expect(payload.session.chat.messageCount).toBe(2);
+
+    await app.close();
+  });
+
+  it('returns 404 when truncating with an out-of-range index', async () => {
+    await writeGenericChatFile('truncate-missing-chat', [
+      JSON.stringify({
+        chat_metadata: {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          title: 'Truncate missing',
+          updatedAt: '2026-01-01T00:00:01.000Z',
+        },
+        user_name: 'Тестер',
+        character_name: '',
+      }),
+      JSON.stringify({ is_user: true, mes: 'only', send_date: '2026-01-01T00:00:01.000Z' }),
+    ]);
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/api/chats/truncate-missing-chat/messages/9',
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'chat_message_not_found' });
+
+    await app.close();
+  });
+
+  it('branches a chat from the chosen message and returns the new summary', async () => {
+    await writeGenericChatFile('branch-source-chat', [
+      JSON.stringify({
+        chat_metadata: {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          title: 'Branch source',
+          updatedAt: '2026-01-01T00:00:04.000Z',
+        },
+        user_name: 'Тестер',
+        character_name: '',
+      }),
+      JSON.stringify({ is_user: true, mes: 'shared-1', send_date: '2026-01-01T00:00:01.000Z' }),
+      JSON.stringify({ is_user: false, mes: 'shared-2', send_date: '2026-01-01T00:00:02.000Z' }),
+      JSON.stringify({ is_user: true, mes: 'shared-3', send_date: '2026-01-01T00:00:03.000Z' }),
+      JSON.stringify({ is_user: false, mes: 'tail', send_date: '2026-01-01T00:00:04.000Z' }),
+    ]);
+
+    const app = buildApiApp();
+    const branchResponse = await app.inject({
+      method: 'POST',
+      url: '/api/chats/branch-source-chat/branch',
+      payload: { throughMessageIndex: 3 },
+    });
+    const branchPayload = BranchChatResponseSchema.parse(branchResponse.json());
+
+    expect(branchResponse.statusCode).toBe(201);
+    expect(branchPayload.chat.title).toBe('Branch source (ветка)');
+    expect(branchPayload.chat.id).not.toBe('branch-source-chat');
+    expect(branchPayload.chat.messageCount).toBe(3);
+
+    const sourceResponse = await app.inject({
+      method: 'GET',
+      url: '/api/chats/branch-source-chat',
+    });
+    const sourcePayload = GetChatSessionResponseSchema.parse(sourceResponse.json());
+    expect(sourcePayload.messages.map((message) => message.content)).toEqual([
+      'shared-1',
+      'shared-2',
+      'shared-3',
+      'tail',
+    ]);
+    expect(sourcePayload.chat.title).toBe('Branch source');
+
+    const forkResponse = await app.inject({
+      method: 'GET',
+      url: `/api/chats/${branchPayload.chat.id}`,
+    });
+    const forkPayload = GetChatSessionResponseSchema.parse(forkResponse.json());
+    expect(forkPayload.messages.map((message) => message.content)).toEqual(['shared-1', 'shared-2', 'shared-3']);
+    expect(forkPayload.userName).toBe('Тестер');
+
+    await app.close();
+  });
+
+  it('honours a custom title when branching', async () => {
+    await writeGenericChatFile('branch-titled-source', [
+      JSON.stringify({
+        chat_metadata: {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          title: 'Original',
+          updatedAt: '2026-01-01T00:00:01.000Z',
+        },
+        user_name: 'Тестер',
+        character_name: '',
+      }),
+      JSON.stringify({ is_user: true, mes: 'one', send_date: '2026-01-01T00:00:01.000Z' }),
+    ]);
+
+    const app = buildApiApp();
+    const branchResponse = await app.inject({
+      method: 'POST',
+      url: '/api/chats/branch-titled-source/branch',
+      payload: { throughMessageIndex: 1, title: 'Альтернативный путь' },
+    });
+    const branchPayload = BranchChatResponseSchema.parse(branchResponse.json());
+
+    expect(branchResponse.statusCode).toBe(201);
+    expect(branchPayload.chat.title).toBe('Альтернативный путь');
+
+    await app.close();
+  });
+
+  it('returns 404 when branching from a missing chat', async () => {
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/chats/never-existed/branch',
+      payload: { throughMessageIndex: 1 },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'chat_not_found' });
+
+    await app.close();
+  });
+
+  it('returns 404 when branching with an out-of-range index', async () => {
+    await writeGenericChatFile('branch-range-chat', [
+      JSON.stringify({
+        chat_metadata: {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          title: 'Range',
+          updatedAt: '2026-01-01T00:00:01.000Z',
+        },
+        user_name: 'Тестер',
+        character_name: '',
+      }),
+      JSON.stringify({ is_user: true, mes: 'only', send_date: '2026-01-01T00:00:01.000Z' }),
+    ]);
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/chats/branch-range-chat/branch',
+      payload: { throughMessageIndex: 99 },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'chat_message_not_found' });
 
     await app.close();
   });

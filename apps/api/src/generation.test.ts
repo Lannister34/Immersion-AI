@@ -857,6 +857,100 @@ describe('generation routes', () => {
     await app.close();
   });
 
+  it('regenerates the last assistant reply by dropping it and producing a new one from the same user turn', async () => {
+    const firstProvider = mockProviderSuccess('First reply.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+
+    const firstResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply',
+      payload: {
+        chatId: chat.id,
+        message: 'Tell me a joke.',
+      },
+    });
+    expect(firstResponse.statusCode).toBe(200);
+    expect(firstProvider).toHaveLength(1);
+
+    const secondProvider = mockProviderSuccess('Regenerated reply.');
+    const regenerateResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs/regenerate',
+      payload: {
+        chatId: chat.id,
+      },
+    });
+    const regeneratePayload = StartChatReplyGenerationJobResponseSchema.parse(regenerateResponse.json());
+
+    expect(regenerateResponse.statusCode).toBe(202);
+    expect(regeneratePayload.job).toMatchObject({
+      chatId: chat.id,
+      kind: 'chat_reply',
+    });
+    expect(getMessagesByRole(regeneratePayload.session.messages)).toEqual([
+      { role: 'user', content: 'Tell me a joke.' },
+    ]);
+
+    await waitForGenerationJobStatus(app, regeneratePayload.job.id, 'completed');
+
+    const sessionResponse = await app.inject({
+      method: 'GET',
+      url: `/api/chats/${chat.id}`,
+    });
+    const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
+
+    expect(getMessagesByRole(sessionPayload.messages)).toEqual([
+      { role: 'user', content: 'Tell me a joke.' },
+      { role: 'assistant', content: 'Regenerated reply.' },
+    ]);
+    expect(secondProvider).toHaveLength(1);
+    const regenRequestBody = getProviderRequestBody(secondProvider[0]);
+    const userTurns =
+      regenRequestBody.messages?.filter(
+        (message) => message.role === 'user' && message.content === 'Tell me a joke.',
+      ) ?? [];
+    expect(userTurns).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it('refuses to regenerate when the last message is not an assistant reply', async () => {
+    const app = buildApiApp();
+    const chat = await createChat(app);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs/regenerate',
+      payload: {
+        chatId: chat.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      code: 'no_assistant_message_to_regenerate',
+    });
+
+    await app.close();
+  });
+
+  it('returns 404 when regenerating a missing chat', async () => {
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs/regenerate',
+      payload: {
+        chatId: 'never-existed',
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'chat_not_found' });
+
+    await app.close();
+  });
+
   it('falls back to the active sampler preset when the provider model has no binding', async () => {
     await writeExternalProviderSettings('http://127.0.0.1:6006', 'unbound-model');
     const providerRequests = mockProviderSuccess('Assistant reply from unbound provider.');
