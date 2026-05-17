@@ -37,6 +37,7 @@ export interface ChatReplyPromptBundle {
 export interface BuildChatReplyPromptInput {
   character?: PromptCharacterSnapshot | null;
   characterScenarioContent?: string | null;
+  lorebookSections?: string[];
   samplerPreset: ActiveSamplerPreset;
   session: ChatSessionDto;
   settings: SettingsOverviewResponse;
@@ -285,9 +286,16 @@ export function buildChatReplyPromptBundle(input: BuildChatReplyPromptInput): Ch
     ? getLanguageInstruction(input.settings.profile.responseLanguage)
     : null;
   const characterContext = buildCharacterContextSection(character, input.characterScenarioContent ?? null);
-  const systemSections = [characterContext, basePrompt.prompt, languageInstruction].filter(
-    (section): section is string => section !== null && section.trim().length > 0,
-  );
+  const lorebookContext = (input.lorebookSections ?? [])
+    .map((section) => section.trim())
+    .filter((section) => section.length > 0)
+    .join('\n\n');
+  const systemSections = [
+    characterContext,
+    lorebookContext.length > 0 ? `World context:\n${lorebookContext}` : null,
+    basePrompt.prompt,
+    languageInstruction,
+  ].filter((section): section is string => section !== null && section.trim().length > 0);
   const messages: ChatReplyPromptMessage[] = [];
 
   if (systemSections.length > 0) {

@@ -673,6 +673,86 @@ describe('generation routes', () => {
     await app.close();
   });
 
+  it('injects scenario content into the prompt for a scenario-bound chat', async () => {
+    const scenariosDir = path.join(temporaryDataRoot, 'scenarios');
+    await fs.mkdir(scenariosDir, { recursive: true });
+    await fs.writeFile(
+      path.join(scenariosDir, 'Ice training.json'),
+      JSON.stringify({
+        name: 'Ice training',
+        content: 'A figure skater practises quads under the watchful coach Daniil Markovich.',
+        concept: 'Pressure on the rink.',
+      }),
+      'utf8',
+    );
+
+    const app = buildApiApp();
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/chats',
+      payload: { scenarioId: 'Ice training.json' },
+    });
+    const chatPayload = CreateChatResponseSchema.parse(createResponse.json());
+    expect(createResponse.statusCode).toBe(201);
+    expect(chatPayload.chat.scenarioId).toBe('Ice training.json');
+    expect(chatPayload.chat.scenarioName).toBe('Ice training');
+    expect(chatPayload.chat.title).toBe('Ice training');
+
+    const previewResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: { chatId: chatPayload.chat.id, draftUserMessage: 'Start.' },
+    });
+    const preview = ChatReplyPromptPreviewResponseSchema.parse(previewResponse.json());
+    const systemMessage = preview.request.messages.find((m) => m.role === 'system');
+    expect(systemMessage?.content).toContain('figure skater practises quads');
+
+    await app.close();
+  });
+
+  it('injects matching lorebook entries into the prompt when keys are mentioned', async () => {
+    const worldsDir = path.join(temporaryDataRoot, 'worlds');
+    await fs.mkdir(worldsDir, { recursive: true });
+    await fs.writeFile(
+      path.join(worldsDir, 'Studio.json'),
+      JSON.stringify({
+        name: 'Студия «Меандр»',
+        entries: [
+          { keys: ['Меандр'], content: 'Студия керамики в Петербурге.', enabled: true, priority: 5 },
+          { keys: ['обжиг'], content: 'Процесс обжига занимает 12 часов.', enabled: true, priority: 1 },
+          { keys: ['неупомянуто'], content: 'Не должно сработать.', enabled: true, priority: 0 },
+        ],
+      }),
+      'utf8',
+    );
+
+    const app = buildApiApp();
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/chats',
+      payload: { lorebookIds: ['Studio.json'], title: 'lorebook chat' },
+    });
+    const chatPayload = CreateChatResponseSchema.parse(createResponse.json());
+    expect(createResponse.statusCode).toBe(201);
+
+    const previewResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: {
+        chatId: chatPayload.chat.id,
+        draftUserMessage: 'Расскажи про Меандр.',
+      },
+    });
+    const preview = ChatReplyPromptPreviewResponseSchema.parse(previewResponse.json());
+    const systemMessage = preview.request.messages.find((m) => m.role === 'system');
+    expect(systemMessage?.content).toContain('World context');
+    expect(systemMessage?.content).toContain('Студия керамики в Петербурге.');
+    expect(systemMessage?.content).not.toContain('Процесс обжига занимает 12 часов.');
+    expect(systemMessage?.content).not.toContain('Не должно сработать.');
+
+    await app.close();
+  });
+
   it('keeps the generic helper prompt for chats without a character', async () => {
     const app = buildApiApp();
     const chat = await createChat(app);

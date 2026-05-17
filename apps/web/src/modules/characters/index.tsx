@@ -1,10 +1,10 @@
 import type { CharacterSummaryDto } from '@immersion/contracts/characters';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { type MouseEvent, useMemo, useState } from 'react';
+import { type ChangeEvent, type MouseEvent, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
-import { createApiUrl } from '../../shared/api/client';
+import { ApiError, createApiUrl } from '../../shared/api/client';
 import {
   ChatIcon,
   FilterIcon,
@@ -17,9 +17,27 @@ import {
 } from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
 import { chatListQueryKey } from '../chats/queries/chat-list-query';
-import { characterListQueryOptions } from './queries/character-list-query';
+import { importCharacterCard } from './api/import-character-card';
+import { characterListQueryKey, characterListQueryOptions } from './queries/character-list-query';
 
 export { CharacterEditorScreen } from './editor';
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== 'string') {
+        reject(new Error('File reader returned a non-string result.'));
+        return;
+      }
+      const commaIndex = result.indexOf(',');
+      resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file.'));
+    reader.readAsDataURL(file);
+  });
+}
 
 function avatarColor(seed: string): string {
   let hash = 0;
@@ -52,8 +70,11 @@ function formatRelative(iso: string, now: Date = new Date()): string {
 }
 
 export function CharactersScreen() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const query = useQuery(characterListQueryOptions());
   const [search, setSearch] = useState('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const items = query.data?.items ?? [];
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -61,13 +82,49 @@ export function CharactersScreen() {
     return items.filter((item) => item.name.toLowerCase().includes(needle));
   }, [items, search]);
 
+  const importMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const contentBase64 = await readFileAsBase64(file);
+      return importCharacterCard({ contentBase64, fileName: file.name });
+    },
+    onSuccess: async (response) => {
+      await queryClient.invalidateQueries({ queryKey: characterListQueryKey });
+      await navigate({ to: '/characters/$characterId', params: { characterId: response.character.id } });
+    },
+  });
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) return;
+    importMutation.mutate(file);
+  };
+
+  const importErrorMessage =
+    importMutation.error instanceof ApiError
+      ? importMutation.error.message
+      : importMutation.error
+        ? 'Не удалось импортировать карточку.'
+        : null;
+
   return (
     <main className="main">
       <Topbar
         actions={
           <>
-            <button className="btn" disabled type="button">
-              <UploadIcon size={13} /> Импорт
+            <input accept=".png,image/png" hidden onChange={handleFileChange} ref={fileInputRef} type="file" />
+            <button
+              className="btn"
+              disabled={importMutation.isPending}
+              onClick={handleImportClick}
+              title="Импорт карточки PNG SillyTavern"
+              type="button"
+            >
+              <UploadIcon size={13} /> {importMutation.isPending ? 'Импорт…' : 'Импорт'}
             </button>
             <Link className="btn btn--primary" to="/characters/new">
               <PlusIcon size={13} /> Новый персонаж
@@ -89,6 +146,11 @@ export function CharactersScreen() {
                     ? 'Не удалось загрузить персонажей'
                     : `${items.length} карт${items.length === 1 ? 'а' : items.length >= 2 && items.length <= 4 ? 'ы' : ''} в библиотеке`}
               </div>
+              {importErrorMessage ? (
+                <div style={{ color: 'var(--danger)', fontSize: 'var(--fz-xs)', marginTop: 4 }}>
+                  {importErrorMessage}
+                </div>
+              ) : null}
             </div>
             <div className="row gap-8">
               <div className="search" style={{ minWidth: 240 }}>

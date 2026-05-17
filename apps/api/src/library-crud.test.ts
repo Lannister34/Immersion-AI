@@ -1,13 +1,62 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-
+import zlib from 'node:zlib';
 import { CharacterDetailResponseSchema, CharacterListResponseSchema } from '@immersion/contracts/characters';
 import { LorebookDetailResponseSchema, LorebookListResponseSchema } from '@immersion/contracts/lorebooks';
 import { ScenarioDetailResponseSchema, ScenarioListResponseSchema } from '@immersion/contracts/scenarios';
+
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildApiApp } from './app.js';
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+function buildChunk(type: string, data: Buffer): Buffer {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length, 0);
+  const typeAndData = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+  const crcTable: number[] = [];
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) {
+      c = c & 1 ? 0xed_b8_83_20 ^ (c >>> 1) : c >>> 1;
+    }
+    crcTable[n] = c >>> 0;
+  }
+  let crc = 0xff_ff_ff_ff;
+  for (const byte of typeAndData) {
+    crc = (crcTable[(crc ^ byte) & 0xff]! ^ (crc >>> 8)) >>> 0;
+  }
+  const crcBuffer = Buffer.alloc(4);
+  crcBuffer.writeUInt32BE((crc ^ 0xff_ff_ff_ff) >>> 0, 0);
+  return Buffer.concat([length, typeAndData, crcBuffer]);
+}
+
+function buildPngWithCharaChunk(cardJson: string): Buffer {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(1, 0); // width
+  ihdr.writeUInt32BE(1, 4); // height
+  ihdr.writeUInt8(8, 8); // bit depth
+  ihdr.writeUInt8(0, 9); // colour type (grayscale)
+  ihdr.writeUInt8(0, 10); // compression
+  ihdr.writeUInt8(0, 11); // filter
+  ihdr.writeUInt8(0, 12); // interlace
+
+  const idatRaw = Buffer.from([0x00, 0x00]); // 1 filter byte + 1 sample byte
+  const idatCompressed = zlib.deflateSync(idatRaw);
+
+  const cardBase64 = Buffer.from(cardJson, 'utf8').toString('base64');
+  const tEXt = Buffer.concat([Buffer.from('chara', 'ascii'), Buffer.from([0x00]), Buffer.from(cardBase64, 'latin1')]);
+
+  return Buffer.concat([
+    PNG_SIGNATURE,
+    buildChunk('IHDR', ihdr),
+    buildChunk('tEXt', tEXt),
+    buildChunk('IDAT', idatCompressed),
+    buildChunk('IEND', Buffer.alloc(0)),
+  ]);
+}
 
 describe('library CRUD routes', () => {
   let previousDataRoot: string | undefined;
@@ -152,6 +201,61 @@ describe('library CRUD routes', () => {
       });
       expect(missingResponse.statusCode).toBe(404);
 
+      await app.close();
+    });
+
+    it('imports a SillyTavern PNG character card and returns the editable JSON detail', async () => {
+      const cardJson = {
+        spec: 'chara_card_v2',
+        data: {
+          name: 'Эмбер',
+          description: 'Молодой дракон, любящий светлячков.',
+          personality: 'Любопытный и мягкий.',
+          scenario: 'Лесная поляна на закате.',
+          first_mes: 'Привет, ты тоже пришёл за светлячками?',
+        },
+      };
+      const png = buildPngWithCharaChunk(JSON.stringify(cardJson));
+
+      const app = buildApiApp();
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/characters/import',
+        payload: {
+          fileName: 'Ember.png',
+          contentBase64: png.toString('base64'),
+        },
+      });
+      const payload = CharacterDetailResponseSchema.parse(response.json());
+
+      expect(response.statusCode).toBe(201);
+      expect(payload.character.name).toBe('Эмбер');
+      expect(payload.character.description).toContain('светлячков');
+      expect(payload.character.personality).toContain('Любопытный');
+      expect(payload.character.firstMessage).toContain('светлячками');
+      expect(payload.character.source).toBe('json');
+      expect(payload.character.isEditable).toBe(true);
+      expect(payload.character.avatarUrl).toMatch(/\.png\/avatar$/);
+
+      const listResponse = await app.inject({ method: 'GET', url: '/api/characters' });
+      const listPayload = CharacterListResponseSchema.parse(listResponse.json());
+      expect(listPayload.items.some((item) => item.id === payload.character.id)).toBe(true);
+
+      await app.close();
+    });
+
+    it('rejects an upload that is not a PNG character card', async () => {
+      const app = buildApiApp();
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/characters/import',
+        payload: {
+          fileName: 'note.txt',
+          contentBase64: Buffer.from('just a note').toString('base64'),
+        },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ code: 'invalid_character_card' });
       await app.close();
     });
 

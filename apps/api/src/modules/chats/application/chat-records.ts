@@ -13,7 +13,10 @@ export interface ChatSummaryRecord {
   createdAt: string;
   id: string;
   lastMessagePreview: string | null;
+  lorebookIds: string[];
   messageCount: number;
+  scenarioId: string | null;
+  scenarioName: string | null;
   title: string;
   updatedAt: string;
 }
@@ -21,6 +24,9 @@ export interface ChatSummaryRecord {
 export interface ChatSessionRecord {
   characterId: string | null;
   characterName: string | null;
+  scenarioId: string | null;
+  scenarioName: string | null;
+  lorebookIds: string[];
   chat: ChatSummaryRecord;
   generationSettings: ChatGenerationSettingsRecord;
   messages: ChatMessageRecord[];
@@ -30,6 +36,9 @@ export interface ChatSessionRecord {
 export interface CreateGenericChatInput {
   characterId?: string | null;
   characterName?: string | null;
+  scenarioId?: string | null;
+  scenarioName?: string | null;
+  lorebookIds?: string[];
   createdAt: string;
   id: string;
   seedMessages?: AppendChatMessageInput[];

@@ -35,6 +35,9 @@ interface StoredChatHeader {
   chat_metadata?: StoredChatMetadata;
   character_id?: string;
   character_name?: string;
+  scenario_id?: string;
+  scenario_name?: string;
+  lorebook_ids?: string[];
   generation_settings?: StoredChatGenerationSettings;
   user_name?: string;
 }
@@ -216,6 +219,10 @@ function parseStoredHeader(line: string, filePath: string) {
 
   const generationSettings = parseStoredGenerationSettings(parsed.generation_settings, filePath);
 
+  const storedLorebookIds = Array.isArray(parsed.lorebook_ids)
+    ? parsed.lorebook_ids.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : [];
+
   return {
     chat_metadata: {
       createdAt: getString(metadataSource.createdAt),
@@ -224,6 +231,9 @@ function parseStoredHeader(line: string, filePath: string) {
     },
     character_id: getString(parsed.character_id),
     character_name: getString(parsed.character_name),
+    scenario_id: getString(parsed.scenario_id),
+    scenario_name: getString(parsed.scenario_name),
+    lorebook_ids: storedLorebookIds,
     generation_settings: serializeGenerationSettings(generationSettings),
     user_name: getString(parsed.user_name),
   } satisfies StoredChatHeader;
@@ -312,6 +322,9 @@ function updateHeaderRecord(
     },
     character_id: getString(header.character_id, session.characterId ?? ''),
     character_name: getString(header.character_name, session.characterName ?? ''),
+    scenario_id: getString(header.scenario_id, session.scenarioId ?? ''),
+    scenario_name: getString(header.scenario_name, session.scenarioName ?? ''),
+    lorebook_ids: Array.isArray(header.lorebook_ids) ? header.lorebook_ids : (session.lorebookIds ?? []),
     generation_settings: serializeGenerationSettings(generationSettings),
     user_name: getString(header.user_name, session.userName ?? ''),
   } satisfies StoredChatHeader;
@@ -383,6 +396,7 @@ async function readChatFile(chatId: string): Promise<ChatSessionRecord | null> {
     getLatestIsoDate(messages.at(-1)?.createdAt, header?.chat_metadata?.updatedAt) ?? stats.mtime.toISOString();
   const createdAt = getString(header?.chat_metadata?.createdAt).trim() || fallbackCreatedAt;
   const title = getString(header?.chat_metadata?.title).trim() || getFallbackTitle(chatId, messages);
+  const lorebookIds = Array.isArray(header?.lorebook_ids) ? [...header.lorebook_ids] : [];
   const summary: ChatSummaryRecord = {
     id: chatId,
     title,
@@ -392,6 +406,9 @@ async function readChatFile(chatId: string): Promise<ChatSessionRecord | null> {
     lastMessagePreview: messages.at(-1)?.content.slice(0, 160) ?? null,
     characterId: getString(header?.character_id).trim() || null,
     characterName: getString(header?.character_name).trim() || null,
+    scenarioId: getString(header?.scenario_id).trim() || null,
+    scenarioName: getString(header?.scenario_name).trim() || null,
+    lorebookIds,
   };
 
   return {
@@ -399,6 +416,9 @@ async function readChatFile(chatId: string): Promise<ChatSessionRecord | null> {
     userName: getString(header?.user_name) || null,
     characterId: summary.characterId,
     characterName: summary.characterName,
+    scenarioId: summary.scenarioId,
+    scenarioName: summary.scenarioName,
+    lorebookIds,
     generationSettings: header?.generation_settings
       ? parseStoredGenerationSettings(header.generation_settings, filePath)
       : createDefaultChatGenerationSettings(),
@@ -467,6 +487,9 @@ export class FileChatRepository implements ChatRepository {
         },
         character_id: sourceSession.characterId ?? '',
         character_name: sourceSession.characterName ?? '',
+        scenario_id: sourceSession.scenarioId ?? '',
+        scenario_name: sourceSession.scenarioName ?? '',
+        lorebook_ids: sourceSession.lorebookIds ?? [],
         generation_settings: serializeGenerationSettings(sourceSession.generationSettings),
         user_name: sourceSession.userName ?? '',
       };
@@ -508,6 +531,9 @@ export class FileChatRepository implements ChatRepository {
       user_name: input.userName,
       character_id: input.characterId ?? '',
       character_name: input.characterName ?? '',
+      scenario_id: input.scenarioId ?? '',
+      scenario_name: input.scenarioName ?? '',
+      lorebook_ids: input.lorebookIds ?? [],
     };
 
     await fs.mkdir(resolveChatsDirectory(), { recursive: true });
@@ -529,6 +555,9 @@ export class FileChatRepository implements ChatRepository {
       lastMessagePreview: lastSeed ? lastSeed.content.slice(0, 160) : null,
       characterId: input.characterId ?? null,
       characterName: input.characterName ?? null,
+      scenarioId: input.scenarioId ?? null,
+      scenarioName: input.scenarioName ?? null,
+      lorebookIds: input.lorebookIds ?? [],
     };
   }
 
@@ -584,6 +613,37 @@ export class FileChatRepository implements ChatRepository {
       const existingMessageLines = existingHeader ? lines.slice(1) : lines;
       const nextLines = [
         JSON.stringify(updateHeaderRecord(existingHeader, currentSession, updatedAt, settings)),
+        ...existingMessageLines,
+      ];
+
+      await writeChatFileAtomically(filePath, `${nextLines.join('\n')}\n`);
+
+      return readChatFile(chatId);
+    });
+  }
+
+  async updateGenericChatLorebooks(chatId: string, lorebookIds: string[], updatedAt: string) {
+    return withChatWriteQueue(chatId, async () => {
+      const currentSession = await readChatFile(chatId);
+
+      if (!currentSession) {
+        return null;
+      }
+
+      const filePath = resolveChatFilePath(chatId);
+      const rawContent = await fs.readFile(filePath, 'utf8');
+      const lines = rawContent
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      const existingHeader = lines[0] ? parseStoredHeaderRecord(lines[0], filePath) : null;
+      const existingMessageLines = existingHeader ? lines.slice(1) : lines;
+      const nextHeaderRecord = {
+        ...(existingHeader ?? {}),
+        lorebook_ids: [...lorebookIds],
+      };
+      const nextLines = [
+        JSON.stringify(updateHeaderRecord(nextHeaderRecord, currentSession, updatedAt)),
         ...existingMessageLines,
       ];
 

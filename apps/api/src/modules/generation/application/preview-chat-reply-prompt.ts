@@ -104,6 +104,7 @@ export async function previewChatReplyPrompt(
   const generationPlan = resolveChatReplyGenerationPlan({
     character: characterContext.character,
     characterScenarioContent: characterContext.characterScenarioContent,
+    lorebookSections: characterContext.lorebookSections,
     providerModelName,
     session: sessionForPlan,
   });

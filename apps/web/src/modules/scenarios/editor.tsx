@@ -5,7 +5,9 @@ import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 're
 
 import { Topbar } from '../../app/layout/topbar';
 import { ApiError } from '../../shared/api/client';
-import { TrashIcon } from '../../shared/ui/icons';
+import { ChatIcon, TrashIcon } from '../../shared/ui/icons';
+import { createChat } from '../chats/api/create-chat';
+import { chatListQueryKey } from '../chats/queries/chat-list-query';
 import { deleteScenario } from './api/delete-scenario';
 import { createScenario, updateScenario } from './api/save-scenario';
 import { scenarioDetailQueryKey, scenarioDetailQueryOptions } from './queries/scenario-detail-query';
@@ -114,6 +116,19 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
     },
   });
 
+  const startChatMutation = useMutation({
+    mutationFn: () => {
+      if (isNew || !scenarioId) {
+        throw new Error('Need a saved scenario first.');
+      }
+      return createChat({ scenarioId });
+    },
+    onSuccess: async (response) => {
+      await queryClient.invalidateQueries({ queryKey: chatListQueryKey });
+      await navigate({ to: '/chat/$chatId', params: { chatId: response.chat.id } });
+    },
+  });
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmed = form.name.trim();
@@ -171,15 +186,28 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
                 </button>
               </>
             ) : !isNew ? (
-              <button
-                className="btn"
-                disabled={saveMutation.isPending || deleteMutation.isPending}
-                onClick={() => setConfirmDelete(true)}
-                title="Удалить сценарий"
-                type="button"
-              >
-                <TrashIcon size={14} /> Удалить
-              </button>
+              <>
+                <button
+                  className="btn btn--primary"
+                  disabled={
+                    startChatMutation.isPending || saveMutation.isPending || deleteMutation.isPending || isDirty
+                  }
+                  onClick={() => startChatMutation.mutate()}
+                  title={isDirty ? 'Сначала сохрани изменения' : 'Создать новый чат с этим сценарием'}
+                  type="button"
+                >
+                  <ChatIcon size={14} /> {startChatMutation.isPending ? '…' : 'Начать чат'}
+                </button>
+                <button
+                  className="btn"
+                  disabled={saveMutation.isPending || deleteMutation.isPending}
+                  onClick={() => setConfirmDelete(true)}
+                  title="Удалить сценарий"
+                  type="button"
+                >
+                  <TrashIcon size={14} /> Удалить
+                </button>
+              </>
             ) : null}
             <button
               className="btn btn--primary"

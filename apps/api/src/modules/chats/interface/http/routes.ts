@@ -2,12 +2,14 @@ import {
   BranchChatCommandSchema,
   ChatIdSchema,
   CreateChatCommandSchema,
+  UpdateChatLorebooksCommandSchema,
   UpdateChatMessageCommandSchema,
 } from '@immersion/contracts/chats';
 import { ApiProblemSchema } from '@immersion/contracts/common';
 import type { FastifyPluginAsync } from 'fastify';
 import { ZodError, z } from 'zod';
 import { CharacterNotFoundError } from '../../../characters/application/get-character-avatar.js';
+import { ScenarioNotFoundError } from '../../../scenarios/application/get-scenario.js';
 import { ChatMessageNotFoundError, ChatNotFoundError } from '../../application/append-chat-messages.js';
 import { branchChat } from '../../application/branch-chat.js';
 import { createChat } from '../../application/create-chat.js';
@@ -20,6 +22,7 @@ import {
   InvalidChatGenerationSettingsError,
   updateChatGenerationSettings,
 } from '../../application/update-chat-generation-settings.js';
+import { updateChatLorebooks } from '../../application/update-chat-lorebooks.js';
 import { updateChatMessage } from '../../application/update-chat-message.js';
 
 const ChatRouteParamsSchema = z.object({
@@ -72,6 +75,16 @@ function toProblem(error: unknown) {
       body: ApiProblemSchema.parse({
         code: 'character_not_found',
         message: 'Character not found.',
+      }),
+    };
+  }
+
+  if (error instanceof ScenarioNotFoundError) {
+    return {
+      statusCode: 404,
+      body: ApiProblemSchema.parse({
+        code: 'scenario_not_found',
+        message: 'Scenario not found.',
       }),
     };
   }
@@ -169,6 +182,20 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(204).send();
     } catch (error) {
       request.log.error({ err: error }, 'Failed to delete chat');
+      const problem = toProblem(error);
+
+      return reply.status(problem.statusCode).send(problem.body);
+    }
+  });
+
+  app.put('/:chatId/lorebooks', async (request, reply) => {
+    try {
+      const { chatId } = ChatRouteParamsSchema.parse(request.params);
+      const command = UpdateChatLorebooksCommandSchema.parse(request.body);
+      const session = await updateChatLorebooks(chatId, command.lorebookIds);
+      return session;
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to update chat lorebooks');
       const problem = toProblem(error);
 
       return reply.status(problem.statusCode).send(problem.body);

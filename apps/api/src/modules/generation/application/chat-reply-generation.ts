@@ -54,6 +54,7 @@ export async function completeChatReplyForSession(
     const generationPlan = resolveChatReplyGenerationPlan({
       character: characterContext.character,
       characterScenarioContent: characterContext.characterScenarioContent,
+      lorebookSections: characterContext.lorebookSections,
       providerModelName: endpoint.model,
       session: sessionAfterUserMessage,
     });

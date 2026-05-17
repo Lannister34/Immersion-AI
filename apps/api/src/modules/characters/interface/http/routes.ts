@@ -1,6 +1,7 @@
 import {
   CharacterDetailResponseSchema,
   CharacterIdSchema,
+  ImportCharacterCardCommandSchema,
   SaveCharacterCommandSchema,
 } from '@immersion/contracts/characters';
 import { ApiProblemSchema } from '@immersion/contracts/common';
@@ -8,8 +9,10 @@ import type { FastifyPluginAsync } from 'fastify';
 import { ZodError, z } from 'zod';
 
 import { deleteCharacter } from '../../application/delete-character.js';
+import { InvalidCharacterCardError } from '../../application/extract-png-character-card.js';
 import { getCharacter } from '../../application/get-character.js';
 import { CharacterNotFoundError, getCharacterAvatar } from '../../application/get-character-avatar.js';
+import { importCharacterCard } from '../../application/import-character-card.js';
 import { listCharacters } from '../../application/list-characters.js';
 import { CharacterNotEditableError, createCharacter, updateCharacter } from '../../application/save-character.js';
 
@@ -48,6 +51,16 @@ function toProblem(error: unknown) {
     };
   }
 
+  if (error instanceof InvalidCharacterCardError) {
+    return {
+      statusCode: 400,
+      body: ApiProblemSchema.parse({
+        code: 'invalid_character_card',
+        message: error.message,
+      }),
+    };
+  }
+
   return {
     statusCode: 500,
     body: ApiProblemSchema.parse({
@@ -76,6 +89,19 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(201).send(CharacterDetailResponseSchema.parse({ character }));
     } catch (error) {
       request.log.error({ err: error }, 'Failed to create character');
+      const problem = toProblem(error);
+
+      return reply.status(problem.statusCode).send(problem.body);
+    }
+  });
+
+  app.post('/import', async (request, reply) => {
+    try {
+      const command = ImportCharacterCardCommandSchema.parse(request.body);
+      const character = await importCharacterCard(command);
+      return reply.status(201).send(CharacterDetailResponseSchema.parse({ character }));
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to import character card');
       const problem = toProblem(error);
 
       return reply.status(problem.statusCode).send(problem.body);

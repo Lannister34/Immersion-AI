@@ -52,12 +52,14 @@ import {
   toGenerationAvailabilityViewModel,
   useChatReplyGeneration,
 } from '../generation';
+import { lorebookListQueryOptions } from '../lorebooks/queries/lorebook-list-query';
 import { settingsOverviewQueryOptions } from '../settings';
 import { createChat } from './api/create-chat';
 import { useBranchChat } from './mutations/use-branch-chat';
 import { useDeleteChat } from './mutations/use-delete-chat';
 import { useDeleteChatMessage } from './mutations/use-delete-chat-message';
 import { useUpdateChatGenerationSettings } from './mutations/use-update-chat-generation-settings';
+import { useUpdateChatLorebooks } from './mutations/use-update-chat-lorebooks';
 import { useUpdateChatMessage } from './mutations/use-update-chat-message';
 import { chatListQueryKey, chatListQueryOptions } from './queries/chat-list-query';
 import { chatSessionQueryOptions } from './queries/chat-session-query';
@@ -406,7 +408,7 @@ function ChatListSkeleton() {
 
 // ============================== Chat session ==============================
 
-type RightPanelSection = 'settings' | 'character' | 'context' | null;
+type RightPanelSection = 'settings' | 'character' | 'lorebooks' | 'context' | null;
 
 export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const [draftMessage, setDraftMessage] = useState('');
@@ -745,11 +747,14 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
       </main>
       <RightPanel
         characterName={session.characterName}
+        chatId={chatId}
         contextStats={tokenStats}
+        lorebookIds={session.lorebookIds}
         onSectionToggle={(id) => setOpenSection(openSection === id ? null : id)}
         openSection={openSection}
         samplerPresetId={session.generationSettings.samplerPresetId}
         sampling={session.generationSettings.sampling}
+        scenarioName={session.scenarioName}
         settingsOverview={settingsOverviewQuery.data}
       />
     </div>
@@ -1190,26 +1195,33 @@ function toContextStats(preview: ChatReplyPromptPreviewResponse | undefined): Co
 
 interface RightPanelProps {
   characterName: string | null;
+  chatId: string;
   contextStats?: ContextStats | undefined;
+  lorebookIds: string[];
   onSectionToggle: (section: RightPanelSection) => void;
   openSection: RightPanelSection;
   samplerPresetId: string | null;
   sampling: Record<string, number | string | null>;
+  scenarioName: string | null;
   settingsOverview?: SettingsOverviewResponse | undefined;
 }
 
 function RightPanel({
   characterName,
+  chatId,
   contextStats,
+  lorebookIds,
   onSectionToggle,
   openSection,
   samplerPresetId,
   sampling,
+  scenarioName,
   settingsOverview,
 }: RightPanelProps) {
   const sections: { id: NonNullable<RightPanelSection>; label: string; icon: ReactNode }[] = [
     { id: 'settings', label: 'Настройки генерации', icon: <SlidersIcon size={13} stroke="var(--muted)" /> },
-    { id: 'character', label: 'Персонаж', icon: <UserIcon size={13} stroke="var(--muted)" /> },
+    { id: 'character', label: 'Персонаж и сценарий', icon: <UserIcon size={13} stroke="var(--muted)" /> },
+    { id: 'lorebooks', label: 'Лорбуки', icon: <BookIcon size={13} stroke="var(--muted)" /> },
     { id: 'context', label: 'Превью контекста', icon: <EyeIcon size={13} stroke="var(--muted)" /> },
   ];
 
@@ -1240,7 +1252,9 @@ function RightPanel({
                       settings={settingsOverview}
                     />
                   ) : section.id === 'character' ? (
-                    <CharacterSectionContent characterName={characterName} />
+                    <CharacterSectionContent characterName={characterName} scenarioName={scenarioName} />
+                  ) : section.id === 'lorebooks' ? (
+                    <LorebooksSectionContent chatId={chatId} lorebookIds={lorebookIds} />
                   ) : (
                     <ContextSectionContent stats={contextStats} />
                   )}
@@ -1251,6 +1265,78 @@ function RightPanel({
         })}
       </div>
     </aside>
+  );
+}
+
+interface LorebooksSectionContentProps {
+  chatId: string;
+  lorebookIds: string[];
+}
+
+function LorebooksSectionContent({ chatId, lorebookIds }: LorebooksSectionContentProps) {
+  const query = useQuery(lorebookListQueryOptions());
+  const mutation = useUpdateChatLorebooks(chatId);
+  const items = query.data?.items ?? [];
+  const selected = new Set(lorebookIds);
+
+  const toggle = (id: string) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    mutation.mutate(Array.from(next));
+  };
+
+  if (query.isLoading) {
+    return (
+      <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+        Загружаем…
+      </div>
+    );
+  }
+  if (query.isError) {
+    return (
+      <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+        Не удалось загрузить лорбуки.
+      </div>
+    );
+  }
+  if (items.length === 0) {
+    return (
+      <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+        Лорбуков пока нет — добавьте JSON-файлы в <code>data/worlds/</code>.
+      </div>
+    );
+  }
+
+  return (
+    <div className="col gap-6">
+      <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
+        Подключённые лорбуки добавляются в системный prompt, когда в последних сообщениях встречаются их ключевые слова.
+      </div>
+      {items.map((lorebook) => {
+        const isOn = selected.has(lorebook.id);
+        return (
+          <label
+            className="row gap-8"
+            key={lorebook.id}
+            style={{ alignItems: 'center', cursor: 'pointer', fontSize: 'var(--fz-sm)', padding: '4px 0' }}
+          >
+            <input checked={isOn} disabled={mutation.isPending} onChange={() => toggle(lorebook.id)} type="checkbox" />
+            <span style={{ flex: 1, minWidth: 0 }} className="truncate">
+              {lorebook.name}
+            </span>
+            <span className="muted mono tnum" style={{ fontSize: 'var(--fz-2xs)' }}>
+              {lorebook.entryCount}
+            </span>
+          </label>
+        );
+      })}
+      {mutation.error ? (
+        <div className="muted" style={{ color: 'var(--danger)', fontSize: 'var(--fz-2xs)' }}>
+          Не удалось сохранить выбор.
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1312,13 +1398,35 @@ function SettingsSectionContent({ samplerPresetId, sampling, settings }: Setting
   );
 }
 
-function CharacterSectionContent({ characterName }: { characterName: string | null }) {
-  if (!characterName) {
+function CharacterSectionContent({
+  characterName,
+  scenarioName,
+}: {
+  characterName: string | null;
+  scenarioName: string | null;
+}) {
+  if (!characterName && !scenarioName) {
     return (
       <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-        У этого чата нет привязанного персонажа. Это свободный чат.
+        У этого чата нет привязанного персонажа или сценария. Это свободный чат.
       </div>
     );
+  }
+  if (!characterName && scenarioName) {
+    return (
+      <div className="col gap-6">
+        <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
+          Сценарий
+        </div>
+        <div style={{ fontWeight: 600 }}>{scenarioName}</div>
+        <Link className="btn btn--xs" to="/scenarios">
+          Открыть сценарий
+        </Link>
+      </div>
+    );
+  }
+  if (!characterName) {
+    return null;
   }
   return (
     <div className="col gap-10">
@@ -1344,6 +1452,14 @@ function CharacterSectionContent({ characterName }: { characterName: string | nu
           Сменить
         </button>
       </div>
+      {scenarioName ? (
+        <div className="col gap-4" style={{ marginTop: 6 }}>
+          <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
+            Сценарий
+          </div>
+          <div style={{ fontSize: 'var(--fz-sm)' }}>{scenarioName}</div>
+        </div>
+      ) : null}
     </div>
   );
 }

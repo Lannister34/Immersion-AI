@@ -39,6 +39,7 @@ export interface ChatReplyGenerationPlan {
 export interface ResolveChatReplyGenerationPlanInput {
   character?: PromptCharacterSnapshot | null;
   characterScenarioContent?: string | null;
+  lorebookSections?: string[];
   providerModelName: string | null;
   session: ChatSessionDto;
   settings?: SettingsOverviewResponse;
@@ -77,6 +78,7 @@ export function resolveChatReplyGenerationPlan(input: ResolveChatReplyGeneration
   const prompt = buildChatReplyPromptBundle({
     character: input.character ?? null,
     characterScenarioContent: input.characterScenarioContent ?? null,
+    lorebookSections: input.lorebookSections ?? [],
     samplerPreset: toPromptSamplerPreset(effectiveSettings),
     session: input.session,
     settings,

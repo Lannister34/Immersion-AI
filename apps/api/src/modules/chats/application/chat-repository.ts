@@ -35,6 +35,11 @@ export interface ChatRepository {
     settings: ChatGenerationSettingsRecord,
     updatedAt: string,
   ): Promise<ChatSessionRecord | null>;
+  updateGenericChatLorebooks(
+    chatId: string,
+    lorebookIds: string[],
+    updatedAt: string,
+  ): Promise<ChatSessionRecord | null>;
   updateGenericChatMessage(
     chatId: string,
     messageIndex: number,

@@ -16,6 +16,9 @@ export const ChatSummaryDtoSchema = z.object({
   characterId: z.string().nullable(),
   characterAvatarUrl: z.string().nullable(),
   characterName: z.string().nullable(),
+  scenarioId: z.string().nullable(),
+  scenarioName: z.string().nullable(),
+  lorebookIds: z.array(z.string()),
 });
 export type ChatSummaryDto = z.infer<typeof ChatSummaryDtoSchema>;
 
@@ -57,6 +60,9 @@ export const ChatSessionDtoSchema = z.object({
   characterId: z.string().nullable(),
   characterName: z.string().nullable(),
   characterAvatarUrl: z.string().nullable(),
+  scenarioId: z.string().nullable(),
+  scenarioName: z.string().nullable(),
+  lorebookIds: z.array(z.string()),
   generationSettings: ChatGenerationSettingsDtoSchema,
   messages: z.array(ChatMessageDtoSchema),
 });
@@ -69,9 +75,16 @@ export type ChatListResponse = z.infer<typeof ChatListResponseSchema>;
 
 export const CreateChatCommandSchema = z.object({
   characterId: z.string().trim().min(1).max(200).optional(),
+  scenarioId: z.string().trim().min(1).max(200).optional(),
+  lorebookIds: z.array(z.string().trim().min(1).max(200)).max(20).optional(),
   title: z.string().trim().min(1).max(120).optional(),
 });
 export type CreateChatCommand = z.infer<typeof CreateChatCommandSchema>;
+
+export const UpdateChatLorebooksCommandSchema = z.object({
+  lorebookIds: z.array(z.string().trim().min(1).max(200)).max(20),
+});
+export type UpdateChatLorebooksCommand = z.infer<typeof UpdateChatLorebooksCommandSchema>;
 
 export const CreateChatResponseSchema = z.object({
   chat: ChatSummaryDtoSchema,

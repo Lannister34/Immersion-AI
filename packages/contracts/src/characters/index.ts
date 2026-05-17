@@ -43,6 +43,12 @@ export const CharacterDetailResponseSchema = z.object({
 });
 export type CharacterDetailResponse = z.infer<typeof CharacterDetailResponseSchema>;
 
+export const ImportCharacterCardCommandSchema = z.object({
+  contentBase64: z.string().min(1).max(10_000_000),
+  fileName: z.string().trim().min(1).max(200),
+});
+export type ImportCharacterCardCommand = z.infer<typeof ImportCharacterCardCommandSchema>;
+
 export const SaveCharacterCommandSchema = z.object({
   description: z.string().max(20_000).default(''),
   exampleDialogue: z.string().max(20_000).default(''),

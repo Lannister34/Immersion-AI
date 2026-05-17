@@ -4,6 +4,8 @@ import { type CreateChatCommand, type CreateChatResponse, CreateChatResponseSche
 
 import { CharacterNotFoundError } from '../../characters/application/get-character-avatar.js';
 import { readCharacterDetail } from '../../characters/infrastructure/file-character-repository.js';
+import { ScenarioNotFoundError } from '../../scenarios/application/get-scenario.js';
+import { readScenarioDetail } from '../../scenarios/infrastructure/file-scenario-repository.js';
 import { FileChatRepository } from '../infrastructure/file-chat-repository.js';
 import type { AppendChatMessageInput } from './chat-records.js';
 import { toChatSummaryDto } from './chat-session-response.js';
@@ -15,8 +17,22 @@ export async function createChat(command: CreateChatCommand): Promise<CreateChat
 
   let characterId: string | null = null;
   let characterName: string | null = null;
+  let scenarioId: string | null = null;
+  let scenarioName: string | null = null;
   let title = command.title?.trim() || 'Новый чат';
   const seedMessages: AppendChatMessageInput[] = [];
+
+  if (command.scenarioId) {
+    const scenario = await readScenarioDetail(command.scenarioId);
+    if (!scenario) {
+      throw new ScenarioNotFoundError(command.scenarioId);
+    }
+    scenarioId = scenario.id;
+    scenarioName = scenario.name;
+    if (!command.title?.trim()) {
+      title = scenario.name;
+    }
+  }
 
   if (command.characterId) {
     const character = await readCharacterDetail(command.characterId);
@@ -25,7 +41,7 @@ export async function createChat(command: CreateChatCommand): Promise<CreateChat
     }
     characterId = character.id;
     characterName = character.name;
-    if (!command.title?.trim()) {
+    if (!command.title?.trim() && !command.scenarioId) {
       title = `Чат с ${character.name}`;
     }
     if (character.firstMessage.trim().length > 0) {
@@ -40,6 +56,9 @@ export async function createChat(command: CreateChatCommand): Promise<CreateChat
   const summary = await chatRepository.createGenericChat({
     characterId,
     characterName,
+    scenarioId,
+    scenarioName,
+    lorebookIds: command.lorebookIds ?? [],
     createdAt,
     id: crypto.randomUUID(),
     seedMessages,
