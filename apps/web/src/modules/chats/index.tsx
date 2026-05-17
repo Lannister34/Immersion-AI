@@ -30,7 +30,6 @@ import {
   DownloadIcon,
   EditIcon,
   EyeIcon,
-  FilterIcon,
   MoreIcon,
   PaperclipIcon,
   PlusIcon,
@@ -129,6 +128,8 @@ export function ChatListScreen() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const [characterFilter, setCharacterFilter] = useState<string | null>(null);
+  const [sortMode, setSortMode] = useState<'updated' | 'name'>('updated');
   const deferredSearch = useDeferredValue(search);
   const chatListQuery = useQuery(chatListQueryOptions(deferredSearch));
   const createMutation = useMutation({
@@ -139,8 +140,7 @@ export function ChatListScreen() {
     },
   });
 
-  const filtered = chatListQuery.data?.items ?? [];
-  const allItems = filtered;
+  const allItems = chatListQuery.data?.items ?? [];
 
   const characterCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -150,6 +150,17 @@ export function ChatListScreen() {
     }
     return Array.from(map.entries()).slice(0, 6);
   }, [allItems]);
+
+  const filtered = useMemo(() => {
+    const filteredItems = characterFilter
+      ? allItems.filter((item) => (item.characterName ?? 'Свободный') === characterFilter)
+      : allItems;
+    const collator = new Intl.Collator('ru');
+    return [...filteredItems].sort((left, right) => {
+      if (sortMode === 'name') return collator.compare(left.title, right.title);
+      return right.updatedAt.localeCompare(left.updatedAt);
+    });
+  }, [allItems, characterFilter, sortMode]);
 
   const lastUpdated = allItems[0]?.updatedAt;
 
@@ -197,21 +208,33 @@ export function ChatListScreen() {
                   value={search}
                 />
               </div>
-              <button className="btn btn--ghost-bordered" type="button">
-                <FilterIcon size={13} /> Фильтр
-              </button>
-              <button className="btn btn--ghost-bordered" type="button">
-                <SortIcon size={13} /> Активность ↓
+              <button
+                className="btn btn--ghost-bordered"
+                onClick={() => setSortMode((mode) => (mode === 'updated' ? 'name' : 'updated'))}
+                type="button"
+              >
+                <SortIcon size={13} /> {sortMode === 'updated' ? 'Активность ↓' : 'По имени'}
               </button>
             </div>
           </div>
           {characterCounts.length > 0 ? (
             <div className="filters">
-              <span className="filter-chip" data-active="true">
+              <span
+                className="filter-chip"
+                data-active={characterFilter === null ? 'true' : 'false'}
+                onClick={() => setCharacterFilter(null)}
+                style={{ cursor: 'pointer' }}
+              >
                 Все
               </span>
               {characterCounts.map(([name, count]) => (
-                <span className="filter-chip" key={name}>
+                <span
+                  className="filter-chip"
+                  data-active={characterFilter === name ? 'true' : 'false'}
+                  key={name}
+                  onClick={() => setCharacterFilter((current) => (current === name ? null : name))}
+                  style={{ cursor: 'pointer' }}
+                >
                   {name} <span className="dim">{count}</span>
                 </span>
               ))}
@@ -231,9 +254,27 @@ export function ChatListScreen() {
               <h2>{allItems.length === 0 ? 'Пока нет ни одного чата' : 'Ничего не найдено'}</h2>
               <p>
                 {allItems.length === 0
-                  ? 'Создайте первую сессию — кнопка «Новый чат» в правом верхнем углу.'
+                  ? 'Запустите свободный чат или начните разговор с готовым персонажем или сценарием.'
                   : 'Попробуйте изменить запрос или сбросить фильтры.'}
               </p>
+              {allItems.length === 0 ? (
+                <div className="row gap-8" style={{ marginTop: 12, justifyContent: 'center' }}>
+                  <button
+                    className="btn btn--primary"
+                    disabled={createMutation.isPending}
+                    onClick={() => createMutation.mutate({})}
+                    type="button"
+                  >
+                    <PlusIcon size={13} /> Свободный чат
+                  </button>
+                  <Link className="btn" to="/characters">
+                    Выбрать персонажа
+                  </Link>
+                  <Link className="btn" to="/scenarios">
+                    Выбрать сценарий
+                  </Link>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div
@@ -746,6 +787,8 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
         </div>
       </main>
       <RightPanel
+        characterAvatarUrl={session.characterAvatarUrl}
+        characterId={session.characterId}
         characterName={session.characterName}
         chatId={chatId}
         contextStats={tokenStats}
@@ -754,6 +797,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
         openSection={openSection}
         samplerPresetId={session.generationSettings.samplerPresetId}
         sampling={session.generationSettings.sampling}
+        scenarioId={session.scenarioId}
         scenarioName={session.scenarioName}
         settingsOverview={settingsOverviewQuery.data}
       />
@@ -1194,6 +1238,8 @@ function toContextStats(preview: ChatReplyPromptPreviewResponse | undefined): Co
 }
 
 interface RightPanelProps {
+  characterAvatarUrl: string | null;
+  characterId: string | null;
   characterName: string | null;
   chatId: string;
   contextStats?: ContextStats | undefined;
@@ -1202,11 +1248,14 @@ interface RightPanelProps {
   openSection: RightPanelSection;
   samplerPresetId: string | null;
   sampling: Record<string, number | string | null>;
+  scenarioId: string | null;
   scenarioName: string | null;
   settingsOverview?: SettingsOverviewResponse | undefined;
 }
 
 function RightPanel({
+  characterAvatarUrl,
+  characterId,
   characterName,
   chatId,
   contextStats,
@@ -1215,6 +1264,7 @@ function RightPanel({
   openSection,
   samplerPresetId,
   sampling,
+  scenarioId,
   scenarioName,
   settingsOverview,
 }: RightPanelProps) {
@@ -1252,7 +1302,13 @@ function RightPanel({
                       settings={settingsOverview}
                     />
                   ) : section.id === 'character' ? (
-                    <CharacterSectionContent characterName={characterName} scenarioName={scenarioName} />
+                    <CharacterSectionContent
+                      characterAvatarUrl={characterAvatarUrl}
+                      characterId={characterId}
+                      characterName={characterName}
+                      scenarioId={scenarioId}
+                      scenarioName={scenarioName}
+                    />
                   ) : section.id === 'lorebooks' ? (
                     <LorebooksSectionContent chatId={chatId} lorebookIds={lorebookIds} />
                   ) : (
@@ -1399,10 +1455,16 @@ function SettingsSectionContent({ samplerPresetId, sampling, settings }: Setting
 }
 
 function CharacterSectionContent({
+  characterAvatarUrl,
+  characterId,
   characterName,
+  scenarioId,
   scenarioName,
 }: {
+  characterAvatarUrl: string | null;
+  characterId: string | null;
   characterName: string | null;
+  scenarioId: string | null;
   scenarioName: string | null;
 }) {
   if (!characterName && !scenarioName) {
@@ -1412,20 +1474,20 @@ function CharacterSectionContent({
       </div>
     );
   }
-  if (!characterName && scenarioName) {
+  if (!characterName && scenarioName && scenarioId) {
     return (
       <div className="col gap-6">
         <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
           Сценарий
         </div>
         <div style={{ fontWeight: 600 }}>{scenarioName}</div>
-        <Link className="btn btn--xs" to="/scenarios">
+        <Link className="btn btn--xs" params={{ scenarioId }} to="/scenarios/$scenarioId">
           Открыть сценарий
         </Link>
       </div>
     );
   }
-  if (!characterName) {
+  if (!characterName || !characterId) {
     return null;
   }
   return (
@@ -1433,9 +1495,16 @@ function CharacterSectionContent({
       <div className="row gap-10">
         <div
           className="avatar avatar--36"
-          style={{ background: avatarColor(characterName), color: 'white', border: 0 }}
+          style={
+            characterAvatarUrl
+              ? {
+                  background: `center / cover no-repeat url("${createApiUrl(characterAvatarUrl)}")`,
+                  border: 0,
+                }
+              : { background: avatarColor(characterName), color: 'white', border: 0 }
+          }
         >
-          {avatarInitial(characterName)}
+          {characterAvatarUrl ? null : avatarInitial(characterName)}
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontWeight: 600 }}>{characterName}</div>
@@ -1445,19 +1514,24 @@ function CharacterSectionContent({
         </div>
       </div>
       <div className="row gap-6">
-        <Link className="btn btn--xs" to="/characters">
+        <Link className="btn btn--xs" params={{ characterId }} to="/characters/$characterId">
           Открыть карточку
         </Link>
-        <button className="btn btn--xs btn--ghost-bordered" type="button">
-          Сменить
-        </button>
       </div>
-      {scenarioName ? (
+      {scenarioName && scenarioId ? (
         <div className="col gap-4" style={{ marginTop: 6 }}>
           <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
             Сценарий
           </div>
           <div style={{ fontSize: 'var(--fz-sm)' }}>{scenarioName}</div>
+          <Link
+            className="btn btn--xs btn--ghost-bordered"
+            params={{ scenarioId }}
+            style={{ width: 'fit-content' }}
+            to="/scenarios/$scenarioId"
+          >
+            Открыть сценарий
+          </Link>
         </div>
       ) : null}
     </div>

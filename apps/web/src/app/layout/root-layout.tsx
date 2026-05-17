@@ -1,6 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { Outlet } from '@tanstack/react-router';
 
+import { characterListQueryOptions } from '../../modules/characters/queries/character-list-query';
+import { chatListQueryOptions } from '../../modules/chats/queries/chat-list-query';
+import { lorebookListQueryOptions } from '../../modules/lorebooks/queries/lorebook-list-query';
+import { scenarioListQueryOptions } from '../../modules/scenarios/queries/scenario-list-query';
 import { getRuntimeOverview } from '../../modules/server-control/api/get-runtime-overview';
 import { settingsOverviewQueryOptions } from '../../modules/settings';
 import { type RuntimeBadgeStatus, Sidebar } from './sidebar';
@@ -50,6 +54,10 @@ export function RootLayout() {
     refetchInterval: 5000,
   });
   const settingsQuery = useQuery(settingsOverviewQueryOptions());
+  const chatListQuery = useQuery(chatListQueryOptions());
+  const characterListQuery = useQuery(characterListQueryOptions());
+  const scenarioListQuery = useQuery(scenarioListQueryOptions());
+  const lorebookListQuery = useQuery(lorebookListQueryOptions());
 
   const runtime = describeRuntime(runtimeOverviewQuery);
   const userName = settingsQuery.data?.profile.userName?.trim();
@@ -61,9 +69,16 @@ export function RootLayout() {
       }
     : undefined;
 
+  const workspaceCounts = {
+    '/chat': chatListQuery.data?.items.length,
+    '/characters': characterListQuery.data?.items.length,
+    '/scenarios': scenarioListQuery.data?.items.length,
+    '/lorebooks': lorebookListQuery.data?.items.length,
+  } as const;
+
   return (
     <div className="frame">
-      <Sidebar persona={persona} runtime={runtime} />
+      <Sidebar persona={persona} runtime={runtime} workspaceCounts={workspaceCounts} />
       <Outlet />
     </div>
   );

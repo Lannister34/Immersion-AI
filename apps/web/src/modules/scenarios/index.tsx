@@ -25,15 +25,40 @@ function formatRelative(iso: string, now: Date = new Date()): string {
 export function ScenariosScreen() {
   const query = useQuery(scenarioListQueryOptions());
   const [search, setSearch] = useState('');
+  const [activeTags, setActiveTags] = useState<readonly string[]>([]);
+  const [sortMode, setSortMode] = useState<'updated' | 'name'>('updated');
   const items = query.data?.items ?? [];
+  const tagCloud = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of items) {
+      for (const tag of item.tags) {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 12);
+  }, [items]);
+
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    if (!needle) return items;
-    return items.filter((item) => {
+    const tagFilter = activeTags;
+    const filteredItems = items.filter((item) => {
+      if (tagFilter.length > 0 && !tagFilter.every((tag) => item.tags.includes(tag))) return false;
+      if (!needle) return true;
       const haystack = [item.name, item.preview ?? '', item.concept ?? '', ...item.tags].join(' ').toLowerCase();
       return haystack.includes(needle);
     });
-  }, [items, search]);
+    const collator = new Intl.Collator('ru');
+    return [...filteredItems].sort((left, right) => {
+      if (sortMode === 'name') return collator.compare(left.name, right.name);
+      return right.updatedAt.localeCompare(left.updatedAt);
+    });
+  }, [items, search, activeTags, sortMode]);
+
+  const toggleTag = (tag: string) => {
+    setActiveTags((current) => (current.includes(tag) ? current.filter((value) => value !== tag) : [...current, tag]));
+  };
 
   return (
     <main className="main">
@@ -73,8 +98,38 @@ export function ScenariosScreen() {
                   value={search}
                 />
               </div>
+              <button
+                className="btn btn--ghost-bordered"
+                onClick={() => setSortMode((mode) => (mode === 'updated' ? 'name' : 'updated'))}
+                type="button"
+              >
+                {sortMode === 'updated' ? 'Активность ↓' : 'По имени'}
+              </button>
             </div>
           </div>
+          {tagCloud.length > 0 ? (
+            <div className="filters" style={{ marginTop: 8 }}>
+              <span
+                className="filter-chip"
+                data-active={activeTags.length === 0 ? 'true' : 'false'}
+                onClick={() => setActiveTags([])}
+                style={{ cursor: 'pointer' }}
+              >
+                Все
+              </span>
+              {tagCloud.map(([tag, count]) => (
+                <span
+                  className="filter-chip"
+                  data-active={activeTags.includes(tag) ? 'true' : 'false'}
+                  key={tag}
+                  onClick={() => toggleTag(tag)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {tag} <span className="dim">{count}</span>
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
         <div className="page__body">
           {query.isLoading ? (
@@ -88,8 +143,13 @@ export function ScenariosScreen() {
             <div className="empty">
               <h2>Папка сценариев пуста</h2>
               <p>
-                Положите .json-файлы в <code>data/scenarios/</code> и обновите страницу.
+                Создайте новый сценарий или положите .json-файлы в <code>data/scenarios/</code>.
               </p>
+              <div className="row gap-8" style={{ marginTop: 12, justifyContent: 'center' }}>
+                <Link className="btn btn--primary" to="/scenarios/new">
+                  <PlusIcon size={13} /> Новый сценарий
+                </Link>
+              </div>
             </div>
           ) : filtered.length === 0 ? (
             <div className="empty">

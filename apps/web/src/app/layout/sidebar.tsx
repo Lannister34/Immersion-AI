@@ -50,7 +50,7 @@ const systemItems: SidebarNavItem[] = [
 interface SidebarProps {
   runtime: RuntimeBadge;
   persona?: PersonaBadge | undefined;
-  workspaceCounts?: Partial<Record<SidebarLinkPath, number>> | undefined;
+  workspaceCounts?: Partial<Record<SidebarLinkPath, number | undefined>> | undefined;
 }
 
 const dotClassByStatus: Record<RuntimeBadgeStatus, string> = {

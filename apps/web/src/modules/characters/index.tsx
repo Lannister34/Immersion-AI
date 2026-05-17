@@ -1,20 +1,11 @@
 import type { CharacterSummaryDto } from '@immersion/contracts/characters';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { type ChangeEvent, type MouseEvent, useMemo, useRef, useState } from 'react';
+import { type ChangeEvent, type DragEvent, type MouseEvent, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
 import { ApiError, createApiUrl } from '../../shared/api/client';
-import {
-  ChatIcon,
-  FilterIcon,
-  LayersIcon,
-  MoreIcon,
-  PlusIcon,
-  SearchIcon,
-  SortIcon,
-  UploadIcon,
-} from '../../shared/ui/icons';
+import { ChatIcon, LayersIcon, MoreIcon, PlusIcon, SearchIcon, SortIcon, UploadIcon } from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
 import { chatListQueryKey } from '../chats/queries/chat-list-query';
 import { importCharacterCard } from './api/import-character-card';
@@ -74,13 +65,21 @@ export function CharactersScreen() {
   const queryClient = useQueryClient();
   const query = useQuery(characterListQueryOptions());
   const [search, setSearch] = useState('');
+  const [sortMode, setSortMode] = useState<'updated' | 'name'>('updated');
+  const [isDragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const items = query.data?.items ?? [];
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    if (!needle) return items;
-    return items.filter((item) => item.name.toLowerCase().includes(needle));
-  }, [items, search]);
+    const matched = needle ? items.filter((item) => item.name.toLowerCase().includes(needle)) : items;
+    const collator = new Intl.Collator('ru');
+    return [...matched].sort((left, right) => {
+      if (sortMode === 'name') {
+        return collator.compare(left.name, right.name);
+      }
+      return right.updatedAt.localeCompare(left.updatedAt);
+    });
+  }, [items, search, sortMode]);
 
   const importMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -104,6 +103,30 @@ export function CharactersScreen() {
     importMutation.mutate(file);
   };
 
+  const handleDragOver = (event: DragEvent<HTMLElement>) => {
+    if (!event.dataTransfer.types.includes('Files')) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setDragActive(true);
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLElement>) => {
+    if (event.currentTarget === event.target) {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    setDragActive(false);
+    const file = Array.from(event.dataTransfer.files).find((candidate) =>
+      candidate.name.toLowerCase().endsWith('.png'),
+    );
+    if (file) {
+      importMutation.mutate(file);
+    }
+  };
+
   const importErrorMessage =
     importMutation.error instanceof ApiError
       ? importMutation.error.message
@@ -112,7 +135,13 @@ export function CharactersScreen() {
         : null;
 
   return (
-    <main className="main">
+    <main
+      className="main"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      style={isDragActive ? { outline: '2px dashed var(--accent)', outlineOffset: -8 } : undefined}
+    >
       <Topbar
         actions={
           <>
@@ -162,16 +191,18 @@ export function CharactersScreen() {
                 />
               </div>
               <div className="row gap-2 card" style={{ padding: 2 }}>
-                <button className="btn btn--xs" style={{ background: 'var(--surface-2)' }} type="button">
+                <button className="btn btn--xs" style={{ background: 'var(--surface-2)' }} title="Сетка" type="button">
                   <LayersIcon size={12} />
                 </button>
-                <button className="btn btn--xs" disabled type="button">
+                <button
+                  className="btn btn--xs"
+                  onClick={() => setSortMode((mode) => (mode === 'updated' ? 'name' : 'updated'))}
+                  title={sortMode === 'updated' ? 'Сортировка: по дате' : 'Сортировка: по имени'}
+                  type="button"
+                >
                   <SortIcon size={12} />
                 </button>
               </div>
-              <button className="btn btn--ghost-bordered" disabled type="button">
-                <FilterIcon size={13} /> Фильтр
-              </button>
             </div>
           </div>
         </div>
@@ -186,9 +217,15 @@ export function CharactersScreen() {
           ) : items.length === 0 ? (
             <div className="empty">
               <h2>Папка персонажей пуста</h2>
-              <p>
-                Поместите .png-карточки или .json-файлы в <code>data/characters/</code> и обновите страницу.
-              </p>
+              <p>Перетащите PNG-карточку SillyTavern в окно, нажмите «Импорт» или создайте нового персонажа.</p>
+              <div className="row gap-8" style={{ marginTop: 12, justifyContent: 'center' }}>
+                <button className="btn" disabled={importMutation.isPending} onClick={handleImportClick} type="button">
+                  <UploadIcon size={13} /> Импорт PNG
+                </button>
+                <Link className="btn btn--primary" to="/characters/new">
+                  <PlusIcon size={13} /> Новый персонаж
+                </Link>
+              </div>
             </div>
           ) : filtered.length === 0 ? (
             <div className="empty">
