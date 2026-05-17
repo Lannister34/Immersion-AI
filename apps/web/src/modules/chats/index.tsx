@@ -300,7 +300,7 @@ function ChatListRow({ chat }: ChatListRowProps) {
       params={{ chatId: chat.id }}
       style={{
         display: 'grid',
-        gridTemplateColumns: '40px minmax(0, 1.2fr) minmax(0, 2fr) 100px 80px',
+        gridTemplateColumns: '40px minmax(0, 1.2fr) minmax(0, 2fr) 100px minmax(80px, max-content)',
         gap: 14,
         alignItems: 'center',
         padding: '12px 14px',
@@ -328,7 +328,7 @@ function ChatListRow({ chat }: ChatListRowProps) {
       <div className="muted mono tnum" style={{ fontSize: 'var(--fz-xs)' }}>
         {formatRelative(chat.updatedAt)}
       </div>
-      <div className="row gap-4" style={{ justifyContent: 'flex-end' }}>
+      <div className="row gap-4" style={{ flexWrap: 'nowrap', justifyContent: 'flex-end', whiteSpace: 'nowrap' }}>
         {confirmDelete ? (
           <>
             <button
@@ -339,8 +339,14 @@ function ChatListRow({ chat }: ChatListRowProps) {
             >
               Удалить
             </button>
-            <button className="btn btn--xs" disabled={deleteMutation.isPending} onClick={handleCancel} type="button">
-              Отмена
+            <button
+              className="btn btn--xs btn--icon"
+              disabled={deleteMutation.isPending}
+              onClick={handleCancel}
+              title="Отменить"
+              type="button"
+            >
+              <XIcon size={12} />
             </button>
           </>
         ) : (
@@ -854,8 +860,12 @@ function BubbleMessage({
     }
   };
 
+  const isActionsPinned = mode === 'edit' || confirmDelete || branchDraft !== null;
+
   return (
     <div
+      className="bubble-row"
+      data-actions={isActionsPinned ? 'pinned' : 'auto'}
       style={{
         display: 'flex',
         gap: 10,
@@ -943,7 +953,7 @@ function BubbleMessage({
           <div className={isUser ? 'bubble bubble--user' : 'bubble'}>{text}</div>
         )}
         {mode === 'view' ? (
-          <div className="row gap-4" style={{ justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
+          <div className="row gap-4 bubble-row__actions" style={{ justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
             {canRegenerate ? (
               <button
                 className="btn btn--xs"
@@ -1001,6 +1011,7 @@ function BubbleMessage({
                   autoFocus
                   className="input"
                   onChange={(event) => setBranchDraft(event.currentTarget.value)}
+                  onFocus={(event) => event.currentTarget.select()}
                   onKeyDown={(event) => {
                     if (event.key === 'Escape') {
                       event.preventDefault();

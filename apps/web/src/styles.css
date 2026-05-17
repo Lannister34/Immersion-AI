@@ -1063,6 +1063,18 @@ select:disabled {
   font-size: var(--fz-sm);
 }
 
+/* Message bubble actions reveal on hover or focus, stay visible while a sub-action
+   is open (edit mode, delete confirm, branch input). */
+.bubble-row__actions {
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+.bubble-row:hover .bubble-row__actions,
+.bubble-row:focus-within .bubble-row__actions,
+.bubble-row[data-actions="pinned"] .bubble-row__actions {
+  opacity: 1;
+}
+
 .bubble__caret {
   display: inline-block;
   width: 7px;
