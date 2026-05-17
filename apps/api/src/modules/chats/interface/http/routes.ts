@@ -7,6 +7,7 @@ import {
 import { ApiProblemSchema } from '@immersion/contracts/common';
 import type { FastifyPluginAsync } from 'fastify';
 import { ZodError, z } from 'zod';
+import { CharacterNotFoundError } from '../../../characters/application/get-character-avatar.js';
 import { ChatMessageNotFoundError, ChatNotFoundError } from '../../application/append-chat-messages.js';
 import { branchChat } from '../../application/branch-chat.js';
 import { createChat } from '../../application/create-chat.js';
@@ -61,6 +62,16 @@ function toProblem(error: unknown) {
       body: ApiProblemSchema.parse({
         code: 'chat_message_not_found',
         message: 'Chat message not found.',
+      }),
+    };
+  }
+
+  if (error instanceof CharacterNotFoundError) {
+    return {
+      statusCode: 404,
+      body: ApiProblemSchema.parse({
+        code: 'character_not_found',
+        message: 'Character not found.',
       }),
     };
   }

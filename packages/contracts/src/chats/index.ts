@@ -13,6 +13,8 @@ export const ChatSummaryDtoSchema = z.object({
   updatedAt: z.string().min(1),
   messageCount: z.number().int().nonnegative(),
   lastMessagePreview: z.string().nullable(),
+  characterId: z.string().nullable(),
+  characterAvatarUrl: z.string().nullable(),
   characterName: z.string().nullable(),
 });
 export type ChatSummaryDto = z.infer<typeof ChatSummaryDtoSchema>;
@@ -52,7 +54,9 @@ export type ChatGenerationSettingsDto = z.infer<typeof ChatGenerationSettingsDto
 export const ChatSessionDtoSchema = z.object({
   chat: ChatSummaryDtoSchema,
   userName: z.string(),
+  characterId: z.string().nullable(),
   characterName: z.string().nullable(),
+  characterAvatarUrl: z.string().nullable(),
   generationSettings: ChatGenerationSettingsDtoSchema,
   messages: z.array(ChatMessageDtoSchema),
 });
@@ -64,6 +68,7 @@ export const ChatListResponseSchema = z.object({
 export type ChatListResponse = z.infer<typeof ChatListResponseSchema>;
 
 export const CreateChatCommandSchema = z.object({
+  characterId: z.string().trim().min(1).max(200).optional(),
   title: z.string().trim().min(1).max(120).optional(),
 });
 export type CreateChatCommand = z.infer<typeof CreateChatCommandSchema>;

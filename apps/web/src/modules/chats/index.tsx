@@ -305,8 +305,18 @@ function ChatListRow({ chat }: ChatListRowProps) {
       }}
       to="/chat/$chatId"
     >
-      <div className="avatar avatar--36" style={{ background: avatarColor(displayName), color: 'white', border: 0 }}>
-        {avatarInitial(displayName)}
+      <div
+        className="avatar avatar--36"
+        style={
+          chat.characterAvatarUrl
+            ? {
+                background: `center / cover no-repeat url("${createApiUrl(chat.characterAvatarUrl)}")`,
+                border: 0,
+              }
+            : { background: avatarColor(displayName), color: 'white', border: 0 }
+        }
+      >
+        {chat.characterAvatarUrl ? null : avatarInitial(displayName)}
       </div>
       <div style={{ minWidth: 0 }}>
         <strong className="truncate" style={{ display: 'block', fontSize: 'var(--fz-md)' }}>
@@ -576,9 +586,16 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
           >
             <div
               className="avatar avatar--36"
-              style={{ background: avatarColor(characterDisplay), color: 'white', border: 0 }}
+              style={
+                session.characterAvatarUrl
+                  ? {
+                      background: `center / cover no-repeat url("${createApiUrl(session.characterAvatarUrl)}")`,
+                      border: 0,
+                    }
+                  : { background: avatarColor(characterDisplay), color: 'white', border: 0 }
+              }
             >
-              {avatarInitial(characterDisplay)}
+              {session.characterAvatarUrl ? null : avatarInitial(characterDisplay)}
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontWeight: 600, fontSize: 'var(--fz-md)' }}>{characterDisplay}</div>
@@ -634,6 +651,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                       <BubbleMessage
                         branchTitleDefault={defaultBranchTitle}
                         canRegenerate={isLastAssistant && !isMutating}
+                        characterAvatarUrl={session.characterAvatarUrl}
                         chatId={chatId}
                         isMutating={isMutating}
                         isSystem={message.role === 'system'}
@@ -741,6 +759,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
 interface BubbleMessageProps {
   branchTitleDefault: string;
   canRegenerate: boolean;
+  characterAvatarUrl: string | null;
   chatId: string;
   isMutating: boolean;
   isSystem: boolean;
@@ -758,6 +777,7 @@ interface BubbleMessageProps {
 function BubbleMessage({
   branchTitleDefault,
   canRegenerate,
+  characterAvatarUrl,
   chatId,
   isMutating,
   isSystem,
@@ -878,10 +898,12 @@ function BubbleMessage({
         style={
           isUser
             ? { background: 'var(--accent-soft)', color: 'var(--accent)' }
-            : { background: avatarColor(who), color: 'white', border: 0 }
+            : characterAvatarUrl
+              ? { background: `center / cover no-repeat url("${createApiUrl(characterAvatarUrl)}")`, border: 0 }
+              : { background: avatarColor(who), color: 'white', border: 0 }
         }
       >
-        {avatarInitial(who)}
+        {isUser || !characterAvatarUrl ? avatarInitial(who) : null}
       </div>
       <div style={{ maxWidth: 'min(620px, 80%)', display: 'grid', gap: 4 }}>
         <div

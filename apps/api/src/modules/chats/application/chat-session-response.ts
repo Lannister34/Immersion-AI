@@ -1,11 +1,32 @@
 import {
   type ChatGenerationSettingsDto,
+  type ChatSummaryDto,
   type GetChatSessionResponse,
   GetChatSessionResponseSchema,
 } from '@immersion/contracts/chats';
 
-import type { ChatGenerationSettingsRecord, ChatSessionRecord } from './chat-records.js';
+import type { ChatGenerationSettingsRecord, ChatSessionRecord, ChatSummaryRecord } from './chat-records.js';
 import { getDefaultUserName } from './default-user-name.js';
+
+function buildCharacterAvatarUrl(characterId: string | null): string | null {
+  if (!characterId) return null;
+  if (!characterId.toLowerCase().endsWith('.png')) return null;
+  return `/api/characters/${encodeURIComponent(characterId)}/avatar`;
+}
+
+export function toChatSummaryDto(summary: ChatSummaryRecord): ChatSummaryDto {
+  return {
+    characterAvatarUrl: buildCharacterAvatarUrl(summary.characterId),
+    characterId: summary.characterId,
+    characterName: summary.characterName,
+    createdAt: summary.createdAt,
+    id: summary.id,
+    lastMessagePreview: summary.lastMessagePreview,
+    messageCount: summary.messageCount,
+    title: summary.title,
+    updatedAt: summary.updatedAt,
+  };
+}
 
 function toChatGenerationSettingsDto(settings: ChatGenerationSettingsRecord): ChatGenerationSettingsDto {
   return {
@@ -27,9 +48,12 @@ function toChatGenerationSettingsDto(settings: ChatGenerationSettingsRecord): Ch
 }
 
 export function toChatSessionResponse(session: ChatSessionRecord): GetChatSessionResponse {
+  const summaryDto = toChatSummaryDto(session.chat);
   return GetChatSessionResponseSchema.parse({
+    characterAvatarUrl: summaryDto.characterAvatarUrl,
+    characterId: session.characterId,
     characterName: session.characterName,
-    chat: session.chat,
+    chat: summaryDto,
     generationSettings: toChatGenerationSettingsDto(session.generationSettings),
     messages: session.messages,
     userName: session.userName ?? getDefaultUserName(),

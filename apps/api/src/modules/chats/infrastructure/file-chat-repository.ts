@@ -33,6 +33,7 @@ interface StoredChatMetadata {
 
 interface StoredChatHeader {
   chat_metadata?: StoredChatMetadata;
+  character_id?: string;
   character_name?: string;
   generation_settings?: StoredChatGenerationSettings;
   user_name?: string;
@@ -221,6 +222,7 @@ function parseStoredHeader(line: string, filePath: string) {
       title: getString(metadataSource.title),
       updatedAt: getString(metadataSource.updatedAt),
     },
+    character_id: getString(parsed.character_id),
     character_name: getString(parsed.character_name),
     generation_settings: serializeGenerationSettings(generationSettings),
     user_name: getString(parsed.user_name),
@@ -308,6 +310,7 @@ function updateHeaderRecord(
       title: getString(metadata.title, session.chat.title),
       updatedAt,
     },
+    character_id: getString(header.character_id, session.characterId ?? ''),
     character_name: getString(header.character_name, session.characterName ?? ''),
     generation_settings: serializeGenerationSettings(generationSettings),
     user_name: getString(header.user_name, session.userName ?? ''),
@@ -387,12 +390,14 @@ async function readChatFile(chatId: string): Promise<ChatSessionRecord | null> {
     updatedAt,
     messageCount: messages.length,
     lastMessagePreview: messages.at(-1)?.content.slice(0, 160) ?? null,
+    characterId: getString(header?.character_id).trim() || null,
     characterName: getString(header?.character_name).trim() || null,
   };
 
   return {
     chat: summary,
     userName: getString(header?.user_name) || null,
+    characterId: summary.characterId,
     characterName: summary.characterName,
     generationSettings: header?.generation_settings
       ? parseStoredGenerationSettings(header.generation_settings, filePath)
@@ -460,6 +465,7 @@ export class FileChatRepository implements ChatRepository {
           title: input.title,
           updatedAt: input.createdAt,
         },
+        character_id: sourceSession.characterId ?? '',
         character_name: sourceSession.characterName ?? '',
         generation_settings: serializeGenerationSettings(sourceSession.generationSettings),
         user_name: sourceSession.userName ?? '',
@@ -500,20 +506,29 @@ export class FileChatRepository implements ChatRepository {
       },
       generation_settings: serializeGenerationSettings(createDefaultChatGenerationSettings()),
       user_name: input.userName,
-      character_name: '',
+      character_id: input.characterId ?? '',
+      character_name: input.characterName ?? '',
     };
 
     await fs.mkdir(resolveChatsDirectory(), { recursive: true });
-    await fs.writeFile(resolveChatFilePath(input.id), `${JSON.stringify(header)}\n`, 'utf8');
+    const seedMessages = input.seedMessages ?? [];
+    const lines = [
+      JSON.stringify(header),
+      ...seedMessages.map((message) => JSON.stringify(createStoredChatLine(message))),
+    ];
+    await fs.writeFile(resolveChatFilePath(input.id), `${lines.join('\n')}\n`, 'utf8');
+
+    const lastSeed = seedMessages.at(-1);
 
     return {
       id: input.id,
       title: input.title,
       createdAt: input.createdAt,
-      updatedAt: input.createdAt,
-      messageCount: 0,
-      lastMessagePreview: null,
-      characterName: null,
+      updatedAt: lastSeed?.createdAt ?? input.createdAt,
+      messageCount: seedMessages.length,
+      lastMessagePreview: lastSeed ? lastSeed.content.slice(0, 160) : null,
+      characterId: input.characterId ?? null,
+      characterName: input.characterName ?? null,
     };
   }
 

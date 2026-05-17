@@ -8,6 +8,7 @@ export interface ChatMessageRecord {
 }
 
 export interface ChatSummaryRecord {
+  characterId: string | null;
   characterName: string | null;
   createdAt: string;
   id: string;
@@ -18,6 +19,7 @@ export interface ChatSummaryRecord {
 }
 
 export interface ChatSessionRecord {
+  characterId: string | null;
   characterName: string | null;
   chat: ChatSummaryRecord;
   generationSettings: ChatGenerationSettingsRecord;
@@ -26,8 +28,11 @@ export interface ChatSessionRecord {
 }
 
 export interface CreateGenericChatInput {
+  characterId?: string | null;
+  characterName?: string | null;
   createdAt: string;
   id: string;
+  seedMessages?: AppendChatMessageInput[];
   title: string;
   userName: string;
 }

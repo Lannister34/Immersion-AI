@@ -1,7 +1,7 @@
 import type { CharacterSummaryDto } from '@immersion/contracts/characters';
-import { useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { type MouseEvent, useMemo, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
 import { createApiUrl } from '../../shared/api/client';
@@ -15,6 +15,8 @@ import {
   SortIcon,
   UploadIcon,
 } from '../../shared/ui/icons';
+import { createChat } from '../chats/api/create-chat';
+import { chatListQueryKey } from '../chats/queries/chat-list-query';
 import { characterListQueryOptions } from './queries/character-list-query';
 
 export { CharacterEditorScreen } from './editor';
@@ -151,6 +153,21 @@ interface CharacterCardProps {
 function CharacterCard({ character }: CharacterCardProps) {
   const color = avatarColor(character.name);
   const initial = avatarInitial(character.name);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const startChatMutation = useMutation({
+    mutationFn: () => createChat({ characterId: character.id }),
+    onSuccess: async (response) => {
+      await queryClient.invalidateQueries({ queryKey: chatListQueryKey });
+      await navigate({ to: '/chat/$chatId', params: { chatId: response.chat.id } });
+    },
+  });
+
+  const handleStartChat = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    startChatMutation.mutate();
+  };
 
   return (
     <Link
@@ -217,12 +234,12 @@ function CharacterCard({ character }: CharacterCardProps) {
         </span>
         <button
           className="btn btn--xs btn--primary"
-          disabled
-          onClick={(event) => event.preventDefault()}
-          title="Чат с этим персонажем — следующий слайс"
+          disabled={startChatMutation.isPending}
+          onClick={handleStartChat}
+          title="Начать новый чат с этим персонажем"
           type="button"
         >
-          <ChatIcon size={11} /> Чат
+          <ChatIcon size={11} /> {startChatMutation.isPending ? '…' : 'Чат'}
         </button>
       </div>
     </Link>

@@ -4,6 +4,7 @@ import type { ChatSummaryDto } from '@immersion/contracts/chats';
 
 import { FileChatRepository } from '../infrastructure/file-chat-repository.js';
 import { ChatMessageNotFoundError, ChatNotFoundError } from './append-chat-messages.js';
+import { toChatSummaryDto } from './chat-session-response.js';
 
 interface BranchChatInput {
   now: () => Date;
@@ -54,5 +55,5 @@ export async function branchChat({ now, sourceChatId, throughIndex, title }: Bra
     throw new ChatMessageNotFoundError(sourceChatId, throughIndex);
   }
 
-  return summary;
+  return toChatSummaryDto(summary);
 }
