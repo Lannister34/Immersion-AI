@@ -625,6 +625,67 @@ describe('generation routes', () => {
     await app.close();
   });
 
+  it('previews the prompt with an edited transcript message via messageOverrides', async () => {
+    mockProviderSuccess('Setup reply.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+
+    const firstReplyResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply',
+      payload: {
+        chatId: chat.id,
+        message: 'Original prompt.',
+      },
+    });
+    expect(firstReplyResponse.statusCode).toBe(200);
+
+    const previewResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: {
+        chatId: chat.id,
+        messageOverrides: [{ messageIndex: 1, content: 'Edited prompt with extra context.' }],
+      },
+    });
+    const preview = ChatReplyPromptPreviewResponseSchema.parse(previewResponse.json());
+    const userTurnContents = preview.request.messages
+      .filter((message) => message.role === 'user')
+      .map((message) => message.content);
+
+    expect(previewResponse.statusCode).toBe(200);
+    expect(userTurnContents).toContain('Edited prompt with extra context.');
+    expect(userTurnContents).not.toContain('Original prompt.');
+
+    const sessionResponse = await app.inject({
+      method: 'GET',
+      url: `/api/chats/${chat.id}`,
+    });
+    const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
+    expect(sessionPayload.messages[0]?.content).toBe('Original prompt.');
+
+    await app.close();
+  });
+
+  it('returns 404 when previewing with an out-of-range messageOverride index', async () => {
+    const app = buildApiApp();
+    const chat = await createChat(app);
+
+    const previewResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: {
+        chatId: chat.id,
+        messageOverrides: [{ messageIndex: 9, content: 'no such message' }],
+      },
+    });
+
+    expect(previewResponse.statusCode).toBe(404);
+    expect(previewResponse.json()).toMatchObject({ code: 'chat_message_not_found' });
+
+    await app.close();
+  });
+
   it('matches previewed provider payload to the real generation payload for the same draft', async () => {
     const providerRequests = mockProviderSuccess('Assistant reply after preview.');
     const app = buildApiApp();

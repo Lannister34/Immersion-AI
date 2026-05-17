@@ -552,10 +552,12 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                     return (
                       <BubbleMessage
                         canRegenerate={isLastAssistant && !isMutating}
+                        chatId={chatId}
                         isMutating={isMutating}
                         isSystem={message.role === 'system'}
                         isUser={message.role === 'user'}
                         key={message.id}
+                        messageIndex={messageIndex}
                         onBranch={async () => {
                           await branchChatMutation.mutateAsync({ throughMessageIndex: messageIndex });
                         }}
@@ -653,9 +655,11 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
 
 interface BubbleMessageProps {
   canRegenerate: boolean;
+  chatId: string;
   isMutating: boolean;
   isSystem: boolean;
   isUser: boolean;
+  messageIndex: number;
   onBranch: () => Promise<void>;
   onDelete: () => Promise<void>;
   onRegenerate: () => Promise<void>;
@@ -667,9 +671,11 @@ interface BubbleMessageProps {
 
 function BubbleMessage({
   canRegenerate,
+  chatId,
   isMutating,
   isSystem,
   isUser,
+  messageIndex,
   onBranch,
   onDelete,
   onRegenerate,
@@ -682,6 +688,13 @@ function BubbleMessage({
   const [draft, setDraft] = useState(text);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
+  const deferredDraft = useDeferredValue(draft);
+  const trimmedDraft = deferredDraft.trim();
+  const editPreviewQuery = useQuery({
+    ...chatReplyPromptPreviewQueryOptions(chatId, undefined, [{ content: trimmedDraft, messageIndex }]),
+    enabled: mode === 'edit' && trimmedDraft.length > 0 && trimmedDraft !== text,
+  });
+  const editPreviewStats = mode === 'edit' ? toContextStats(editPreviewQuery.data) : undefined;
 
   useEffect(() => {
     if (mode === 'view') {
@@ -798,11 +811,29 @@ function BubbleMessage({
               style={{ minHeight: 80, background: 'transparent', border: '1px solid var(--hairline)' }}
               value={draft}
             />
-            <div className="row gap-6" style={{ justifyContent: 'flex-end' }}>
+            <div className="row gap-6" style={{ alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <span className="muted" style={{ fontSize: 'var(--fz-2xs)', marginRight: 'auto' }}>
                 <span className="kbd">Ctrl</span>+<span className="kbd">Enter</span> сохранить ·{' '}
                 <span className="kbd">Esc</span> отменить
               </span>
+              <span className="muted mono" style={{ fontSize: 'var(--fz-2xs)' }} title="Длина черновика в символах">
+                {draft.length.toLocaleString('ru-RU')} симв.
+              </span>
+              {editPreviewStats ? (
+                <span
+                  className="muted mono"
+                  style={{ fontSize: 'var(--fz-2xs)' }}
+                  title="Оценка контекста после применения правки"
+                >
+                  ≈ {editPreviewStats.totalTokens.toLocaleString('ru-RU')} /{' '}
+                  {editPreviewStats.contextWindow.toLocaleString('ru-RU')} ток.
+                </span>
+              ) : null}
+              {editPreviewQuery.isFetching ? (
+                <span className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
+                  пересчёт…
+                </span>
+              ) : null}
               <button className="btn btn--xs btn--ghost-bordered" disabled={busy} onClick={handleCancel} type="button">
                 Отменить
               </button>

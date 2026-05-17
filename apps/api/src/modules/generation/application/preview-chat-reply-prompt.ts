@@ -1,16 +1,51 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 import {
   type ChatReplyPromptPreviewCommand,
+  type ChatReplyPromptPreviewMessageOverride,
   type ChatReplyPromptPreviewResponse,
   ChatReplyPromptPreviewResponseSchema,
 } from '@immersion/contracts/generation';
-import { ChatNotFoundError } from '../../chats/application/append-chat-messages.js';
+import { ChatMessageNotFoundError, ChatNotFoundError } from '../../chats/application/append-chat-messages.js';
 import { getChatSession } from '../../chats/application/get-chat-session.js';
 import { resolveChatReplyGenerationPlan } from '../../prompting/application/resolve-chat-reply-generation-plan.js';
 import { getProviderSettings } from '../../providers/application/get-provider-settings.js';
 import { DEFAULT_OPENAI_COMPATIBLE_MODEL } from '../../providers/domain/provider-settings.js';
 import { getRuntimeOverview } from '../../runtime/application/get-runtime-overview.js';
 import { getGenerationReadiness } from './get-generation-readiness.js';
+
+function withMessageOverrides(
+  session: ChatSessionDto,
+  overrides: ChatReplyPromptPreviewMessageOverride[] | undefined,
+): ChatSessionDto {
+  if (!overrides?.length) {
+    return session;
+  }
+
+  const overrideMap = new Map<number, string>();
+  for (const override of overrides) {
+    if (override.messageIndex < 1 || override.messageIndex > session.messages.length) {
+      throw new ChatMessageNotFoundError(session.chat.id, override.messageIndex);
+    }
+    overrideMap.set(override.messageIndex, override.content);
+  }
+
+  const nextMessages = session.messages.map((message, index) => {
+    const content = overrideMap.get(index + 1);
+    if (content === undefined) {
+      return message;
+    }
+    return { ...message, content };
+  });
+
+  return {
+    ...session,
+    messages: nextMessages,
+    chat: {
+      ...session.chat,
+      lastMessagePreview: nextMessages.at(-1)?.content.slice(0, 160) ?? null,
+    },
+  };
+}
 
 function withDraftUserMessage(session: ChatSessionDto, draftUserMessage: string | undefined): ChatSessionDto {
   const normalizedDraft = draftUserMessage?.trim();
@@ -62,9 +97,10 @@ export async function previewChatReplyPrompt(
   }
 
   const [readiness, providerModelName] = await Promise.all([getGenerationReadiness(), resolvePreviewModelName()]);
+  const sessionWithOverrides = withMessageOverrides(session, command.messageOverrides);
   const generationPlan = resolveChatReplyGenerationPlan({
     providerModelName,
-    session: withDraftUserMessage(session, command.draftUserMessage),
+    session: withDraftUserMessage(sessionWithOverrides, command.draftUserMessage),
   });
   const systemMessageCount = generationPlan.providerRequest.messages.filter(
     (message) => message.role === 'system',

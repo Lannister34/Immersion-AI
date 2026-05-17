@@ -63,9 +63,16 @@ export const ChatReplyGenerationErrorResponseSchema = ApiProblemSchema.extend({
 });
 export type ChatReplyGenerationErrorResponse = z.infer<typeof ChatReplyGenerationErrorResponseSchema>;
 
+export const ChatReplyPromptPreviewMessageOverrideSchema = z.object({
+  content: z.string().min(1).max(20_000),
+  messageIndex: z.number().int().positive(),
+});
+export type ChatReplyPromptPreviewMessageOverride = z.infer<typeof ChatReplyPromptPreviewMessageOverrideSchema>;
+
 export const ChatReplyPromptPreviewCommandSchema = z.object({
   chatId: ChatIdSchema,
   draftUserMessage: z.string().trim().min(1).max(20_000).optional(),
+  messageOverrides: z.array(ChatReplyPromptPreviewMessageOverrideSchema).optional(),
 });
 export type ChatReplyPromptPreviewCommand = z.infer<typeof ChatReplyPromptPreviewCommandSchema>;
 

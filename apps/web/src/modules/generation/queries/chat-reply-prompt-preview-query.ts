@@ -1,3 +1,4 @@
+import type { ChatReplyPromptPreviewMessageOverride } from '@immersion/contracts/generation';
 import { queryOptions } from '@tanstack/react-query';
 
 import { previewChatReplyPrompt } from '../api/preview-chat-reply-prompt';
@@ -5,18 +6,36 @@ import { previewChatReplyPrompt } from '../api/preview-chat-reply-prompt';
 export const chatReplyPromptPreviewQueryBaseKey = (chatId: string) =>
   ['generation', 'chat-reply-preview', chatId] as const;
 
-export const chatReplyPromptPreviewQueryKey = (chatId: string, draftUserMessage = '') =>
-  [...chatReplyPromptPreviewQueryBaseKey(chatId), draftUserMessage.trim()] as const;
+function normalizeOverrides(overrides?: ChatReplyPromptPreviewMessageOverride[]) {
+  if (!overrides?.length) {
+    return [] as ChatReplyPromptPreviewMessageOverride[];
+  }
+  return [...overrides]
+    .map((override) => ({ ...override, content: override.content }))
+    .sort((left, right) => left.messageIndex - right.messageIndex);
+}
 
-export function chatReplyPromptPreviewQueryOptions(chatId: string, draftUserMessage = '') {
+export const chatReplyPromptPreviewQueryKey = (
+  chatId: string,
+  draftUserMessage = '',
+  overrides?: ChatReplyPromptPreviewMessageOverride[],
+) => [...chatReplyPromptPreviewQueryBaseKey(chatId), draftUserMessage.trim(), normalizeOverrides(overrides)] as const;
+
+export function chatReplyPromptPreviewQueryOptions(
+  chatId: string,
+  draftUserMessage = '',
+  overrides?: ChatReplyPromptPreviewMessageOverride[],
+) {
   const normalizedDraftUserMessage = draftUserMessage.trim();
+  const normalizedOverrides = normalizeOverrides(overrides);
 
   return queryOptions({
-    queryKey: chatReplyPromptPreviewQueryKey(chatId, normalizedDraftUserMessage),
+    queryKey: chatReplyPromptPreviewQueryKey(chatId, normalizedDraftUserMessage, normalizedOverrides),
     queryFn: () =>
       previewChatReplyPrompt({
         chatId,
-        draftUserMessage: normalizedDraftUserMessage || undefined,
+        ...(normalizedDraftUserMessage ? { draftUserMessage: normalizedDraftUserMessage } : {}),
+        ...(normalizedOverrides.length > 0 ? { messageOverrides: normalizedOverrides } : {}),
       }),
   });
 }
