@@ -1,10 +1,13 @@
 import type { LorebookSummaryDto } from '@immersion/contracts/lorebooks';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
 import { BookIcon, MoreIcon, PlusIcon, SearchIcon, UploadIcon } from '../../shared/ui/icons';
 import { lorebookListQueryOptions } from './queries/lorebook-list-query';
+
+export { LorebookEditorScreen } from './editor';
 
 function formatRelative(iso: string, now: Date = new Date()): string {
   const date = new Date(iso);
@@ -38,9 +41,9 @@ export function LorebooksScreen() {
             <button className="btn" disabled type="button">
               <UploadIcon size={13} /> Импорт
             </button>
-            <button className="btn btn--primary" disabled type="button">
+            <Link className="btn btn--primary" to="/lorebooks/new">
               <PlusIcon size={13} /> Новый лорбук
-            </button>
+            </Link>
           </>
         }
         crumbs={[{ label: 'Лорбуки', strong: true }]}
@@ -135,7 +138,8 @@ interface LorebookRowProps {
 
 function LorebookRow({ lorebook }: LorebookRowProps) {
   return (
-    <div
+    <Link
+      params={{ lorebookId: lorebook.id }}
       style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(0, 1fr) 80px minmax(0, 1fr) 120px 40px',
@@ -144,7 +148,10 @@ function LorebookRow({ lorebook }: LorebookRowProps) {
         padding: '10px 14px',
         borderBottom: '1px solid var(--hairline)',
         background: 'var(--bg)',
+        color: 'inherit',
+        textDecoration: 'none',
       }}
+      to="/lorebooks/$lorebookId"
     >
       <div className="row gap-8" style={{ minWidth: 0 }}>
         <BookIcon size={13} stroke="var(--muted)" />
@@ -165,9 +172,9 @@ function LorebookRow({ lorebook }: LorebookRowProps) {
       <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
         {formatRelative(lorebook.updatedAt)}
       </span>
-      <button className="btn btn--icon btn--xs" disabled type="button">
+      <button className="btn btn--icon btn--xs" disabled onClick={(event) => event.preventDefault()} type="button">
         <MoreIcon size={12} />
       </button>
-    </div>
+    </Link>
   );
 }

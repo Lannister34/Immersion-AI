@@ -1,11 +1,11 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { createRootRouteWithContext, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 
-import { CharactersScreen } from '../../modules/characters';
+import { CharacterEditorScreen, CharactersScreen } from '../../modules/characters';
 import { HomeScreen } from '../../modules/chat-shell';
 import { ChatListScreen, ChatSessionScreen } from '../../modules/chats';
-import { LorebooksScreen } from '../../modules/lorebooks';
-import { ScenariosScreen } from '../../modules/scenarios';
+import { LorebookEditorScreen, LorebooksScreen } from '../../modules/lorebooks';
+import { ScenarioEditorScreen, ScenariosScreen } from '../../modules/scenarios';
 import { ServerControlScreen } from '../../modules/server-control';
 import { SettingsScreen } from '../../modules/settings';
 import { RouteStatusScreen } from '../../shared/ui/route-status-screen';
@@ -75,16 +75,79 @@ const charactersRoute = createRoute({
   component: CharactersScreen,
 });
 
+function CharacterNewRouteComponent() {
+  return <CharacterEditorScreen characterId={null} />;
+}
+
+function CharacterEditorRouteComponent() {
+  const { characterId } = characterEditorRoute.useParams();
+  return <CharacterEditorScreen characterId={characterId} />;
+}
+
+const characterNewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/characters/new',
+  component: CharacterNewRouteComponent,
+});
+
+const characterEditorRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/characters/$characterId',
+  component: CharacterEditorRouteComponent,
+});
+
 const scenariosRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/scenarios',
   component: ScenariosScreen,
 });
 
+function ScenarioNewRouteComponent() {
+  return <ScenarioEditorScreen scenarioId={null} />;
+}
+
+function ScenarioEditorRouteComponent() {
+  const { scenarioId } = scenarioEditorRoute.useParams();
+  return <ScenarioEditorScreen scenarioId={scenarioId} />;
+}
+
+const scenarioNewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/scenarios/new',
+  component: ScenarioNewRouteComponent,
+});
+
+const scenarioEditorRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/scenarios/$scenarioId',
+  component: ScenarioEditorRouteComponent,
+});
+
 const lorebooksRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/lorebooks',
   component: LorebooksScreen,
+});
+
+function LorebookNewRouteComponent() {
+  return <LorebookEditorScreen lorebookId={null} />;
+}
+
+function LorebookEditorRouteComponent() {
+  const { lorebookId } = lorebookEditorRoute.useParams();
+  return <LorebookEditorScreen lorebookId={lorebookId} />;
+}
+
+const lorebookNewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/lorebooks/new',
+  component: LorebookNewRouteComponent,
+});
+
+const lorebookEditorRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/lorebooks/$lorebookId',
+  component: LorebookEditorRouteComponent,
 });
 
 const serverRoute = createRoute({
@@ -104,8 +167,14 @@ const routeTree = rootRoute.addChildren([
   chatIndexRoute,
   chatSessionRoute,
   charactersRoute,
+  characterNewRoute,
+  characterEditorRoute,
   scenariosRoute,
+  scenarioNewRoute,
+  scenarioEditorRoute,
   lorebooksRoute,
+  lorebookNewRoute,
+  lorebookEditorRoute,
   serverRoute,
   settingsRoute,
 ]);

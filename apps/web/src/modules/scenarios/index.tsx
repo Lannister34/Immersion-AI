@@ -1,10 +1,13 @@
 import type { ScenarioSummaryDto } from '@immersion/contracts/scenarios';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
 import { PlusIcon, SearchIcon, UploadIcon } from '../../shared/ui/icons';
 import { scenarioListQueryOptions } from './queries/scenario-list-query';
+
+export { ScenarioEditorScreen } from './editor';
 
 function formatRelative(iso: string, now: Date = new Date()): string {
   const date = new Date(iso);
@@ -38,9 +41,9 @@ export function ScenariosScreen() {
             <button className="btn" disabled type="button">
               <UploadIcon size={13} /> Импорт
             </button>
-            <button className="btn btn--primary" disabled type="button">
+            <Link className="btn btn--primary" to="/scenarios/new">
               <PlusIcon size={13} /> Новый сценарий
-            </button>
+            </Link>
           </>
         }
         crumbs={[{ label: 'Сценарии', strong: true }]}
@@ -110,9 +113,18 @@ interface ScenarioRowProps {
 
 function ScenarioRow({ scenario }: ScenarioRowProps) {
   return (
-    <article
+    <Link
       className="card card-hover"
-      style={{ padding: 14, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 120px', gap: 18 }}
+      params={{ scenarioId: scenario.id }}
+      style={{
+        padding: 14,
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr) 120px',
+        gap: 18,
+        textDecoration: 'none',
+        color: 'inherit',
+      }}
+      to="/scenarios/$scenarioId"
     >
       <div style={{ minWidth: 0, display: 'grid', gap: 6 }}>
         <strong style={{ fontSize: 'var(--fz-md)' }}>{scenario.name}</strong>
@@ -149,11 +161,17 @@ function ScenarioRow({ scenario }: ScenarioRowProps) {
         <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
           {formatRelative(scenario.updatedAt)}
         </span>
-        <button className="btn btn--xs btn--primary" disabled type="button" title="Чат по сценарию — следующий слайс">
+        <button
+          className="btn btn--xs btn--primary"
+          disabled
+          onClick={(event) => event.preventDefault()}
+          title="Чат по сценарию — следующий слайс"
+          type="button"
+        >
           Начать чат
         </button>
       </div>
-    </article>
+    </Link>
   );
 }
 

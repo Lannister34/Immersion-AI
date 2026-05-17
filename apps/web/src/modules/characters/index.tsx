@@ -1,5 +1,6 @@
 import type { CharacterSummaryDto } from '@immersion/contracts/characters';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
@@ -15,6 +16,8 @@ import {
   UploadIcon,
 } from '../../shared/ui/icons';
 import { characterListQueryOptions } from './queries/character-list-query';
+
+export { CharacterEditorScreen } from './editor';
 
 function avatarColor(seed: string): string {
   let hash = 0;
@@ -64,9 +67,9 @@ export function CharactersScreen() {
             <button className="btn" disabled type="button">
               <UploadIcon size={13} /> Импорт
             </button>
-            <button className="btn btn--primary" disabled type="button">
+            <Link className="btn btn--primary" to="/characters/new">
               <PlusIcon size={13} /> Новый персонаж
-            </button>
+            </Link>
           </>
         }
         crumbs={[{ label: 'Персонажи', strong: true }]}
@@ -150,9 +153,18 @@ function CharacterCard({ character }: CharacterCardProps) {
   const initial = avatarInitial(character.name);
 
   return (
-    <article
+    <Link
       className="card card-hover"
-      style={{ padding: 0, overflow: 'hidden', display: 'grid', gridTemplateRows: 'auto 1fr auto' }}
+      params={{ characterId: character.id }}
+      style={{
+        padding: 0,
+        overflow: 'hidden',
+        display: 'grid',
+        gridTemplateRows: 'auto 1fr auto',
+        textDecoration: 'none',
+        color: 'inherit',
+      }}
+      to="/characters/$characterId"
     >
       <div
         style={{
@@ -206,13 +218,14 @@ function CharacterCard({ character }: CharacterCardProps) {
         <button
           className="btn btn--xs btn--primary"
           disabled
+          onClick={(event) => event.preventDefault()}
           title="Чат с этим персонажем — следующий слайс"
           type="button"
         >
           <ChatIcon size={11} /> Чат
         </button>
       </div>
-    </article>
+    </Link>
   );
 }
 
