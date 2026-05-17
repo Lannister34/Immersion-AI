@@ -1,5 +1,6 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
+import type { PromptCharacterSnapshot } from '@immersion/domain/prompting';
 
 import { getSettingsOverview } from '../../settings/application/get-settings-overview.js';
 import {
@@ -36,6 +37,8 @@ export interface ChatReplyGenerationPlan {
 }
 
 export interface ResolveChatReplyGenerationPlanInput {
+  character?: PromptCharacterSnapshot | null;
+  characterScenarioContent?: string | null;
   providerModelName: string | null;
   session: ChatSessionDto;
   settings?: SettingsOverviewResponse;
@@ -72,6 +75,8 @@ export function resolveChatReplyGenerationPlan(input: ResolveChatReplyGeneration
     input.session.generationSettings,
   );
   const prompt = buildChatReplyPromptBundle({
+    character: input.character ?? null,
+    characterScenarioContent: input.characterScenarioContent ?? null,
     samplerPreset: toPromptSamplerPreset(effectiveSettings),
     session: input.session,
     settings,

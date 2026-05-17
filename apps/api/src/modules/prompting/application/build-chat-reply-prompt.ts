@@ -1,5 +1,6 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
+import type { PromptCharacterSnapshot } from '@immersion/domain/prompting';
 
 import type { ActiveSamplerPreset } from '../../settings/application/active-sampler-preset.js';
 import { assembleBasePrompt, type BasePromptAssemblyResult } from './assemble-base-prompt.js';
@@ -34,6 +35,8 @@ export interface ChatReplyPromptBundle {
 }
 
 export interface BuildChatReplyPromptInput {
+  character?: PromptCharacterSnapshot | null;
+  characterScenarioContent?: string | null;
   samplerPreset: ActiveSamplerPreset;
   session: ChatSessionDto;
   settings: SettingsOverviewResponse;
@@ -41,10 +44,45 @@ export interface BuildChatReplyPromptInput {
 
 const DEFAULT_SYSTEM_PROMPT_TEMPLATE =
   'You are a helpful local assistant. Answer the user directly and keep the conversation coherent.';
+const CHARACTER_SYSTEM_PROMPT_TEMPLATE = [
+  'You are {{character.name}}, a character in an immersive role-play with {{user.name}}.',
+  '{{character.description}}',
+  '{{character.personality}}',
+  '{{scenario.content}}',
+  '{{user.persona}}',
+  'Stay fully in character as {{character.name}}. Reply in first person, in the same language as the user, and never refer to yourself as an AI or assistant.',
+].join('\n\n');
 const EMPTY_SYSTEM_PROMPT_TEMPLATE = '';
 
 function isContextualChat(session: ChatSessionDto) {
   return session.characterName !== null || session.chat.characterName !== null;
+}
+
+function buildCharacterContextSection(
+  character: PromptCharacterSnapshot | null,
+  scenarioContent: string | null,
+): string | null {
+  if (!character) return null;
+
+  const lines: string[] = [`You are ${character.name}.`];
+  const description = character.description?.trim();
+  if (description) {
+    lines.push(`Description:\n${description}`);
+  }
+  const personality = character.personality?.trim();
+  if (personality) {
+    lines.push(`Personality:\n${personality}`);
+  }
+  const scenario = scenarioContent?.trim();
+  if (scenario) {
+    lines.push(`Scenario:\n${scenario}`);
+  }
+  const example = character.mesExample?.trim();
+  if (example) {
+    lines.push(`Example dialogue:\n${example}`);
+  }
+
+  return lines.join('\n\n');
 }
 
 function toPromptTranscriptRole(role: ChatSessionDto['messages'][number]['role']): PromptTranscriptRole {
@@ -204,8 +242,16 @@ function trimTranscriptToContextBudget(
 
 export function buildChatReplyPromptBundle(input: BuildChatReplyPromptInput): ChatReplyPromptBundle {
   const activePreset = input.samplerPreset;
-  const shouldUseContextualPromptSettings = isContextualChat(input.session);
+  const character = input.character ?? null;
+  const shouldUseContextualPromptSettings = character !== null || isContextualChat(input.session);
+  const defaultSystemPromptTemplate = !shouldUseContextualPromptSettings
+    ? EMPTY_SYSTEM_PROMPT_TEMPLATE
+    : character !== null
+      ? CHARACTER_SYSTEM_PROMPT_TEMPLATE
+      : DEFAULT_SYSTEM_PROMPT_TEMPLATE;
   const snapshot = buildPromptInputSnapshot({
+    ...(character ? { character } : {}),
+    ...(input.characterScenarioContent ? { scenario: { content: input.characterScenarioContent, name: null } } : {}),
     chat: {
       customSystemPrompt: input.session.generationSettings.systemPrompt,
       id: input.session.chat.id,
@@ -222,9 +268,7 @@ export function buildChatReplyPromptBundle(input: BuildChatReplyPromptInput): Ch
       trimStrategy: activePreset.contextTrimStrategy,
     },
     settings: {
-      defaultSystemPromptTemplate: shouldUseContextualPromptSettings
-        ? DEFAULT_SYSTEM_PROMPT_TEMPLATE
-        : EMPTY_SYSTEM_PROMPT_TEMPLATE,
+      defaultSystemPromptTemplate,
       responseLanguage: shouldUseContextualPromptSettings ? input.settings.profile.responseLanguage : 'none',
       systemPromptTemplate: shouldUseContextualPromptSettings
         ? input.settings.profile.systemPromptTemplate.trim() || null
@@ -240,7 +284,8 @@ export function buildChatReplyPromptBundle(input: BuildChatReplyPromptInput): Ch
   const languageInstruction = shouldUseContextualPromptSettings
     ? getLanguageInstruction(input.settings.profile.responseLanguage)
     : null;
-  const systemSections = [basePrompt.prompt, languageInstruction].filter(
+  const characterContext = buildCharacterContextSection(character, input.characterScenarioContent ?? null);
+  const systemSections = [characterContext, basePrompt.prompt, languageInstruction].filter(
     (section): section is string => section !== null && section.trim().length > 0,
   );
   const messages: ChatReplyPromptMessage[] = [];

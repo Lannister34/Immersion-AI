@@ -7,6 +7,7 @@ import {
 } from '@immersion/contracts/generation';
 import { ChatMessageNotFoundError, ChatNotFoundError } from '../../chats/application/append-chat-messages.js';
 import { getChatSession } from '../../chats/application/get-chat-session.js';
+import { loadCharacterContextForSession } from '../../chats/application/load-character-context.js';
 import { resolveChatReplyGenerationPlan } from '../../prompting/application/resolve-chat-reply-generation-plan.js';
 import { getProviderSettings } from '../../providers/application/get-provider-settings.js';
 import { DEFAULT_OPENAI_COMPATIBLE_MODEL } from '../../providers/domain/provider-settings.js';
@@ -98,9 +99,13 @@ export async function previewChatReplyPrompt(
 
   const [readiness, providerModelName] = await Promise.all([getGenerationReadiness(), resolvePreviewModelName()]);
   const sessionWithOverrides = withMessageOverrides(session, command.messageOverrides);
+  const sessionForPlan = withDraftUserMessage(sessionWithOverrides, command.draftUserMessage);
+  const characterContext = await loadCharacterContextForSession(sessionForPlan);
   const generationPlan = resolveChatReplyGenerationPlan({
+    character: characterContext.character,
+    characterScenarioContent: characterContext.characterScenarioContent,
     providerModelName,
-    session: withDraftUserMessage(sessionWithOverrides, command.draftUserMessage),
+    session: sessionForPlan,
   });
   const systemMessageCount = generationPlan.providerRequest.messages.filter(
     (message) => message.role === 'system',

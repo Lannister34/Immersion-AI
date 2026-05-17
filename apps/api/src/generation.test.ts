@@ -625,6 +625,72 @@ describe('generation routes', () => {
     await app.close();
   });
 
+  it('previews the prompt with character description, personality and per-card scenario for a character chat', async () => {
+    const charactersDir = path.join(temporaryDataRoot, 'characters');
+    await fs.mkdir(charactersDir, { recursive: true });
+    await fs.writeFile(
+      path.join(charactersDir, 'Aria.json'),
+      JSON.stringify({
+        name: 'Ария',
+        description: 'Молодая скульпторша из Петербурга.',
+        personality: 'Тихая, но острая на язык.',
+        scenario: 'В мастерской вечером, в стенах пахнет глиной.',
+        first_message: 'Привет, ты впервые в студии?',
+      }),
+      'utf8',
+    );
+
+    const app = buildApiApp();
+    const createChatResponse = await app.inject({
+      method: 'POST',
+      url: '/api/chats',
+      payload: { characterId: 'Aria.json' },
+    });
+    const createdChat = CreateChatResponseSchema.parse(createChatResponse.json()).chat;
+
+    const previewResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: { chatId: createdChat.id, draftUserMessage: 'Расскажи о себе.' },
+    });
+    const preview = ChatReplyPromptPreviewResponseSchema.parse(previewResponse.json());
+    const systemMessage = preview.request.messages.find((message) => message.role === 'system');
+
+    expect(previewResponse.statusCode).toBe(200);
+    expect(preview.diagnostics.systemPromptIncluded).toBe(true);
+    expect(systemMessage).toBeDefined();
+    expect(systemMessage?.content).toContain('Ария');
+    expect(systemMessage?.content).toContain('Молодая скульпторша из Петербурга.');
+    expect(systemMessage?.content).toContain('Тихая, но острая на язык.');
+    expect(systemMessage?.content).toContain('В мастерской вечером, в стенах пахнет глиной.');
+    // Seed first_message also lands in the transcript
+    expect(
+      preview.request.messages.some(
+        (m) => m.role === 'assistant' && m.content.includes('Привет, ты впервые в студии?'),
+      ),
+    ).toBe(true);
+
+    await app.close();
+  });
+
+  it('keeps the generic helper prompt for chats without a character', async () => {
+    const app = buildApiApp();
+    const chat = await createChat(app);
+
+    const previewResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: { chatId: chat.id, draftUserMessage: 'Plain question.' },
+    });
+    const preview = ChatReplyPromptPreviewResponseSchema.parse(previewResponse.json());
+
+    expect(previewResponse.statusCode).toBe(200);
+    expect(preview.diagnostics.systemPromptIncluded).toBe(false);
+    expect(preview.diagnostics.systemMessageCount).toBe(0);
+
+    await app.close();
+  });
+
   it('previews the prompt with an edited transcript message via messageOverrides', async () => {
     mockProviderSuccess('Setup reply.');
     const app = buildApiApp();
