@@ -14,13 +14,17 @@ export interface ForkGenericChatInput {
   title: string;
 }
 
+export interface ListGenericChatsOptions {
+  searchText?: string;
+}
+
 export interface ChatRepository {
   appendGenericChatMessages(chatId: string, messages: AppendChatMessageInput[]): Promise<ChatSessionRecord | null>;
   createGenericChat(input: CreateGenericChatInput): Promise<ChatSummaryRecord>;
   deleteGenericChat(chatId: string): Promise<boolean>;
   forkGenericChat(input: ForkGenericChatInput): Promise<ChatSummaryRecord | null>;
   getGenericChatSession(chatId: string): Promise<ChatSessionRecord | null>;
-  listGenericChats(): Promise<ChatSummaryRecord[]>;
+  listGenericChats(options?: ListGenericChatsOptions): Promise<ChatSummaryRecord[]>;
   truncateGenericChatMessagesFromIndex(
     chatId: string,
     fromIndex: number,

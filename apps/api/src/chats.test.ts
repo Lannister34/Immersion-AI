@@ -852,6 +852,50 @@ describe('chat routes', () => {
     await app.close();
   });
 
+  it('exports a chat as JSONL with an attachment header derived from the title', async () => {
+    await writeGenericChatFile('export-route-chat', [
+      JSON.stringify({
+        chat_metadata: {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          title: 'Сказка о драконе',
+          updatedAt: '2026-01-01T00:00:01.000Z',
+        },
+        user_name: 'Тестер',
+        character_name: '',
+      }),
+      JSON.stringify({ is_user: true, mes: 'one', send_date: '2026-01-01T00:00:01.000Z' }),
+    ]);
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/chats/export-route-chat/export',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('application/x-ndjson');
+    expect(response.headers['content-disposition']).toContain('attachment');
+    expect(response.headers['content-disposition']).toContain('filename*=UTF-8');
+    expect(response.body.trim().split('\n')).toHaveLength(2);
+    expect(response.body).toContain('chat_metadata');
+    expect(response.body).toContain('"mes":"one"');
+
+    await app.close();
+  });
+
+  it('returns 404 when exporting a missing chat', async () => {
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/chats/never-existed/export',
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'chat_not_found' });
+
+    await app.close();
+  });
+
   it('returns 404 when deleting a missing chat', async () => {
     const app = buildApiApp();
     const response = await app.inject({

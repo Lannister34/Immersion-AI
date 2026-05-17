@@ -11,6 +11,7 @@ import { ChatMessageNotFoundError, ChatNotFoundError } from '../../application/a
 import { branchChat } from '../../application/branch-chat.js';
 import { createChat } from '../../application/create-chat.js';
 import { deleteChat } from '../../application/delete-chat.js';
+import { exportChat } from '../../application/export-chat.js';
 import { getChatSession } from '../../application/get-chat-session.js';
 import { listChats } from '../../application/list-chats.js';
 import { truncateChatMessages } from '../../application/truncate-chat-messages.js';
@@ -27,6 +28,10 @@ const ChatRouteParamsSchema = z.object({
 const ChatMessageRouteParamsSchema = z.object({
   chatId: ChatIdSchema,
   messageIndex: z.coerce.number().int().positive(),
+});
+
+const ChatListQuerySchema = z.object({
+  q: z.string().trim().max(200).optional(),
 });
 
 function toProblem(error: unknown) {
@@ -80,11 +85,12 @@ function toProblem(error: unknown) {
 }
 
 export const chatsRoutes: FastifyPluginAsync = async (app) => {
-  app.get('/', async (_request, reply) => {
+  app.get('/', async (request, reply) => {
     try {
-      return await listChats();
+      const query = ChatListQuerySchema.parse(request.query);
+      return await listChats(query.q ? { searchText: query.q } : {});
     } catch (error) {
-      _request.log.error({ err: error }, 'Failed to list generic chats');
+      request.log.error({ err: error }, 'Failed to list generic chats');
       const problem = toProblem(error);
 
       return reply.status(problem.statusCode).send(problem.body);
@@ -119,6 +125,26 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return session;
     } catch (error) {
       request.log.error({ err: error }, 'Failed to load generic chat session');
+      const problem = toProblem(error);
+
+      return reply.status(problem.statusCode).send(problem.body);
+    }
+  });
+
+  app.get('/:chatId/export', async (request, reply) => {
+    try {
+      const { chatId } = ChatRouteParamsSchema.parse(request.params);
+      const exported = await exportChat(chatId);
+      const asciiFallback = exported.fileName.replace(/[^\x20-\x7e]+/gu, '_').replace(/"/g, "'");
+      const safeAscii = asciiFallback.length > 0 ? asciiFallback : 'chat.jsonl';
+      const encodedFileName = encodeURIComponent(exported.fileName);
+
+      reply.header('Content-Type', 'application/x-ndjson; charset=utf-8');
+      reply.header('Content-Disposition', `attachment; filename="${safeAscii}"; filename*=UTF-8''${encodedFileName}`);
+
+      return exported.body;
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to export chat');
       const problem = toProblem(error);
 
       return reply.status(problem.statusCode).send(problem.body);

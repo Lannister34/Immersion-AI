@@ -18,7 +18,8 @@ import {
 } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
-import { ApiError } from '../../shared/api/client';
+import { useUiShellStore } from '../../app/store/ui-shell';
+import { ApiError, createApiUrl } from '../../shared/api/client';
 import {
   BookIcon,
   BranchIcon,
@@ -125,8 +126,9 @@ function formatTime(iso: string): string {
 export function ChatListScreen() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const chatListQuery = useQuery(chatListQueryOptions());
   const [search, setSearch] = useState('');
+  const deferredSearch = useDeferredValue(search);
+  const chatListQuery = useQuery(chatListQueryOptions(deferredSearch));
   const createMutation = useMutation({
     mutationFn: createChat,
     onSuccess: async (response) => {
@@ -135,16 +137,8 @@ export function ChatListScreen() {
     },
   });
 
-  const allItems = chatListQuery.data?.items ?? [];
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return allItems;
-    return allItems.filter((item) =>
-      [item.title, item.characterName, item.lastMessagePreview]
-        .filter(Boolean)
-        .some((value) => value!.toLowerCase().includes(q)),
-    );
-  }, [allItems, search]);
+  const filtered = chatListQuery.data?.items ?? [];
+  const allItems = filtered;
 
   const characterCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -407,7 +401,8 @@ type RightPanelSection = 'settings' | 'character' | 'context' | null;
 export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const [draftMessage, setDraftMessage] = useState('');
   const deferredDraftMessage = useDeferredValue(draftMessage);
-  const [openSection, setOpenSection] = useState<RightPanelSection>('settings');
+  const openSection = useUiShellStore((state) => state.chatRightPanelSection);
+  const setOpenSection = useUiShellStore((state) => state.setChatRightPanelSection);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -520,9 +515,14 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
           crumbs={[{ label: 'Чаты' }, { label: `${characterDisplay} · ${session.chat.title}`, strong: true }]}
           actions={
             <>
-              <button className="btn" type="button">
+              <a
+                className="btn"
+                download
+                href={createApiUrl(`/api/chats/${encodeURIComponent(chatId)}/export`)}
+                title="Скачать JSONL-снимок чата"
+              >
                 <DownloadIcon size={14} /> Экспорт
-              </button>
+              </a>
               {confirmDeleteChat ? (
                 <>
                   <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>

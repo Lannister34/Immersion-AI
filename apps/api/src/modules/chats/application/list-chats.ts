@@ -2,10 +2,14 @@ import { type ChatListResponse, ChatListResponseSchema } from '@immersion/contra
 
 import { FileChatRepository } from '../infrastructure/file-chat-repository.js';
 
-export async function listChats(): Promise<ChatListResponse> {
+export interface ListChatsInput {
+  searchText?: string;
+}
+
+export async function listChats(input: ListChatsInput = {}): Promise<ChatListResponse> {
   const chatRepository = new FileChatRepository();
 
   return ChatListResponseSchema.parse({
-    items: await chatRepository.listGenericChats(),
+    items: await chatRepository.listGenericChats(input.searchText ? { searchText: input.searchText } : {}),
   });
 }

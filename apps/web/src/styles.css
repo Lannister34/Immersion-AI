@@ -306,6 +306,22 @@ select:disabled {
   background: var(--surface);
   border: 1px solid var(--hairline);
   border-radius: var(--r-md);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background 120ms ease-out,
+    border-color 120ms ease-out;
+}
+
+.sb__status:hover {
+  background: var(--surface-2);
+  border-color: var(--hairline-strong);
+}
+
+.sb__status:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .sb__status-text {
@@ -1020,10 +1036,22 @@ select:disabled {
   color: var(--text);
   font-size: var(--fz-sm);
   font-weight: 600;
+  transition: background 120ms ease-out;
+}
+
+.rp__section-toggle:hover {
+  background: var(--surface);
 }
 
 .rp__section-toggle .chevron {
-  transition: transform 0.15s;
+  color: var(--muted);
+  transition:
+    transform 0.15s,
+    color 0.15s;
+}
+
+.rp__section-toggle:hover .chevron {
+  color: var(--text-1);
 }
 
 .rp__section[data-open="true"] .chevron {

@@ -1,77 +1,44 @@
+import type { ScenarioSummaryDto } from '@immersion/contracts/scenarios';
+import { useQuery } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+
 import { Topbar } from '../../app/layout/topbar';
 import { PlusIcon, SearchIcon, UploadIcon } from '../../shared/ui/icons';
+import { scenarioListQueryOptions } from './queries/scenario-list-query';
 
-// TODO: wire to backend scenarios module once apps/api exposes /api/scenarios list
-interface SampleScenario {
-  name: string;
-  desc: string;
-  chars: readonly string[];
-  colors: readonly string[];
-  tags: readonly string[];
-  date: string;
+function formatRelative(iso: string, now: Date = new Date()): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.round(diffMs / 86_400_000);
+  if (diffDays === 0) return 'сегодня';
+  if (diffDays === 1) return 'вчера';
+  if (diffDays < 7) return `${diffDays} д`;
+  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
 }
 
-const SAMPLE: readonly SampleScenario[] = [
-  {
-    name: 'Студия керамики',
-    desc: 'Поздняя смена. Третья форма ушла в брак.',
-    chars: ['Э'],
-    colors: ['oklch(0.4 0.08 30)'],
-    tags: ['ремесло', 'конфликт'],
-    date: '19 мар',
-  },
-  {
-    name: 'Неожиданный гость',
-    desc: 'Возвращение домой раньше срока.',
-    chars: ['К', 'М'],
-    colors: ['oklch(0.5 0.15 320)', 'oklch(0.4 0.06 50)'],
-    tags: ['семья', 'ru'],
-    date: '12 мар',
-  },
-  {
-    name: 'Экзамен в школе',
-    desc: 'Подозрение в списывании на пробном ЕГЭ.',
-    chars: ['Ю'],
-    colors: ['oklch(0.5 0.12 80)'],
-    tags: ['школа', 'психология'],
-    date: '27 фев',
-  },
-  {
-    name: 'Домашний разлад',
-    desc: 'Тихий вечер после крупной ссоры.',
-    chars: ['Э'],
-    colors: ['oklch(0.4 0.08 30)'],
-    tags: ['семья', 'драма'],
-    date: '23 апр',
-  },
-  {
-    name: 'Столкновение в коридоре',
-    desc: 'Случайная встреча перед лекцией.',
-    chars: ['Д'],
-    colors: ['oklch(0.45 0.1 200)'],
-    tags: ['учёба', 'ru'],
-    date: '3 мар',
-  },
-  {
-    name: 'Анонимный чат',
-    desc: 'Знакомство без имён и лиц.',
-    chars: ['?'],
-    colors: ['var(--surface-2)'],
-    tags: ['mystery'],
-    date: '15 фев',
-  },
-] as const;
-
 export function ScenariosScreen() {
+  const query = useQuery(scenarioListQueryOptions());
+  const [search, setSearch] = useState('');
+  const items = query.data?.items ?? [];
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return items;
+    return items.filter((item) => {
+      const haystack = [item.name, item.preview ?? '', item.concept ?? '', ...item.tags].join(' ').toLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [items, search]);
+
   return (
     <main className="main">
       <Topbar
         actions={
           <>
-            <button className="btn" type="button">
+            <button className="btn" disabled type="button">
               <UploadIcon size={13} /> Импорт
             </button>
-            <button className="btn btn--primary" type="button">
+            <button className="btn btn--primary" disabled type="button">
               <PlusIcon size={13} /> Новый сценарий
             </button>
           </>
@@ -84,62 +51,118 @@ export function ScenariosScreen() {
           <div className="page__title-row">
             <div>
               <h1 className="page__title">Сценарии</h1>
-              <div className="page__sub">Демо-данные · backend ещё не подключён к этому модулю</div>
+              <div className="page__sub">
+                {query.isLoading
+                  ? 'Загружаем сценарии…'
+                  : query.isError
+                    ? 'Не удалось загрузить сценарии'
+                    : `${items.length} сценари${items.length === 1 ? 'й' : items.length >= 2 && items.length <= 4 ? 'я' : 'ев'} в библиотеке`}
+              </div>
             </div>
-            <div className="search" style={{ minWidth: 280 }}>
-              <SearchIcon size={13} />
-              <input placeholder="Поиск…" />
+            <div className="row gap-8">
+              <div className="search" style={{ minWidth: 280 }}>
+                <SearchIcon size={13} />
+                <input
+                  onChange={(event) => setSearch(event.currentTarget.value)}
+                  placeholder="Имя, концепт, тег…"
+                  value={search}
+                />
+              </div>
             </div>
           </div>
-          <div className="filters">
-            <span className="filter-chip" data-active="true">
-              Все
-            </span>
-            {['ремесло', 'семья', 'школа', 'драма', 'конфликт'].map((tag) => (
-              <span className="filter-chip" key={tag}>
+        </div>
+        <div className="page__body">
+          {query.isLoading ? (
+            <ScenariosListSkeleton />
+          ) : query.isError ? (
+            <div className="empty">
+              <h2>Не удалось загрузить сценарии</h2>
+              <p>Проверьте rewrite API и повторите попытку.</p>
+            </div>
+          ) : items.length === 0 ? (
+            <div className="empty">
+              <h2>Папка сценариев пуста</h2>
+              <p>
+                Положите .json-файлы в <code>data/scenarios/</code> и обновите страницу.
+              </p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="empty">
+              <h2>Ничего не найдено</h2>
+              <p>Поиск не дал совпадений по имени, концепту или тегам.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 10 }}>
+              {filtered.map((scenario) => (
+                <ScenarioRow key={scenario.id} scenario={scenario} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </main>
+  );
+}
+
+interface ScenarioRowProps {
+  scenario: ScenarioSummaryDto;
+}
+
+function ScenarioRow({ scenario }: ScenarioRowProps) {
+  return (
+    <article
+      className="card card-hover"
+      style={{ padding: 14, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 120px', gap: 18 }}
+    >
+      <div style={{ minWidth: 0, display: 'grid', gap: 6 }}>
+        <strong style={{ fontSize: 'var(--fz-md)' }}>{scenario.name}</strong>
+        {scenario.preview ? (
+          <div
+            className="muted"
+            style={{
+              fontSize: 'var(--fz-sm)',
+              lineHeight: 1.5,
+              display: '-webkit-box',
+              WebkitLineClamp: 3,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            }}
+          >
+            {scenario.preview}
+          </div>
+        ) : (
+          <div className="muted" style={{ fontSize: 'var(--fz-sm)' }}>
+            Без описания.
+          </div>
+        )}
+        {scenario.tags.length > 0 ? (
+          <div className="row gap-4" style={{ flexWrap: 'wrap' }}>
+            {scenario.tags.slice(0, 8).map((tag) => (
+              <span className="tag" key={tag}>
                 {tag}
               </span>
             ))}
           </div>
-        </div>
-        <div className="page__body">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 12 }}>
-            {SAMPLE.map((s) => (
-              <article className="card card-hover" key={s.name} style={{ padding: 14, display: 'grid', gap: 10 }}>
-                <div className="between">
-                  <strong style={{ fontSize: 'var(--fz-md)' }}>{s.name}</strong>
-                  <div className="row gap-4">
-                    {s.chars.map((char, j) => (
-                      <div
-                        className="avatar avatar--24"
-                        key={`${s.name}-${char}-${j}`}
-                        style={{ background: s.colors[j], color: 'white', border: 0 }}
-                      >
-                        {char}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="muted" style={{ fontSize: 'var(--fz-sm)', lineHeight: 1.5 }}>
-                  {s.desc}
-                </div>
-                <div className="between">
-                  <div className="row gap-4">
-                    {s.tags.map((tag) => (
-                      <span className="tag" key={tag}>
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                  <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
-                    {s.date}
-                  </span>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
+        ) : null}
       </div>
-    </main>
+      <div className="col" style={{ alignItems: 'flex-end', gap: 6, justifyContent: 'space-between' }}>
+        <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
+          {formatRelative(scenario.updatedAt)}
+        </span>
+        <button className="btn btn--xs btn--primary" disabled type="button" title="Чат по сценарию — следующий слайс">
+          Начать чат
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function ScenariosListSkeleton() {
+  return (
+    <div style={{ display: 'grid', gap: 10 }}>
+      {[0, 1, 2].map((index) => (
+        <div className="card" key={index} style={{ height: 110, background: 'var(--surface)' }} />
+      ))}
+    </div>
   );
 }

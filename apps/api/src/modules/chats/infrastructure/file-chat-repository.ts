@@ -18,7 +18,7 @@ import {
   createDefaultChatGenerationSettings,
   createDefaultChatSamplingOverrides,
 } from '../application/chat-records.js';
-import type { ChatRepository, ForkGenericChatInput } from '../application/chat-repository.js';
+import type { ChatRepository, ForkGenericChatInput, ListGenericChatsOptions } from '../application/chat-repository.js';
 
 // MVP scope: rewrite chats are generic-only until the character-backed slice lands.
 const GENERIC_CHAT_DIRECTORY = '_no_character_';
@@ -521,7 +521,7 @@ export class FileChatRepository implements ChatRepository {
     return readChatFile(chatId);
   }
 
-  async listGenericChats(): Promise<ChatSummaryRecord[]> {
+  async listGenericChats(options: ListGenericChatsOptions = {}): Promise<ChatSummaryRecord[]> {
     let entries: string[];
 
     try {
@@ -538,9 +538,16 @@ export class FileChatRepository implements ChatRepository {
     const sessions = await Promise.all(
       entries.filter((entry) => entry.endsWith('.jsonl')).map(async (entry) => readChatFile(path.parse(entry).name)),
     );
+    const needle = options.searchText?.trim().toLowerCase() ?? '';
+    const matchesNeedle = (session: ChatSessionRecord): boolean => {
+      if (!needle) return true;
+      if (session.chat.title.toLowerCase().includes(needle)) return true;
+      if (session.characterName && session.characterName.toLowerCase().includes(needle)) return true;
+      return session.messages.some((message) => message.content.toLowerCase().includes(needle));
+    };
 
     return sessions
-      .flatMap((session) => (session ? [session.chat] : []))
+      .flatMap((session) => (session && matchesNeedle(session) ? [session.chat] : []))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }
 
