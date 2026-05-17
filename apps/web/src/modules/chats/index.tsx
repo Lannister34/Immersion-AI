@@ -541,6 +541,10 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
               ) : (
                 (() => {
                   const lastAssistantId = [...session.messages].reverse().find((m) => m.role === 'assistant')?.id;
+                  const baseTitle = session.chat.title.trim();
+                  const defaultBranchTitle = baseTitle.endsWith(' (ветка)')
+                    ? baseTitle
+                    : `${baseTitle || 'Новая ветка'} (ветка)`;
                   return session.messages.map((message, index) => {
                     const messageIndex = index + 1;
                     const isLastAssistant = message.id === lastAssistantId;
@@ -551,6 +555,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                       isStreaming;
                     return (
                       <BubbleMessage
+                        branchTitleDefault={defaultBranchTitle}
                         canRegenerate={isLastAssistant && !isMutating}
                         chatId={chatId}
                         isMutating={isMutating}
@@ -558,8 +563,11 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                         isUser={message.role === 'user'}
                         key={message.id}
                         messageIndex={messageIndex}
-                        onBranch={async () => {
-                          await branchChatMutation.mutateAsync({ throughMessageIndex: messageIndex });
+                        onBranch={async (title) => {
+                          await branchChatMutation.mutateAsync({
+                            throughMessageIndex: messageIndex,
+                            ...(title ? { title } : {}),
+                          });
                         }}
                         onDelete={async () => {
                           await deleteMessageMutation.mutateAsync({ messageIndex });
@@ -654,13 +662,14 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
 }
 
 interface BubbleMessageProps {
+  branchTitleDefault: string;
   canRegenerate: boolean;
   chatId: string;
   isMutating: boolean;
   isSystem: boolean;
   isUser: boolean;
   messageIndex: number;
-  onBranch: () => Promise<void>;
+  onBranch: (title?: string) => Promise<void>;
   onDelete: () => Promise<void>;
   onRegenerate: () => Promise<void>;
   onSave: (content: string) => Promise<void>;
@@ -670,6 +679,7 @@ interface BubbleMessageProps {
 }
 
 function BubbleMessage({
+  branchTitleDefault,
   canRegenerate,
   chatId,
   isMutating,
@@ -687,6 +697,7 @@ function BubbleMessage({
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const [draft, setDraft] = useState(text);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [branchDraft, setBranchDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const deferredDraft = useDeferredValue(draft);
   const trimmedDraft = deferredDraft.trim();
@@ -753,10 +764,20 @@ function BubbleMessage({
     }
   };
 
-  const handleBranch = async () => {
+  const handleBranchOpen = () => {
+    setBranchDraft(branchTitleDefault);
+  };
+
+  const handleBranchCancel = () => {
+    setBranchDraft(null);
+  };
+
+  const handleBranchSubmit = async () => {
+    const title = (branchDraft ?? '').trim();
     setBusy(true);
     try {
-      await onBranch();
+      await onBranch(title.length > 0 ? title : undefined);
+      setBranchDraft(null);
     } finally {
       setBusy(false);
     }
@@ -903,15 +924,62 @@ function BubbleMessage({
                 <TrashIcon size={12} />
               </button>
             )}
-            <button
-              className="btn btn--xs"
-              disabled={isMutating || busy}
-              onClick={() => void handleBranch()}
-              title="Разветвить с этой реплики"
-              type="button"
-            >
-              <BranchIcon size={12} />
-            </button>
+            {branchDraft !== null ? (
+              <>
+                <input
+                  autoFocus
+                  className="input"
+                  onChange={(event) => setBranchDraft(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                      event.preventDefault();
+                      handleBranchCancel();
+                    } else if (event.key === 'Enter') {
+                      event.preventDefault();
+                      void handleBranchSubmit();
+                    }
+                  }}
+                  placeholder="Название ветки"
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid var(--hairline)',
+                    borderRadius: 4,
+                    fontSize: 'var(--fz-2xs)',
+                    minWidth: 180,
+                    padding: '2px 6px',
+                  }}
+                  value={branchDraft}
+                />
+                <button
+                  className="btn btn--xs btn--primary"
+                  disabled={busy}
+                  onClick={() => void handleBranchSubmit()}
+                  title="Создать ветку"
+                  type="button"
+                >
+                  Создать
+                </button>
+                <button
+                  className="btn btn--xs"
+                  disabled={busy}
+                  onClick={handleBranchCancel}
+                  title="Отменить"
+                  type="button"
+                >
+                  Отменить
+                </button>
+              </>
+            ) : (
+              <button
+                className="btn btn--xs"
+                disabled={isMutating || busy}
+                onClick={handleBranchOpen}
+                title="Разветвить с этой реплики"
+                type="button"
+              >
+                <BranchIcon size={12} />
+              </button>
+            )}
           </div>
         ) : null}
       </div>
