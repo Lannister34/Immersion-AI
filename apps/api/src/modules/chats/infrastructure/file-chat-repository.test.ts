@@ -307,6 +307,34 @@ describe('FileChatRepository', () => {
     ).resolves.toBeNull();
   });
 
+  it('deletes a chat file and reports true', async () => {
+    const chatId = 'delete-me';
+    const repository = new FileChatRepository();
+
+    await repository.createGenericChat({
+      id: chatId,
+      title: 'Delete me',
+      userName: 'Tester',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    await repository.appendGenericChatMessages(chatId, [
+      { role: 'user', content: 'bye', createdAt: '2026-01-01T00:00:01.000Z' },
+    ]);
+
+    const deleted = await repository.deleteGenericChat(chatId);
+    expect(deleted).toBe(true);
+
+    await expect(fs.access(resolveChatFilePath(chatId))).rejects.toMatchObject({ code: 'ENOENT' });
+
+    const session = await repository.getGenericChatSession(chatId);
+    expect(session).toBeNull();
+  });
+
+  it('returns false when deleting a chat that does not exist', async () => {
+    const repository = new FileChatRepository();
+    await expect(repository.deleteGenericChat('never-existed')).resolves.toBe(false);
+  });
+
   it('updates generation settings without dropping existing messages', async () => {
     const chatId = 'settings-chat';
     const repository = new FileChatRepository();

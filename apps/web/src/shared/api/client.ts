@@ -127,3 +127,24 @@ export async function apiDelete<TResponse>(path: string, responseSchema: ZodType
 
   return parseResponse(response, responseSchema);
 }
+
+export async function apiDeleteNoContent(path: string): Promise<void> {
+  const response = await fetch(createApiUrl(path), {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  if (response.ok) {
+    return;
+  }
+
+  const payload = await readJson(response);
+  const problem = ApiProblemSchema.safeParse(payload);
+  throw new ApiError(
+    problem.success ? problem.data.message : `HTTP ${response.status}`,
+    response.status,
+    problem.success ? problem.data.code : undefined,
+  );
+}

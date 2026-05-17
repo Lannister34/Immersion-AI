@@ -8,6 +8,7 @@ import {
   type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
+  type MouseEvent,
   type ReactNode,
   useDeferredValue,
   useEffect,
@@ -53,6 +54,7 @@ import {
 import { settingsOverviewQueryOptions } from '../settings';
 import { createChat } from './api/create-chat';
 import { useBranchChat } from './mutations/use-branch-chat';
+import { useDeleteChat } from './mutations/use-delete-chat';
 import { useDeleteChatMessage } from './mutations/use-delete-chat-message';
 import { useUpdateChatGenerationSettings } from './mutations/use-update-chat-generation-settings';
 import { useUpdateChatMessage } from './mutations/use-update-chat-message';
@@ -272,6 +274,27 @@ function ChatListRow({ chat }: ChatListRowProps) {
   const displayName = chat.characterName ?? chat.title;
   const subline = chat.characterName ? chat.title : 'свободный чат';
   const preview = chat.lastMessagePreview ?? 'Сообщений пока нет.';
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const deleteMutation = useDeleteChat(chat.id);
+
+  const handleDeleteClick = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setConfirmDelete(true);
+  };
+  const handleConfirm = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deleteMutation.mutate(undefined, {
+      onSettled: () => setConfirmDelete(false),
+    });
+  };
+  const handleCancel = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setConfirmDelete(false);
+  };
+
   return (
     <Link
       params={{ chatId: chat.id }}
@@ -306,10 +329,28 @@ function ChatListRow({ chat }: ChatListRowProps) {
         {formatRelative(chat.updatedAt)}
       </div>
       <div className="row gap-4" style={{ justifyContent: 'flex-end' }}>
-        <span className="tag mono tnum">{chat.messageCount}</span>
-        <button className="btn btn--icon btn--xs" onClick={(event) => event.preventDefault()} type="button">
-          <MoreIcon size={12} />
-        </button>
+        {confirmDelete ? (
+          <>
+            <button
+              className="btn btn--xs btn--danger"
+              disabled={deleteMutation.isPending}
+              onClick={handleConfirm}
+              type="button"
+            >
+              Удалить
+            </button>
+            <button className="btn btn--xs" disabled={deleteMutation.isPending} onClick={handleCancel} type="button">
+              Отмена
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="tag mono tnum">{chat.messageCount}</span>
+            <button className="btn btn--icon btn--xs" onClick={handleDeleteClick} title="Удалить чат" type="button">
+              <TrashIcon size={12} />
+            </button>
+          </>
+        )}
       </div>
     </Link>
   );
@@ -382,6 +423,12 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
       await navigate({ to: '/chat/$chatId', params: { chatId: response.chat.id } });
     },
   });
+  const deleteChatMutation = useDeleteChat(chatId, {
+    onSuccess: async () => {
+      await navigate({ to: '/chat' });
+    },
+  });
+  const [confirmDeleteChat, setConfirmDeleteChat] = useState(false);
   const chatReplyGeneration = useChatReplyGeneration(chatId);
 
   const transcriptRef = useRef<HTMLDivElement | null>(null);
@@ -468,11 +515,35 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
           actions={
             <>
               <button className="btn" type="button">
-                <BranchIcon size={14} /> Разветвить
-              </button>
-              <button className="btn" type="button">
                 <DownloadIcon size={14} /> Экспорт
               </button>
+              {confirmDeleteChat ? (
+                <>
+                  <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+                    удалить весь чат?
+                  </span>
+                  <button
+                    className="btn btn--danger"
+                    disabled={deleteChatMutation.isPending}
+                    onClick={() => deleteChatMutation.mutate()}
+                    type="button"
+                  >
+                    Да, удалить
+                  </button>
+                  <button
+                    className="btn"
+                    disabled={deleteChatMutation.isPending}
+                    onClick={() => setConfirmDeleteChat(false)}
+                    type="button"
+                  >
+                    Отменить
+                  </button>
+                </>
+              ) : (
+                <button className="btn" onClick={() => setConfirmDeleteChat(true)} title="Удалить чат" type="button">
+                  <TrashIcon size={14} /> Удалить
+                </button>
+              )}
               <button className="btn btn--icon" type="button">
                 <MoreIcon size={14} />
               </button>

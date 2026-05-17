@@ -813,6 +813,58 @@ describe('chat routes', () => {
     await app.close();
   });
 
+  it('deletes a chat and removes it from the list', async () => {
+    await writeGenericChatFile('delete-route-chat', [
+      JSON.stringify({
+        chat_metadata: {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          title: 'Delete route',
+          updatedAt: '2026-01-01T00:00:01.000Z',
+        },
+        user_name: 'Тестер',
+        character_name: '',
+      }),
+      JSON.stringify({ is_user: true, mes: 'bye', send_date: '2026-01-01T00:00:01.000Z' }),
+    ]);
+
+    const app = buildApiApp();
+    const deleteResponse = await app.inject({
+      method: 'DELETE',
+      url: '/api/chats/delete-route-chat',
+    });
+
+    expect(deleteResponse.statusCode).toBe(204);
+    expect(deleteResponse.body).toBe('');
+
+    const sessionResponse = await app.inject({
+      method: 'GET',
+      url: '/api/chats/delete-route-chat',
+    });
+    expect(sessionResponse.statusCode).toBe(404);
+
+    const listResponse = await app.inject({
+      method: 'GET',
+      url: '/api/chats',
+    });
+    const listPayload = ChatListResponseSchema.parse(listResponse.json());
+    expect(listPayload.items.find((item) => item.id === 'delete-route-chat')).toBeUndefined();
+
+    await app.close();
+  });
+
+  it('returns 404 when deleting a missing chat', async () => {
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/api/chats/never-existed',
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'chat_not_found' });
+
+    await app.close();
+  });
+
   it('returns 404 when updating generation settings for an unknown chat', async () => {
     const app = buildApiApp();
     const response = await app.inject({

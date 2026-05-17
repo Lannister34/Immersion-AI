@@ -475,6 +475,22 @@ export class FileChatRepository implements ChatRepository {
     });
   }
 
+  async deleteGenericChat(chatId: string): Promise<boolean> {
+    return withChatWriteQueue(chatId, async () => {
+      const filePath = resolveChatFilePath(chatId);
+      try {
+        await fs.unlink(filePath);
+        return true;
+      } catch (error) {
+        const candidate = error as NodeJS.ErrnoException;
+        if (candidate.code === 'ENOENT') {
+          return false;
+        }
+        throw error;
+      }
+    });
+  }
+
   async createGenericChat(input: CreateGenericChatInput): Promise<ChatSummaryRecord> {
     const header: StoredChatHeader = {
       chat_metadata: {

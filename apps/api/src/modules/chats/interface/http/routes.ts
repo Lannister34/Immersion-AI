@@ -10,6 +10,7 @@ import { ZodError, z } from 'zod';
 import { ChatMessageNotFoundError, ChatNotFoundError } from '../../application/append-chat-messages.js';
 import { branchChat } from '../../application/branch-chat.js';
 import { createChat } from '../../application/create-chat.js';
+import { deleteChat } from '../../application/delete-chat.js';
 import { getChatSession } from '../../application/get-chat-session.js';
 import { listChats } from '../../application/list-chats.js';
 import { truncateChatMessages } from '../../application/truncate-chat-messages.js';
@@ -118,6 +119,19 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return session;
     } catch (error) {
       request.log.error({ err: error }, 'Failed to load generic chat session');
+      const problem = toProblem(error);
+
+      return reply.status(problem.statusCode).send(problem.body);
+    }
+  });
+
+  app.delete('/:chatId', async (request, reply) => {
+    try {
+      const { chatId } = ChatRouteParamsSchema.parse(request.params);
+      await deleteChat(chatId);
+      return reply.status(204).send();
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to delete chat');
       const problem = toProblem(error);
 
       return reply.status(problem.statusCode).send(problem.body);
