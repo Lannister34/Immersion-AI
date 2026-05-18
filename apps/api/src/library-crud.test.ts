@@ -259,6 +259,71 @@ describe('library CRUD routes', () => {
       await app.close();
     });
 
+    it('reads SillyTavern fields from an existing PNG character card on detail GET', async () => {
+      const charactersDir = path.join(temporaryDataRoot, 'characters');
+      await fs.mkdir(charactersDir, { recursive: true });
+      const cardJson = {
+        spec: 'chara_card_v2',
+        data: {
+          name: 'Мария Чернова',
+          description: 'Художница из Петербурга, увлекается ботанической иллюстрацией.',
+          personality: 'Тихая, наблюдательная, ироничная.',
+          scenario: 'Мастерская в Гавани, поздний вечер.',
+          first_mes: 'Привет. Чай завариваю — будешь?',
+          mes_example: '<START>\n{{user}}: Что рисуешь?\n{{char}}: Папоротник.',
+          system_prompt: 'Отвечай в стиле спокойного, тёплого диалога.',
+          tags: ['ru', 'slice-of-life'],
+        },
+      };
+      const png = buildPngWithCharaChunk(JSON.stringify(cardJson));
+      await fs.writeFile(path.join(charactersDir, 'Мария Чернова.png'), png);
+
+      const app = buildApiApp();
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/characters/${encodeURIComponent('Мария Чернова.png')}`,
+      });
+      const payload = CharacterDetailResponseSchema.parse(response.json());
+
+      expect(response.statusCode).toBe(200);
+      expect(payload.character.source).toBe('png');
+      expect(payload.character.isEditable).toBe(false);
+      expect(payload.character.name).toBe('Мария Чернова');
+      expect(payload.character.description).toContain('Художница');
+      expect(payload.character.personality).toContain('наблюдательная');
+      expect(payload.character.scenario).toContain('Гавани');
+      expect(payload.character.firstMessage).toContain('Чай завариваю');
+      expect(payload.character.exampleDialogue).toContain('Папоротник');
+      expect(payload.character.systemPrompt).toContain('спокойного');
+      expect(payload.character.tags).toEqual(['ru', 'slice-of-life']);
+      expect(payload.character.avatarUrl).toMatch(/\.png\/avatar$/);
+
+      await app.close();
+    });
+
+    it('falls back to filename metadata when a PNG is not a SillyTavern card', async () => {
+      const charactersDir = path.join(temporaryDataRoot, 'characters');
+      await fs.mkdir(charactersDir, { recursive: true });
+      const png = Buffer.from(
+        '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c63000100000500010d0a2db40000000049454e44ae426082',
+        'hex',
+      );
+      await fs.writeFile(path.join(charactersDir, 'plain.png'), png);
+
+      const app = buildApiApp();
+      const response = await app.inject({ method: 'GET', url: '/api/characters/plain.png' });
+      const payload = CharacterDetailResponseSchema.parse(response.json());
+
+      expect(response.statusCode).toBe(200);
+      expect(payload.character.source).toBe('png');
+      expect(payload.character.isEditable).toBe(false);
+      expect(payload.character.name).toBe('plain');
+      expect(payload.character.description).toBe('');
+      expect(payload.character.tags).toEqual([]);
+
+      await app.close();
+    });
+
     it('refuses to update a PNG character (read-only format)', async () => {
       const charactersDir = path.join(temporaryDataRoot, 'characters');
       await fs.mkdir(charactersDir, { recursive: true });

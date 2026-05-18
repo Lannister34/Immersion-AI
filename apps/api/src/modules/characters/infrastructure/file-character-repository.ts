@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { CharacterDetailDto, CharacterSourceFormat, CharacterSummaryDto } from '@immersion/contracts/characters';
 
 import { resolveDataRoot } from '../../../lib/data-root.js';
+import { extractPngCharacterCard, InvalidCharacterCardError } from '../application/extract-png-character-card.js';
 
 const CHARACTERS_DIRECTORY = 'characters';
 const JSON_EXTENSION = '.json';
@@ -169,7 +170,8 @@ export async function readCharacterDetail(id: string): Promise<CharacterDetailDt
     return null;
   }
   if (summary.source !== 'json') {
-    return detailFromStored(id, summary.source, false, null, summary.avatarUrl, stats.mtime.toISOString());
+    const stored = await readPngStoredCharacter(summary.filePath);
+    return detailFromStored(id, summary.source, false, stored, summary.avatarUrl, stats.mtime.toISOString());
   }
 
   let raw: string;
@@ -185,6 +187,34 @@ export async function readCharacterDetail(id: string): Promise<CharacterDetailDt
     return null;
   }
   return detailFromStored(id, 'json', true, parsed, summary.avatarUrl, stats.mtime.toISOString());
+}
+
+async function readPngStoredCharacter(filePath: string): Promise<StoredCharacter | null> {
+  let buffer: Buffer;
+  try {
+    buffer = await fs.readFile(filePath);
+  } catch {
+    return null;
+  }
+  try {
+    const card = extractPngCharacterCard(buffer);
+    return {
+      description: card.description,
+      example_dialogue: card.exampleDialogue,
+      first_message: card.firstMessage,
+      name: card.name,
+      personality: card.personality,
+      scenario: card.scenario,
+      system_prompt: card.systemPrompt,
+      tags: card.tags,
+    };
+  } catch (error) {
+    if (error instanceof InvalidCharacterCardError) {
+      // Not a SillyTavern card — fall back to bare filename metadata.
+      return null;
+    }
+    throw error;
+  }
 }
 
 export interface SaveCharacterFileInput {
