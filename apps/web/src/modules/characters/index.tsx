@@ -5,10 +5,20 @@ import { type ChangeEvent, type DragEvent, type MouseEvent, useMemo, useRef, use
 
 import { Topbar } from '../../app/layout/topbar';
 import { ApiError, createApiUrl } from '../../shared/api/client';
-import { ChatIcon, LayersIcon, MoreIcon, PlusIcon, SearchIcon, SortIcon, UploadIcon } from '../../shared/ui/icons';
+import {
+  ChatIcon,
+  LayersIcon,
+  PlusIcon,
+  SearchIcon,
+  SortIcon,
+  TrashIcon,
+  UploadIcon,
+  XIcon,
+} from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
 import { chatListQueryKey } from '../chats/queries/chat-list-query';
 import { importCharacterCard } from './api/import-character-card';
+import { useDeleteCharacter } from './mutations/use-delete-character';
 import { characterListQueryKey, characterListQueryOptions } from './queries/character-list-query';
 
 export { CharacterEditorScreen } from './editor';
@@ -254,6 +264,7 @@ function CharacterCard({ character }: CharacterCardProps) {
   const initial = avatarInitial(character.name);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const startChatMutation = useMutation({
     mutationFn: () => createChat({ characterId: character.id }),
     onSuccess: async (response) => {
@@ -261,11 +272,34 @@ function CharacterCard({ character }: CharacterCardProps) {
       await navigate({ to: '/chat/$chatId', params: { chatId: response.chat.id } });
     },
   });
+  const deleteMutation = useDeleteCharacter(character.id, {
+    onSuccess: () => {
+      setConfirmDelete(false);
+    },
+  });
 
   const handleStartChat = (event: MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
     startChatMutation.mutate();
+  };
+
+  const handleAskDelete = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setConfirmDelete(true);
+  };
+
+  const handleConfirmDelete = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deleteMutation.mutate();
+  };
+
+  const handleCancelDelete = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setConfirmDelete(false);
   };
 
   return (
@@ -295,9 +329,39 @@ function CharacterCard({ character }: CharacterCardProps) {
         }}
       >
         <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 4 }}>
-          <button className="btn btn--icon btn--xs" disabled style={{ background: 'oklch(0 0 0 / 0.4)' }} type="button">
-            <MoreIcon size={11} />
-          </button>
+          {confirmDelete ? (
+            <>
+              <button
+                className="btn btn--xs btn--danger"
+                disabled={deleteMutation.isPending}
+                onClick={handleConfirmDelete}
+                title="Удалить карточку без возможности восстановления"
+                type="button"
+              >
+                {deleteMutation.isPending ? '…' : 'Удалить'}
+              </button>
+              <button
+                className="btn btn--icon btn--xs"
+                disabled={deleteMutation.isPending}
+                onClick={handleCancelDelete}
+                style={{ background: 'oklch(0 0 0 / 0.4)' }}
+                title="Не удалять"
+                type="button"
+              >
+                <XIcon size={11} />
+              </button>
+            </>
+          ) : (
+            <button
+              className="btn btn--icon btn--xs"
+              onClick={handleAskDelete}
+              style={{ background: 'oklch(0 0 0 / 0.4)' }}
+              title="Удалить карточку"
+              type="button"
+            >
+              <TrashIcon size={11} />
+            </button>
+          )}
         </div>
         {!character.avatarUrl ? (
           <div

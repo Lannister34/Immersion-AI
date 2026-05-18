@@ -8,8 +8,8 @@ import { ApiError, createApiUrl } from '../../shared/api/client';
 import { ChatIcon, TrashIcon } from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
 import { chatListQueryKey } from '../chats/queries/chat-list-query';
-import { deleteCharacter } from './api/delete-character';
 import { createCharacter, updateCharacter } from './api/save-character';
+import { useDeleteCharacter } from './mutations/use-delete-character';
 import { characterDetailQueryKey, characterDetailQueryOptions } from './queries/character-detail-query';
 import { characterListQueryKey } from './queries/character-list-query';
 
@@ -127,14 +127,8 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: async () => {
-      if (isNew) return;
-      await deleteCharacter(characterId);
-    },
+  const deleteMutation = useDeleteCharacter(characterId ?? '', {
     onSuccess: async () => {
-      queryClient.removeQueries({ queryKey: characterDetailQueryKey(characterId ?? '') });
-      await queryClient.invalidateQueries({ queryKey: characterListQueryKey });
       await navigate({ to: '/characters' });
     },
   });

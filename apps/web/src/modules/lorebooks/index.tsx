@@ -1,10 +1,11 @@
 import type { LorebookSummaryDto } from '@immersion/contracts/lorebooks';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
+import { type MouseEvent, useMemo, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
-import { BookIcon, MoreIcon, PlusIcon, SearchIcon, UploadIcon } from '../../shared/ui/icons';
+import { BookIcon, PlusIcon, SearchIcon, TrashIcon, UploadIcon, XIcon } from '../../shared/ui/icons';
+import { useDeleteLorebook } from './mutations/use-delete-lorebook';
 import { lorebookListQueryOptions } from './queries/lorebook-list-query';
 
 export { LorebookEditorScreen } from './editor';
@@ -169,7 +170,7 @@ export function LorebooksScreen() {
                   fontSize: 'var(--fz-xs)',
                   color: 'var(--muted)',
                   display: 'grid',
-                  gridTemplateColumns: 'minmax(0, 1fr) 80px minmax(0, 1fr) 120px 40px',
+                  gridTemplateColumns: 'minmax(0, 1fr) 80px minmax(0, 1fr) 120px 100px',
                   gap: 14,
                 }}
               >
@@ -197,12 +198,37 @@ interface LorebookRowProps {
 }
 
 function LorebookRow({ lorebook }: LorebookRowProps) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const deleteMutation = useDeleteLorebook(lorebook.id, {
+    onSuccess: () => {
+      setConfirmDelete(false);
+    },
+  });
+
+  const handleAskDelete = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setConfirmDelete(true);
+  };
+
+  const handleConfirmDelete = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deleteMutation.mutate();
+  };
+
+  const handleCancelDelete = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setConfirmDelete(false);
+  };
+
   return (
     <Link
       params={{ lorebookId: lorebook.id }}
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) 80px minmax(0, 1fr) 120px 40px',
+        gridTemplateColumns: 'minmax(0, 1fr) 80px minmax(0, 1fr) 120px 100px',
         gap: 14,
         alignItems: 'center',
         padding: '10px 14px',
@@ -232,9 +258,34 @@ function LorebookRow({ lorebook }: LorebookRowProps) {
       <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
         {formatRelative(lorebook.updatedAt)}
       </span>
-      <button className="btn btn--icon btn--xs" disabled onClick={(event) => event.preventDefault()} type="button">
-        <MoreIcon size={12} />
-      </button>
+      <div className="row gap-4" style={{ justifyContent: 'flex-end' }}>
+        {confirmDelete ? (
+          <>
+            <button
+              className="btn btn--xs btn--danger"
+              disabled={deleteMutation.isPending}
+              onClick={handleConfirmDelete}
+              title="Удалить лорбук"
+              type="button"
+            >
+              {deleteMutation.isPending ? '…' : 'Удалить'}
+            </button>
+            <button
+              className="btn btn--icon btn--xs"
+              disabled={deleteMutation.isPending}
+              onClick={handleCancelDelete}
+              title="Не удалять"
+              type="button"
+            >
+              <XIcon size={11} />
+            </button>
+          </>
+        ) : (
+          <button className="btn btn--icon btn--xs" onClick={handleAskDelete} title="Удалить лорбук" type="button">
+            <TrashIcon size={11} />
+          </button>
+        )}
+      </div>
     </Link>
   );
 }

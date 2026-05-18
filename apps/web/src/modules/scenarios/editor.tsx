@@ -8,8 +8,8 @@ import { ApiError } from '../../shared/api/client';
 import { ChatIcon, TrashIcon } from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
 import { chatListQueryKey } from '../chats/queries/chat-list-query';
-import { deleteScenario } from './api/delete-scenario';
 import { createScenario, updateScenario } from './api/save-scenario';
+import { useDeleteScenario } from './mutations/use-delete-scenario';
 import { scenarioDetailQueryKey, scenarioDetailQueryOptions } from './queries/scenario-detail-query';
 import { scenarioListQueryKey } from './queries/scenario-list-query';
 
@@ -104,14 +104,8 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: async () => {
-      if (isNew) return;
-      await deleteScenario(scenarioId);
-    },
+  const deleteMutation = useDeleteScenario(scenarioId ?? '', {
     onSuccess: async () => {
-      queryClient.removeQueries({ queryKey: scenarioDetailQueryKey(scenarioId ?? '') });
-      await queryClient.invalidateQueries({ queryKey: scenarioListQueryKey });
       await navigate({ to: '/scenarios' });
     },
   });

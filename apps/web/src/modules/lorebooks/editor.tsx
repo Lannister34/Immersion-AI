@@ -6,8 +6,8 @@ import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 're
 import { Topbar } from '../../app/layout/topbar';
 import { ApiError } from '../../shared/api/client';
 import { PlusIcon, TrashIcon } from '../../shared/ui/icons';
-import { deleteLorebook } from './api/delete-lorebook';
 import { createLorebook, updateLorebook } from './api/save-lorebook';
+import { useDeleteLorebook } from './mutations/use-delete-lorebook';
 import { lorebookDetailQueryKey, lorebookDetailQueryOptions } from './queries/lorebook-detail-query';
 import { lorebookListQueryKey } from './queries/lorebook-list-query';
 
@@ -136,14 +136,8 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: async () => {
-      if (isNew) return;
-      await deleteLorebook(lorebookId);
-    },
+  const deleteMutation = useDeleteLorebook(lorebookId ?? '', {
     onSuccess: async () => {
-      queryClient.removeQueries({ queryKey: lorebookDetailQueryKey(lorebookId ?? '') });
-      await queryClient.invalidateQueries({ queryKey: lorebookListQueryKey });
       await navigate({ to: '/lorebooks' });
     },
   });

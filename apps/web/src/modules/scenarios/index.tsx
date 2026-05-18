@@ -4,9 +4,10 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { type MouseEvent, useMemo, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
-import { PlusIcon, SearchIcon, UploadIcon } from '../../shared/ui/icons';
+import { PlusIcon, SearchIcon, TrashIcon, UploadIcon, XIcon } from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
 import { chatListQueryKey } from '../chats/queries/chat-list-query';
+import { useDeleteScenario } from './mutations/use-delete-scenario';
 import { scenarioListQueryOptions } from './queries/scenario-list-query';
 
 export { ScenarioEditorScreen } from './editor';
@@ -176,11 +177,17 @@ interface ScenarioRowProps {
 function ScenarioRow({ scenario }: ScenarioRowProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const startChatMutation = useMutation({
     mutationFn: () => createChat({ scenarioId: scenario.id }),
     onSuccess: async (response) => {
       await queryClient.invalidateQueries({ queryKey: chatListQueryKey });
       await navigate({ to: '/chat/$chatId', params: { chatId: response.chat.id } });
+    },
+  });
+  const deleteMutation = useDeleteScenario(scenario.id, {
+    onSuccess: () => {
+      setConfirmDelete(false);
     },
   });
 
@@ -190,6 +197,24 @@ function ScenarioRow({ scenario }: ScenarioRowProps) {
     startChatMutation.mutate();
   };
 
+  const handleAskDelete = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setConfirmDelete(true);
+  };
+
+  const handleConfirmDelete = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deleteMutation.mutate();
+  };
+
+  const handleCancelDelete = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setConfirmDelete(false);
+  };
+
   return (
     <Link
       className="card card-hover"
@@ -197,7 +222,7 @@ function ScenarioRow({ scenario }: ScenarioRowProps) {
       style={{
         padding: 14,
         display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) 120px',
+        gridTemplateColumns: 'minmax(0, 1fr) 140px',
         gap: 18,
         textDecoration: 'none',
         color: 'inherit',
@@ -239,15 +264,50 @@ function ScenarioRow({ scenario }: ScenarioRowProps) {
         <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
           {formatRelative(scenario.updatedAt)}
         </span>
-        <button
-          className="btn btn--xs btn--primary"
-          disabled={startChatMutation.isPending}
-          onClick={handleStartChat}
-          title="Начать новый чат по сценарию"
-          type="button"
-        >
-          {startChatMutation.isPending ? '…' : 'Начать чат'}
-        </button>
+        <div className="row gap-4">
+          {confirmDelete ? (
+            <>
+              <button
+                className="btn btn--xs btn--danger"
+                disabled={deleteMutation.isPending}
+                onClick={handleConfirmDelete}
+                title="Удалить сценарий"
+                type="button"
+              >
+                {deleteMutation.isPending ? '…' : 'Удалить'}
+              </button>
+              <button
+                className="btn btn--icon btn--xs"
+                disabled={deleteMutation.isPending}
+                onClick={handleCancelDelete}
+                title="Не удалять"
+                type="button"
+              >
+                <XIcon size={11} />
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                className="btn btn--icon btn--xs"
+                onClick={handleAskDelete}
+                title="Удалить сценарий"
+                type="button"
+              >
+                <TrashIcon size={11} />
+              </button>
+              <button
+                className="btn btn--xs btn--primary"
+                disabled={startChatMutation.isPending}
+                onClick={handleStartChat}
+                title="Начать новый чат по сценарию"
+                type="button"
+              >
+                {startChatMutation.isPending ? '…' : 'Начать чат'}
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </Link>
   );
