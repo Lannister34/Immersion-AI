@@ -60,6 +60,7 @@ import { useDeleteChatMessage } from './mutations/use-delete-chat-message';
 import { useUpdateChatGenerationSettings } from './mutations/use-update-chat-generation-settings';
 import { useUpdateChatLorebooks } from './mutations/use-update-chat-lorebooks';
 import { useUpdateChatMessage } from './mutations/use-update-chat-message';
+import { useUpdateChatTitle } from './mutations/use-update-chat-title';
 import { chatListQueryKey, chatListQueryOptions } from './queries/chat-list-query';
 import { chatSessionQueryOptions } from './queries/chat-session-query';
 
@@ -483,6 +484,12 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
     },
   });
   const [confirmDeleteChat, setConfirmDeleteChat] = useState(false);
+  const [renamingTitle, setRenamingTitle] = useState<string | null>(null);
+  const renameChatMutation = useUpdateChatTitle(chatId, {
+    onSuccess: () => {
+      setRenamingTitle(null);
+    },
+  });
   const chatReplyGeneration = useChatReplyGeneration(chatId);
 
   const transcriptRef = useRef<HTMLDivElement | null>(null);
@@ -642,8 +649,59 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontWeight: 600, fontSize: 'var(--fz-md)' }}>{characterDisplay}</div>
-              <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-                {session.chat.title} · {messageCount} сообщ. · ред. {formatRelative(lastUpdated)}
+              <div className="muted row gap-6" style={{ fontSize: 'var(--fz-xs)', alignItems: 'center' }}>
+                {renamingTitle !== null ? (
+                  <input
+                    autoFocus
+                    className="input"
+                    disabled={renameChatMutation.isPending}
+                    onBlur={() => {
+                      const value = renamingTitle.trim();
+                      if (value.length > 0 && value !== session.chat.title) {
+                        renameChatMutation.mutate({ title: value });
+                      } else {
+                        setRenamingTitle(null);
+                      }
+                    }}
+                    onChange={(event) => setRenamingTitle(event.currentTarget.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        const value = renamingTitle.trim();
+                        if (value.length > 0 && value !== session.chat.title) {
+                          renameChatMutation.mutate({ title: value });
+                        } else {
+                          setRenamingTitle(null);
+                        }
+                      } else if (event.key === 'Escape') {
+                        event.preventDefault();
+                        setRenamingTitle(null);
+                      }
+                    }}
+                    style={{ height: 24, padding: '2px 6px', fontSize: 'var(--fz-xs)', maxWidth: 320 }}
+                    value={renamingTitle}
+                  />
+                ) : (
+                  <button
+                    onClick={() => setRenamingTitle(session.chat.title)}
+                    style={{
+                      background: 'transparent',
+                      border: 0,
+                      color: 'inherit',
+                      cursor: 'text',
+                      font: 'inherit',
+                      padding: 0,
+                      textAlign: 'left',
+                    }}
+                    title="Переименовать чат"
+                    type="button"
+                  >
+                    {session.chat.title}
+                  </button>
+                )}
+                <span>
+                  · {messageCount} сообщ. · ред. {formatRelative(lastUpdated)}
+                </span>
               </div>
             </div>
             {tokenStats ? (

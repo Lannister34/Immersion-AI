@@ -86,6 +86,16 @@ export const UpdateChatLorebooksCommandSchema = z.object({
 });
 export type UpdateChatLorebooksCommand = z.infer<typeof UpdateChatLorebooksCommandSchema>;
 
+export const UpdateChatTitleCommandSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+});
+export type UpdateChatTitleCommand = z.infer<typeof UpdateChatTitleCommandSchema>;
+
+export const UpdateChatTitleResponseSchema = z.object({
+  chat: ChatSummaryDtoSchema,
+});
+export type UpdateChatTitleResponse = z.infer<typeof UpdateChatTitleResponseSchema>;
+
 export const CreateChatResponseSchema = z.object({
   chat: ChatSummaryDtoSchema,
 });

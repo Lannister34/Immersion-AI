@@ -46,4 +46,5 @@ export interface ChatRepository {
     content: string,
     updatedAt: string,
   ): Promise<ChatSessionRecord | null>;
+  updateGenericChatTitle(chatId: string, title: string, updatedAt: string): Promise<ChatSessionRecord | null>;
 }

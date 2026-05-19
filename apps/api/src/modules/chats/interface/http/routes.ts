@@ -4,6 +4,7 @@ import {
   CreateChatCommandSchema,
   UpdateChatLorebooksCommandSchema,
   UpdateChatMessageCommandSchema,
+  UpdateChatTitleCommandSchema,
 } from '@immersion/contracts/chats';
 import { ApiProblemSchema } from '@immersion/contracts/common';
 import type { FastifyPluginAsync } from 'fastify';
@@ -24,6 +25,7 @@ import {
 } from '../../application/update-chat-generation-settings.js';
 import { updateChatLorebooks } from '../../application/update-chat-lorebooks.js';
 import { updateChatMessage } from '../../application/update-chat-message.js';
+import { updateChatTitle } from '../../application/update-chat-title.js';
 
 const ChatRouteParamsSchema = z.object({
   chatId: ChatIdSchema,
@@ -196,6 +198,20 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return session;
     } catch (error) {
       request.log.error({ err: error }, 'Failed to update chat lorebooks');
+      const problem = toProblem(error);
+
+      return reply.status(problem.statusCode).send(problem.body);
+    }
+  });
+
+  app.patch('/:chatId/title', async (request, reply) => {
+    try {
+      const { chatId } = ChatRouteParamsSchema.parse(request.params);
+      const command = UpdateChatTitleCommandSchema.parse(request.body);
+      const chat = await updateChatTitle({ chatId, title: command.title });
+      return { chat };
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to update chat title');
       const problem = toProblem(error);
 
       return reply.status(problem.statusCode).send(problem.body);

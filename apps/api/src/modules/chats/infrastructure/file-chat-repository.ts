@@ -653,6 +653,41 @@ export class FileChatRepository implements ChatRepository {
     });
   }
 
+  async updateGenericChatTitle(chatId: string, title: string, updatedAt: string) {
+    return withChatWriteQueue(chatId, async () => {
+      const currentSession = await readChatFile(chatId);
+
+      if (!currentSession) {
+        return null;
+      }
+
+      const filePath = resolveChatFilePath(chatId);
+      const rawContent = await fs.readFile(filePath, 'utf8');
+      const lines = rawContent
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      const existingHeader = lines[0] ? parseStoredHeaderRecord(lines[0], filePath) : null;
+      const existingMessageLines = existingHeader ? lines.slice(1) : lines;
+      const existingMetadata = getRecord(existingHeader?.chat_metadata);
+      const nextHeaderRecord = {
+        ...(existingHeader ?? {}),
+        chat_metadata: {
+          ...existingMetadata,
+          title,
+        },
+      };
+      const nextLines = [
+        JSON.stringify(updateHeaderRecord(nextHeaderRecord, currentSession, updatedAt)),
+        ...existingMessageLines,
+      ];
+
+      await writeChatFileAtomically(filePath, `${nextLines.join('\n')}\n`);
+
+      return readChatFile(chatId);
+    });
+  }
+
   async updateGenericChatMessage(chatId: string, messageIndex: number, content: string, updatedAt: string) {
     return withChatWriteQueue(chatId, async () => {
       const currentSession = await readChatFile(chatId);

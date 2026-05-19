@@ -9,6 +9,7 @@ import {
   CreateChatResponseSchema,
   GetChatSessionResponseSchema,
   UpdateChatGenerationSettingsResponseSchema,
+  UpdateChatTitleResponseSchema,
 } from '@immersion/contracts/chats';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -706,6 +707,83 @@ describe('chat routes', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ code: 'chat_message_not_found' });
+
+    await app.close();
+  });
+
+  it('renames a chat via PATCH /title and surfaces the new title in subsequent reads', async () => {
+    await writeGenericChatFile('rename-route-chat', [
+      JSON.stringify({
+        chat_metadata: {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          title: 'Old title',
+          updatedAt: '2026-01-01T00:00:01.000Z',
+        },
+        user_name: 'Тестер',
+        character_name: '',
+      }),
+      JSON.stringify({ is_user: true, mes: 'hi', send_date: '2026-01-01T00:00:01.000Z' }),
+    ]);
+
+    const app = buildApiApp();
+    const renameResponse = await app.inject({
+      method: 'PATCH',
+      url: '/api/chats/rename-route-chat/title',
+      payload: { title: '  New title  ' },
+    });
+    const renamePayload = UpdateChatTitleResponseSchema.parse(renameResponse.json());
+
+    expect(renameResponse.statusCode).toBe(200);
+    expect(renamePayload.chat.title).toBe('New title');
+
+    const sessionResponse = await app.inject({ method: 'GET', url: '/api/chats/rename-route-chat' });
+    const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
+    expect(sessionPayload.chat.title).toBe('New title');
+
+    const listResponse = await app.inject({ method: 'GET', url: '/api/chats' });
+    const listPayload = ChatListResponseSchema.parse(listResponse.json());
+    expect(listPayload.items.find((item) => item.id === 'rename-route-chat')?.title).toBe('New title');
+
+    await app.close();
+  });
+
+  it('rejects renaming a chat with an empty title', async () => {
+    await writeGenericChatFile('rename-empty-chat', [
+      JSON.stringify({
+        chat_metadata: {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          title: 'Stays',
+          updatedAt: '2026-01-01T00:00:01.000Z',
+        },
+        user_name: 'Тестер',
+        character_name: '',
+      }),
+      JSON.stringify({ is_user: true, mes: 'hi', send_date: '2026-01-01T00:00:01.000Z' }),
+    ]);
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/chats/rename-empty-chat/title',
+      payload: { title: '   ' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: 'validation_error' });
+
+    await app.close();
+  });
+
+  it('returns 404 when renaming a missing chat', async () => {
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/chats/never-was-chat/title',
+      payload: { title: 'New' },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'chat_not_found' });
 
     await app.close();
   });
