@@ -47,3 +47,21 @@ export const SettingsOverviewResponseSchema = z.object({
 });
 
 export type SettingsOverviewResponse = z.infer<typeof SettingsOverviewResponseSchema>;
+
+export const UpdateSettingsProfileCommandSchema = z.object({
+  userName: z.string().trim().min(1).max(120),
+  userPersona: z.string().max(20_000),
+  systemPromptTemplate: z.string().max(20_000),
+  uiLanguage: UiLanguageSchema,
+  responseLanguage: ResponseLanguageSchema,
+  streamingEnabled: z.boolean(),
+  thinkingEnabled: z.boolean(),
+});
+
+export type UpdateSettingsProfileCommand = z.infer<typeof UpdateSettingsProfileCommandSchema>;
+
+export const UpdateSettingsProfileResponseSchema = z.object({
+  profile: SettingsProfileSchema,
+});
+
+export type UpdateSettingsProfileResponse = z.infer<typeof UpdateSettingsProfileResponseSchema>;

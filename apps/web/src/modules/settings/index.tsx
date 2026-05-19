@@ -1,8 +1,9 @@
-import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
+import type { SettingsOverviewResponse, UpdateSettingsProfileCommand } from '@immersion/contracts/settings';
 import { useQuery } from '@tanstack/react-query';
-import type { JSX } from 'react';
+import { type FormEvent, type JSX, useEffect, useMemo, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
+import { ApiError } from '../../shared/api/client';
 import {
   BoltIcon,
   CheckIcon,
@@ -16,6 +17,7 @@ import {
   SlidersIcon,
   UserIcon,
 } from '../../shared/ui/icons';
+import { useUpdateSettingsProfile } from './mutations/use-update-settings-profile';
 import { settingsOverviewQueryOptions } from './queries/settings-overview-query';
 
 export { getSettingsOverview } from './api/get-settings-overview';
@@ -96,7 +98,6 @@ export function SettingsScreen() {
             ) : (
               <>
                 <ProfileCard data={data} />
-                <PromptTemplateCard prompt={data.profile.systemPromptTemplate} />
                 <SamplerCard data={data} />
               </>
             )}
@@ -111,94 +112,241 @@ interface SettingsDataProps {
   data: SettingsOverviewResponse;
 }
 
+interface ProfileFormState {
+  userName: string;
+  userPersona: string;
+  systemPromptTemplate: string;
+  uiLanguage: 'ru' | 'en';
+  responseLanguage: 'ru' | 'en' | 'none';
+  streamingEnabled: boolean;
+  thinkingEnabled: boolean;
+}
+
+function profileToFormState(profile: SettingsOverviewResponse['profile']): ProfileFormState {
+  return {
+    userName: profile.userName,
+    userPersona: profile.userPersona,
+    systemPromptTemplate: profile.systemPromptTemplate,
+    uiLanguage: profile.uiLanguage,
+    responseLanguage: profile.responseLanguage,
+    streamingEnabled: profile.streamingEnabled,
+    thinkingEnabled: profile.thinkingEnabled,
+  };
+}
+
+function profileFormToCommand(form: ProfileFormState): UpdateSettingsProfileCommand {
+  return {
+    userName: form.userName.trim(),
+    userPersona: form.userPersona,
+    systemPromptTemplate: form.systemPromptTemplate,
+    uiLanguage: form.uiLanguage,
+    responseLanguage: form.responseLanguage,
+    streamingEnabled: form.streamingEnabled,
+    thinkingEnabled: form.thinkingEnabled,
+  };
+}
+
 function ProfileCard({ data }: SettingsDataProps) {
-  const { profile } = data;
-  const initial = (profile.userName.trim() || 'Я').slice(0, 1).toUpperCase();
+  const initial = useMemo(
+    () => (data.profile.userName.trim() || 'Я').slice(0, 1).toUpperCase(),
+    [data.profile.userName],
+  );
+  const baseline = useMemo(() => profileToFormState(data.profile), [data.profile]);
+  const [form, setForm] = useState<ProfileFormState>(baseline);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    setForm(baseline);
+  }, [baseline]);
+
+  const mutation = useUpdateSettingsProfile({
+    onSuccess: () => {
+      setSavedAt(Date.now());
+    },
+  });
+
+  const isDirty =
+    form.userName !== baseline.userName ||
+    form.userPersona !== baseline.userPersona ||
+    form.systemPromptTemplate !== baseline.systemPromptTemplate ||
+    form.uiLanguage !== baseline.uiLanguage ||
+    form.responseLanguage !== baseline.responseLanguage ||
+    form.streamingEnabled !== baseline.streamingEnabled ||
+    form.thinkingEnabled !== baseline.thinkingEnabled;
+  const canSave = isDirty && form.userName.trim().length > 0 && !mutation.isPending;
+
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canSave) return;
+    mutation.mutate(profileFormToCommand(form));
+  };
+
+  const errorMessage =
+    mutation.error instanceof ApiError
+      ? mutation.error.message
+      : mutation.error
+        ? 'Не удалось сохранить настройки.'
+        : null;
 
   return (
-    <section className="card" id="profile" style={{ padding: 18, display: 'grid', gap: 14 }}>
-      <div className="between">
-        <h2 style={{ margin: 0, fontSize: 'var(--fz-xl)', fontWeight: 600 }}>Профиль / Persona</h2>
-        <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-          как вы представляете себя в чатах
-        </span>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '96px 1fr', gap: 18, alignItems: 'start' }}>
-        <div
-          className="avatar avatar--96"
-          style={{ background: 'var(--accent-soft)', color: 'var(--accent)', border: '1px solid var(--hairline)' }}
-        >
-          {initial}
+    <>
+      <form className="card" id="profile" onSubmit={onSubmit} style={{ padding: 18, display: 'grid', gap: 14 }}>
+        <div className="between">
+          <h2 style={{ margin: 0, fontSize: 'var(--fz-xl)', fontWeight: 600 }}>Профиль / Persona</h2>
+          <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+            как вы представляете себя в чатах
+          </span>
         </div>
-        <div className="col">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '96px 1fr', gap: 18, alignItems: 'start' }}>
+          <div
+            className="avatar avatar--96"
+            style={{ background: 'var(--accent-soft)', color: 'var(--accent)', border: '1px solid var(--hairline)' }}
+          >
+            {initial}
+          </div>
+          <div className="col">
             <div className="field">
-              <label>Имя</label>
-              <input className="input" defaultValue={profile.userName} readOnly />
+              <label htmlFor="profile-user-name">Имя</label>
+              <input
+                className="input"
+                id="profile-user-name"
+                maxLength={120}
+                onChange={(event) => setForm((current) => ({ ...current, userName: event.currentTarget.value }))}
+                placeholder="Например: Миша"
+                value={form.userName}
+              />
             </div>
             <div className="field">
-              <label>Отображаемое имя</label>
-              <input className="input" defaultValue={profile.userName} readOnly />
+              <label htmlFor="profile-user-persona">Описание персоны</label>
+              <textarea
+                className="textarea"
+                id="profile-user-persona"
+                maxLength={20_000}
+                onChange={(event) => setForm((current) => ({ ...current, userPersona: event.currentTarget.value }))}
+                placeholder="Как модель должна представлять пользователя"
+                rows={4}
+                value={form.userPersona}
+              />
             </div>
+          </div>
+        </div>
+        <div className="divider" />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="field">
+            <label htmlFor="profile-ui-language">Язык интерфейса</label>
+            <select
+              className="input"
+              id="profile-ui-language"
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  uiLanguage: event.currentTarget.value as ProfileFormState['uiLanguage'],
+                }))
+              }
+              value={form.uiLanguage}
+            >
+              <option value="ru">RU</option>
+              <option value="en">EN</option>
+            </select>
           </div>
           <div className="field">
-            <label>Описание персоны</label>
-            <textarea className="textarea" defaultValue={profile.userPersona} readOnly />
+            <label htmlFor="profile-response-language">Язык ответа модели</label>
+            <select
+              className="input"
+              id="profile-response-language"
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  responseLanguage: event.currentTarget.value as ProfileFormState['responseLanguage'],
+                }))
+              }
+              value={form.responseLanguage}
+            >
+              <option value="ru">RU</option>
+              <option value="en">EN</option>
+              <option value="none">не задавать</option>
+            </select>
           </div>
         </div>
-      </div>
-      <div className="divider" />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <div className="field">
-          <label>Язык интерфейса</label>
-          <input className="input" defaultValue={profile.uiLanguage.toUpperCase()} readOnly />
+        <div className="divider" />
+        <div className="col gap-12">
+          <ToggleRow
+            checked={form.streamingEnabled}
+            hint="токены приходят по мере генерации"
+            id="profile-streaming"
+            label="Стриминг ответа"
+            onChange={(value) => setForm((current) => ({ ...current, streamingEnabled: value }))}
+          />
+          <ToggleRow
+            checked={form.thinkingEnabled}
+            hint="отдельный блок «размышления» под ответом"
+            id="profile-thinking"
+            label="Показывать reasoning"
+            onChange={(value) => setForm((current) => ({ ...current, thinkingEnabled: value }))}
+          />
         </div>
-        <div className="field">
-          <label>Язык ответа модели</label>
-          <input className="input" defaultValue={profile.responseLanguage.toUpperCase()} readOnly />
+        {errorMessage ? (
+          <div className="card" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', padding: 12 }}>
+            {errorMessage}
+          </div>
+        ) : null}
+        <div className="row gap-8" style={{ justifyContent: 'flex-end', alignItems: 'center' }}>
+          {savedAt && !isDirty ? (
+            <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+              сохранено
+            </span>
+          ) : null}
+          <button
+            className="btn"
+            disabled={!isDirty || mutation.isPending}
+            onClick={() => setForm(baseline)}
+            type="button"
+          >
+            Отменить
+          </button>
+          <button className="btn btn--primary" disabled={!canSave} type="submit">
+            {mutation.isPending ? 'Сохраняем…' : 'Сохранить профиль'}
+          </button>
         </div>
-      </div>
-      <div className="divider" />
-      <div className="col gap-12">
-        <ToggleRow hint="токены приходят по мере генерации" label="Стриминг ответа" value={profile.streamingEnabled} />
-        <ToggleRow
-          hint="отдельный блок «размышления» под ответом"
-          label="Показывать reasoning"
-          value={profile.thinkingEnabled}
-        />
-      </div>
-    </section>
+      </form>
+      <PromptTemplateCard
+        disabled={mutation.isPending}
+        onChange={(value) => setForm((current) => ({ ...current, systemPromptTemplate: value }))}
+        value={form.systemPromptTemplate}
+      />
+    </>
   );
 }
 
-function PromptTemplateCard({ prompt }: { prompt: string }) {
-  const trimmed = prompt.trim();
+interface PromptTemplateCardProps {
+  disabled?: boolean;
+  onChange: (value: string) => void;
+  value: string;
+}
+
+function PromptTemplateCard({ disabled, onChange, value }: PromptTemplateCardProps) {
+  const trimmedLength = value.trim().length;
   return (
     <section className="card" id="prompts" style={{ padding: 18, display: 'grid', gap: 14 }}>
       <div className="between">
         <h2 style={{ margin: 0, fontSize: 'var(--fz-xl)', fontWeight: 600 }}>System Prompt</h2>
         <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-          {trimmed ? `${trimmed.length} символов` : 'шаблон не задан'}
+          {trimmedLength > 0 ? `${trimmedLength} символов` : 'шаблон не задан'}
         </span>
       </div>
-      <pre
-        className="mono"
-        style={{
-          margin: 0,
-          padding: 14,
-          background: 'var(--bg-2)',
-          border: '1px solid var(--hairline)',
-          borderRadius: 'var(--r-sm)',
-          color: 'var(--text-1)',
-          fontSize: 'var(--fz-xs)',
-          lineHeight: 1.55,
-          maxHeight: 320,
-          overflow: 'auto',
-          whiteSpace: 'pre-wrap',
-        }}
-      >
-        {trimmed || 'Шаблон ещё не задан.'}
-      </pre>
+      <textarea
+        className="textarea mono"
+        disabled={disabled}
+        maxLength={20_000}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        placeholder="Например: Reply as {{char}} and do not speak for {{user}}."
+        rows={10}
+        style={{ fontSize: 'var(--fz-xs)', lineHeight: 1.55, minHeight: 220 }}
+        value={value}
+      />
+      <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
+        Шаблон применяется ко всем чатам, у которых не задан собственный system prompt.
+      </div>
     </section>
   );
 }
@@ -223,7 +371,7 @@ function SamplerCard({ data }: SettingsDataProps) {
     <section className="card" id="sampler" style={{ padding: 18, display: 'grid', gap: 14 }}>
       <div className="between">
         <h2 style={{ margin: 0, fontSize: 'var(--fz-xl)', fontWeight: 600 }}>Sampler Presets</h2>
-        <button className="btn btn--ghost-bordered btn--xs" type="button">
+        <button className="btn btn--ghost-bordered btn--xs" disabled type="button">
           <PlusIcon size={11} /> Новый preset
         </button>
       </div>
@@ -263,16 +411,24 @@ function SamplerCard({ data }: SettingsDataProps) {
   );
 }
 
-function ToggleRow({ hint, label, value }: { hint: string; label: string; value: boolean }) {
+interface ToggleRowProps {
+  checked: boolean;
+  hint: string;
+  id: string;
+  label: string;
+  onChange: (value: boolean) => void;
+}
+
+function ToggleRow({ checked, hint, id, label, onChange }: ToggleRowProps) {
   return (
-    <div className="between">
+    <label className="between" htmlFor={id} style={{ cursor: 'pointer' }}>
       <div>
         <strong>{label}</strong>
         <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
           {hint}
         </div>
       </div>
-      <span className="toggle" data-on={value ? 'true' : 'false'} />
-    </div>
+      <input checked={checked} id={id} onChange={(event) => onChange(event.currentTarget.checked)} type="checkbox" />
+    </label>
   );
 }
