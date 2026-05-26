@@ -173,21 +173,16 @@ export function ChatListScreen() {
       <Topbar
         crumbs={[{ label: 'Чаты', strong: true }]}
         actions={
-          <>
-            <button className="btn" type="button">
-              <UploadIcon size={13} /> Импорт
-            </button>
-            <button
-              className="btn btn--primary"
-              disabled={createMutation.isPending}
-              onClick={() => {
-                createMutation.mutate({});
-              }}
-              type="button"
-            >
-              <PlusIcon size={13} /> Новый чат
-            </button>
-          </>
+          <button
+            className="btn btn--primary"
+            disabled={createMutation.isPending}
+            onClick={() => {
+              createMutation.mutate({});
+            }}
+            type="button"
+          >
+            <PlusIcon size={13} /> Новый чат
+          </button>
         }
         search={false}
       />

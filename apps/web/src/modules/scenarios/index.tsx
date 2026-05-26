@@ -1,14 +1,20 @@
-import type { ScenarioSummaryDto } from '@immersion/contracts/scenarios';
+import {
+  type SaveScenarioCommand,
+  SaveScenarioCommandSchema,
+  type ScenarioSummaryDto,
+} from '@immersion/contracts/scenarios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { type MouseEvent, useMemo, useState } from 'react';
+import { type ChangeEvent, type MouseEvent, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
+import { ApiError } from '../../shared/api/client';
 import { PlusIcon, SearchIcon, TrashIcon, UploadIcon, XIcon } from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
 import { chatListQueryKey } from '../chats/queries/chat-list-query';
+import { createScenario } from './api/save-scenario';
 import { useDeleteScenario } from './mutations/use-delete-scenario';
-import { scenarioListQueryOptions } from './queries/scenario-list-query';
+import { scenarioListQueryKey, scenarioListQueryOptions } from './queries/scenario-list-query';
 
 export { ScenarioEditorScreen } from './editor';
 
@@ -23,11 +29,60 @@ function formatRelative(iso: string, now: Date = new Date()): string {
   return date.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
 }
 
+function parseScenarioImportFile(raw: string): SaveScenarioCommand {
+  const parsed = JSON.parse(raw) as unknown;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Файл сценария должен содержать JSON-объект.');
+  }
+  const record = parsed as Record<string, unknown>;
+  return SaveScenarioCommandSchema.parse({
+    concept: typeof record.concept === 'string' ? record.concept : '',
+    content: typeof record.content === 'string' ? record.content : '',
+    name: typeof record.name === 'string' ? record.name : '',
+    tags: Array.isArray(record.tags) ? record.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+  });
+}
+
 export function ScenariosScreen() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const query = useQuery(scenarioListQueryOptions());
   const [search, setSearch] = useState('');
   const [activeTags, setActiveTags] = useState<readonly string[]>([]);
   const [sortMode, setSortMode] = useState<'updated' | 'name'>('updated');
+  const [importError, setImportError] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const importMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const text = await file.text();
+      const command = parseScenarioImportFile(text);
+      return createScenario(command);
+    },
+    onSuccess: async (response) => {
+      await queryClient.invalidateQueries({ queryKey: scenarioListQueryKey });
+      await navigate({ to: '/scenarios/$scenarioId', params: { scenarioId: response.scenario.id } });
+    },
+  });
+
+  const handleImportClick = () => importInputRef.current?.click();
+  const handleImportFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) return;
+    setImportError(null);
+    importMutation.mutate(file, {
+      onError: (error) => {
+        const message =
+          error instanceof ApiError
+            ? error.message
+            : error instanceof Error
+              ? error.message
+              : 'Не удалось импортировать сценарий.';
+        setImportError(message);
+      },
+    });
+  };
+
   const items = query.data?.items ?? [];
   const tagCloud = useMemo(() => {
     const counts = new Map<string, number>();
@@ -66,8 +121,21 @@ export function ScenariosScreen() {
       <Topbar
         actions={
           <>
-            <button className="btn" disabled type="button">
-              <UploadIcon size={13} /> Импорт
+            <input
+              accept=".json,application/json"
+              hidden
+              onChange={handleImportFileChange}
+              ref={importInputRef}
+              type="file"
+            />
+            <button
+              className="btn"
+              disabled={importMutation.isPending}
+              onClick={handleImportClick}
+              title="Импорт .json-сценария"
+              type="button"
+            >
+              <UploadIcon size={13} /> {importMutation.isPending ? 'Импорт…' : 'Импорт'}
             </button>
             <Link className="btn btn--primary" to="/scenarios/new">
               <PlusIcon size={13} /> Новый сценарий
@@ -89,6 +157,9 @@ export function ScenariosScreen() {
                     ? 'Не удалось загрузить сценарии'
                     : `${items.length} сценари${items.length === 1 ? 'й' : items.length >= 2 && items.length <= 4 ? 'я' : 'ев'} в библиотеке`}
               </div>
+              {importError ? (
+                <div style={{ color: 'var(--danger)', fontSize: 'var(--fz-xs)', marginTop: 4 }}>{importError}</div>
+              ) : null}
             </div>
             <div className="row gap-8">
               <div className="search" style={{ minWidth: 280 }}>

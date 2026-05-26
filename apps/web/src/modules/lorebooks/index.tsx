@@ -1,12 +1,18 @@
-import type { LorebookSummaryDto } from '@immersion/contracts/lorebooks';
-import { useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
-import { type MouseEvent, useMemo, useState } from 'react';
+import {
+  type LorebookSummaryDto,
+  type SaveLorebookCommand,
+  SaveLorebookCommandSchema,
+} from '@immersion/contracts/lorebooks';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { type ChangeEvent, type MouseEvent, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
+import { ApiError } from '../../shared/api/client';
 import { BookIcon, PlusIcon, SearchIcon, TrashIcon, UploadIcon, XIcon } from '../../shared/ui/icons';
+import { createLorebook } from './api/save-lorebook';
 import { useDeleteLorebook } from './mutations/use-delete-lorebook';
-import { lorebookListQueryOptions } from './queries/lorebook-list-query';
+import { lorebookListQueryKey, lorebookListQueryOptions } from './queries/lorebook-list-query';
 
 export { LorebookEditorScreen } from './editor';
 
@@ -21,11 +27,82 @@ function formatRelative(iso: string, now: Date = new Date()): string {
   return date.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
 }
 
+function normalizeLorebookEntry(raw: unknown) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  return {
+    content: typeof record.content === 'string' ? record.content : '',
+    enabled: typeof record.enabled === 'boolean' ? record.enabled : true,
+    keys: Array.isArray(record.keys ?? record.key)
+      ? ((record.keys ?? record.key) as unknown[]).filter((key): key is string => typeof key === 'string')
+      : typeof record.key === 'string'
+        ? [record.key]
+        : [],
+    priority:
+      typeof record.priority === 'number' ? record.priority : typeof record.order === 'number' ? record.order : 0,
+  };
+}
+
+function parseLorebookImportFile(raw: string): SaveLorebookCommand {
+  const parsed = JSON.parse(raw) as unknown;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Файл лорбука должен содержать JSON-объект.');
+  }
+  const record = parsed as Record<string, unknown>;
+  const entriesRaw = Array.isArray(record.entries)
+    ? record.entries
+    : record.entries && typeof record.entries === 'object'
+      ? Object.values(record.entries as Record<string, unknown>)
+      : [];
+  const entries = entriesRaw
+    .map((entry) => normalizeLorebookEntry(entry))
+    .filter((entry): entry is NonNullable<ReturnType<typeof normalizeLorebookEntry>> => entry !== null);
+  return SaveLorebookCommandSchema.parse({
+    entries,
+    name: typeof record.name === 'string' ? record.name : '',
+    tags: Array.isArray(record.tags) ? record.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+  });
+}
+
 export function LorebooksScreen() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const query = useQuery(lorebookListQueryOptions());
   const [search, setSearch] = useState('');
   const [activeTags, setActiveTags] = useState<readonly string[]>([]);
   const [sortMode, setSortMode] = useState<'updated' | 'name' | 'entries'>('updated');
+  const [importError, setImportError] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const importMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const text = await file.text();
+      const command = parseLorebookImportFile(text);
+      return createLorebook(command);
+    },
+    onSuccess: async (response) => {
+      await queryClient.invalidateQueries({ queryKey: lorebookListQueryKey });
+      await navigate({ to: '/lorebooks/$lorebookId', params: { lorebookId: response.lorebook.id } });
+    },
+  });
+  const handleImportClick = () => importInputRef.current?.click();
+  const handleImportFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) return;
+    setImportError(null);
+    importMutation.mutate(file, {
+      onError: (error) => {
+        const message =
+          error instanceof ApiError
+            ? error.message
+            : error instanceof Error
+              ? error.message
+              : 'Не удалось импортировать лорбук.';
+        setImportError(message);
+      },
+    });
+  };
+
   const items = query.data?.items ?? [];
   const tagCloud = useMemo(() => {
     const counts = new Map<string, number>();
@@ -68,8 +145,21 @@ export function LorebooksScreen() {
       <Topbar
         actions={
           <>
-            <button className="btn" disabled type="button">
-              <UploadIcon size={13} /> Импорт
+            <input
+              accept=".json,application/json"
+              hidden
+              onChange={handleImportFileChange}
+              ref={importInputRef}
+              type="file"
+            />
+            <button
+              className="btn"
+              disabled={importMutation.isPending}
+              onClick={handleImportClick}
+              title="Импорт .json-лорбука"
+              type="button"
+            >
+              <UploadIcon size={13} /> {importMutation.isPending ? 'Импорт…' : 'Импорт'}
             </button>
             <Link className="btn btn--primary" to="/lorebooks/new">
               <PlusIcon size={13} /> Новый лорбук
@@ -91,6 +181,9 @@ export function LorebooksScreen() {
                     ? 'Не удалось загрузить лорбуки'
                     : `${items.length} лорбук${items.length === 1 ? '' : items.length >= 2 && items.length <= 4 ? 'а' : 'ов'} в библиотеке`}
               </div>
+              {importError ? (
+                <div style={{ color: 'var(--danger)', fontSize: 'var(--fz-xs)', marginTop: 4 }}>{importError}</div>
+              ) : null}
             </div>
             <div className="row gap-8">
               <div className="search" style={{ minWidth: 280 }}>
