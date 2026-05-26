@@ -44,6 +44,7 @@ import {
   UserIcon,
   XIcon,
 } from '../../shared/ui/icons';
+import { characterListQueryOptions } from '../characters/queries/character-list-query';
 import {
   chatReplyPromptPreviewQueryBaseKey,
   chatReplyPromptPreviewQueryOptions,
@@ -52,11 +53,13 @@ import {
   useChatReplyGeneration,
 } from '../generation';
 import { lorebookListQueryOptions } from '../lorebooks/queries/lorebook-list-query';
+import { scenarioListQueryOptions } from '../scenarios/queries/scenario-list-query';
 import { settingsOverviewQueryOptions } from '../settings';
 import { createChat } from './api/create-chat';
 import { useBranchChat } from './mutations/use-branch-chat';
 import { useDeleteChat } from './mutations/use-delete-chat';
 import { useDeleteChatMessage } from './mutations/use-delete-chat-message';
+import { useUpdateChatBindings } from './mutations/use-update-chat-bindings';
 import { useUpdateChatGenerationSettings } from './mutations/use-update-chat-generation-settings';
 import { useUpdateChatLorebooks } from './mutations/use-update-chat-lorebooks';
 import { useUpdateChatMessage } from './mutations/use-update-chat-message';
@@ -1361,6 +1364,7 @@ function RightPanel({
                     />
                   ) : section.id === 'character' ? (
                     <CharacterSectionContent
+                      chatId={chatId}
                       characterAvatarUrl={characterAvatarUrl}
                       characterId={characterId}
                       characterName={characterName}
@@ -1513,85 +1517,289 @@ function SettingsSectionContent({ samplerPresetId, sampling, settings }: Setting
 }
 
 function CharacterSectionContent({
+  chatId,
   characterAvatarUrl,
   characterId,
   characterName,
   scenarioId,
   scenarioName,
 }: {
+  chatId: string;
   characterAvatarUrl: string | null;
   characterId: string | null;
   characterName: string | null;
   scenarioId: string | null;
   scenarioName: string | null;
 }) {
-  if (!characterName && !scenarioName) {
-    return (
-      <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-        У этого чата нет привязанного персонажа или сценария. Это свободный чат.
+  const [editingCharacter, setEditingCharacter] = useState(false);
+  const [editingScenario, setEditingScenario] = useState(false);
+  const characterListQuery = useQuery(characterListQueryOptions());
+  const scenarioListQuery = useQuery(scenarioListQueryOptions());
+  const bindingsMutation = useUpdateChatBindings(chatId, {
+    onSuccess: () => {
+      setEditingCharacter(false);
+      setEditingScenario(false);
+    },
+  });
+
+  const applyCharacter = (nextId: string | null) => {
+    bindingsMutation.mutate({ characterId: nextId });
+  };
+  const applyScenario = (nextId: string | null) => {
+    bindingsMutation.mutate({ scenarioId: nextId });
+  };
+
+  const mutationError = bindingsMutation.error
+    ? bindingsMutation.error instanceof ApiError
+      ? bindingsMutation.error.message
+      : 'Не удалось обновить привязку.'
+    : null;
+
+  return (
+    <div className="col gap-10">
+      {characterId && characterName ? (
+        <div className="row gap-10">
+          <div
+            className="avatar avatar--36"
+            style={
+              characterAvatarUrl
+                ? {
+                    background: `center / cover no-repeat url("${createApiUrl(characterAvatarUrl)}")`,
+                    border: 0,
+                  }
+                : { background: avatarColor(characterName), color: 'white', border: 0 }
+            }
+          >
+            {characterAvatarUrl ? null : avatarInitial(characterName)}
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontWeight: 600 }}>{characterName}</div>
+            <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+              привязан к чату
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+          Персонаж не привязан — свободный чат.
+        </div>
+      )}
+      <div className="row gap-6" style={{ flexWrap: 'wrap' }}>
+        {characterId ? (
+          <Link className="btn btn--xs" params={{ characterId }} to="/characters/$characterId">
+            Открыть карточку
+          </Link>
+        ) : null}
+        <button
+          className="btn btn--xs btn--ghost-bordered"
+          disabled={bindingsMutation.isPending}
+          onClick={() => setEditingCharacter((current) => !current)}
+          type="button"
+        >
+          {editingCharacter ? 'Скрыть' : characterId ? 'Сменить персонажа' : 'Выбрать персонажа'}
+        </button>
+        {characterId ? (
+          <button
+            className="btn btn--xs btn--ghost-bordered"
+            disabled={bindingsMutation.isPending}
+            onClick={() => applyCharacter(null)}
+            type="button"
+          >
+            Отвязать
+          </button>
+        ) : null}
       </div>
-    );
-  }
-  if (!characterName && scenarioName && scenarioId) {
-    return (
-      <div className="col gap-6">
+      {editingCharacter ? (
+        <CharacterPickerList
+          activeId={characterId}
+          disabled={bindingsMutation.isPending}
+          items={characterListQuery.data?.items ?? []}
+          loading={characterListQuery.isLoading}
+          onSelect={applyCharacter}
+        />
+      ) : null}
+
+      <div className="col gap-4" style={{ marginTop: 6 }}>
         <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
           Сценарий
         </div>
-        <div style={{ fontWeight: 600 }}>{scenarioName}</div>
-        <Link className="btn btn--xs" params={{ scenarioId }} to="/scenarios/$scenarioId">
-          Открыть сценарий
-        </Link>
+        {scenarioId && scenarioName ? (
+          <>
+            <div style={{ fontSize: 'var(--fz-sm)' }}>{scenarioName}</div>
+            <div className="row gap-6" style={{ flexWrap: 'wrap' }}>
+              <Link
+                className="btn btn--xs btn--ghost-bordered"
+                params={{ scenarioId }}
+                style={{ width: 'fit-content' }}
+                to="/scenarios/$scenarioId"
+              >
+                Открыть сценарий
+              </Link>
+              <button
+                className="btn btn--xs btn--ghost-bordered"
+                disabled={bindingsMutation.isPending}
+                onClick={() => setEditingScenario((current) => !current)}
+                type="button"
+              >
+                {editingScenario ? 'Скрыть' : 'Сменить сценарий'}
+              </button>
+              <button
+                className="btn btn--xs btn--ghost-bordered"
+                disabled={bindingsMutation.isPending}
+                onClick={() => applyScenario(null)}
+                type="button"
+              >
+                Отвязать
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="row gap-6">
+            <button
+              className="btn btn--xs btn--ghost-bordered"
+              disabled={bindingsMutation.isPending}
+              onClick={() => setEditingScenario((current) => !current)}
+              type="button"
+            >
+              {editingScenario ? 'Скрыть' : 'Выбрать сценарий'}
+            </button>
+          </div>
+        )}
+        {editingScenario ? (
+          <ScenarioPickerList
+            activeId={scenarioId}
+            disabled={bindingsMutation.isPending}
+            items={scenarioListQuery.data?.items ?? []}
+            loading={scenarioListQuery.isLoading}
+            onSelect={applyScenario}
+          />
+        ) : null}
+      </div>
+      {mutationError ? (
+        <div className="muted" style={{ color: 'var(--danger)', fontSize: 'var(--fz-2xs)' }}>
+          {mutationError}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+interface CharacterPickerListProps {
+  activeId: string | null;
+  disabled: boolean;
+  items: { id: string; name: string }[];
+  loading: boolean;
+  onSelect: (id: string) => void;
+}
+
+function CharacterPickerList({ activeId, disabled, items, loading, onSelect }: CharacterPickerListProps) {
+  if (loading) {
+    return (
+      <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
+        Загружаем список персонажей…
       </div>
     );
   }
-  if (!characterName || !characterId) {
-    return null;
+  if (items.length === 0) {
+    return (
+      <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
+        В библиотеке пока нет персонажей.
+      </div>
+    );
   }
   return (
-    <div className="col gap-10">
-      <div className="row gap-10">
-        <div
-          className="avatar avatar--36"
-          style={
-            characterAvatarUrl
-              ? {
-                  background: `center / cover no-repeat url("${createApiUrl(characterAvatarUrl)}")`,
-                  border: 0,
-                }
-              : { background: avatarColor(characterName), color: 'white', border: 0 }
-          }
-        >
-          {characterAvatarUrl ? null : avatarInitial(characterName)}
-        </div>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontWeight: 600 }}>{characterName}</div>
-          <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-            привязан к чату
-          </div>
-        </div>
-      </div>
-      <div className="row gap-6">
-        <Link className="btn btn--xs" params={{ characterId }} to="/characters/$characterId">
-          Открыть карточку
-        </Link>
-      </div>
-      {scenarioName && scenarioId ? (
-        <div className="col gap-4" style={{ marginTop: 6 }}>
-          <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
-            Сценарий
-          </div>
-          <div style={{ fontSize: 'var(--fz-sm)' }}>{scenarioName}</div>
-          <Link
-            className="btn btn--xs btn--ghost-bordered"
-            params={{ scenarioId }}
-            style={{ width: 'fit-content' }}
-            to="/scenarios/$scenarioId"
+    <div
+      className="col gap-2"
+      style={{
+        maxHeight: 220,
+        overflowY: 'auto',
+        border: '1px solid var(--hairline)',
+        borderRadius: 'var(--r-sm)',
+        padding: 4,
+      }}
+    >
+      {items.map((item) => {
+        const isActive = item.id === activeId;
+        return (
+          <button
+            className="btn btn--xs"
+            disabled={disabled || isActive}
+            key={item.id}
+            onClick={() => onSelect(item.id)}
+            style={{
+              background: isActive ? 'var(--accent-soft)' : 'transparent',
+              border: 0,
+              color: isActive ? 'var(--accent)' : 'inherit',
+              justifyContent: 'flex-start',
+              textAlign: 'left',
+            }}
+            title={item.id}
+            type="button"
           >
-            Открыть сценарий
-          </Link>
-        </div>
-      ) : null}
+            {item.name}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+interface ScenarioPickerListProps {
+  activeId: string | null;
+  disabled: boolean;
+  items: { id: string; name: string }[];
+  loading: boolean;
+  onSelect: (id: string) => void;
+}
+
+function ScenarioPickerList({ activeId, disabled, items, loading, onSelect }: ScenarioPickerListProps) {
+  if (loading) {
+    return (
+      <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
+        Загружаем сценарии…
+      </div>
+    );
+  }
+  if (items.length === 0) {
+    return (
+      <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
+        В библиотеке пока нет сценариев.
+      </div>
+    );
+  }
+  return (
+    <div
+      className="col gap-2"
+      style={{
+        maxHeight: 220,
+        overflowY: 'auto',
+        border: '1px solid var(--hairline)',
+        borderRadius: 'var(--r-sm)',
+        padding: 4,
+      }}
+    >
+      {items.map((item) => {
+        const isActive = item.id === activeId;
+        return (
+          <button
+            className="btn btn--xs"
+            disabled={disabled || isActive}
+            key={item.id}
+            onClick={() => onSelect(item.id)}
+            style={{
+              background: isActive ? 'var(--accent-soft)' : 'transparent',
+              border: 0,
+              color: isActive ? 'var(--accent)' : 'inherit',
+              justifyContent: 'flex-start',
+              textAlign: 'left',
+            }}
+            title={item.id}
+            type="button"
+          >
+            {item.name}
+          </button>
+        );
+      })}
     </div>
   );
 }

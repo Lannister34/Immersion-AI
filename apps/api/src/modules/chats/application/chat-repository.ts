@@ -47,4 +47,14 @@ export interface ChatRepository {
     updatedAt: string,
   ): Promise<ChatSessionRecord | null>;
   updateGenericChatTitle(chatId: string, title: string, updatedAt: string): Promise<ChatSessionRecord | null>;
+  updateGenericChatBindings(
+    chatId: string,
+    bindings: {
+      characterId?: string | null;
+      characterName?: string | null;
+      scenarioId?: string | null;
+      scenarioName?: string | null;
+    },
+    updatedAt: string,
+  ): Promise<ChatSessionRecord | null>;
 }

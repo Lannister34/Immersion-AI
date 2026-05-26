@@ -711,6 +711,84 @@ describe('chat routes', () => {
     await app.close();
   });
 
+  it('switches the chat character via PATCH /bindings and reflects it in the next session read', async () => {
+    const charactersDir = path.join(temporaryDataRoot, 'characters');
+    await fs.mkdir(charactersDir, { recursive: true });
+    await fs.writeFile(
+      path.join(charactersDir, 'Arina.json'),
+      JSON.stringify({ name: 'Arina', description: 'first', updatedAt: '2026-01-01T00:00:00.000Z' }),
+    );
+    await fs.writeFile(
+      path.join(charactersDir, 'Boris.json'),
+      JSON.stringify({ name: 'Boris', description: 'second', updatedAt: '2026-01-01T00:00:00.000Z' }),
+    );
+
+    await writeGenericChatFile('bindings-route-chat', [
+      JSON.stringify({
+        chat_metadata: {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          title: 'Chat about Arina',
+          updatedAt: '2026-01-01T00:00:01.000Z',
+        },
+        character_id: 'Arina.json',
+        character_name: 'Arina',
+        user_name: 'Тестер',
+      }),
+      JSON.stringify({ is_user: true, mes: 'hi Arina', send_date: '2026-01-01T00:00:01.000Z' }),
+    ]);
+
+    const app = buildApiApp();
+    const bindResponse = await app.inject({
+      method: 'PATCH',
+      url: '/api/chats/bindings-route-chat/bindings',
+      payload: { characterId: 'Boris.json' },
+    });
+    const bindPayload = GetChatSessionResponseSchema.parse(bindResponse.json());
+
+    expect(bindResponse.statusCode).toBe(200);
+    expect(bindPayload.characterId).toBe('Boris.json');
+    expect(bindPayload.characterName).toBe('Boris');
+    expect(bindPayload.chat.characterId).toBe('Boris.json');
+
+    const readResponse = await app.inject({ method: 'GET', url: '/api/chats/bindings-route-chat' });
+    const readPayload = GetChatSessionResponseSchema.parse(readResponse.json());
+    expect(readPayload.characterId).toBe('Boris.json');
+
+    // Clear the character by passing null.
+    const clearResponse = await app.inject({
+      method: 'PATCH',
+      url: '/api/chats/bindings-route-chat/bindings',
+      payload: { characterId: null },
+    });
+    const clearPayload = GetChatSessionResponseSchema.parse(clearResponse.json());
+    expect(clearResponse.statusCode).toBe(200);
+    expect(clearPayload.characterId).toBeNull();
+    expect(clearPayload.characterName).toBeNull();
+
+    await app.close();
+  });
+
+  it('PATCH /bindings returns 404 when the new character does not exist', async () => {
+    await writeGenericChatFile('bindings-missing-char-chat', [
+      JSON.stringify({
+        chat_metadata: { createdAt: '2026-01-01T00:00:00.000Z', title: 'x', updatedAt: '2026-01-01T00:00:01.000Z' },
+        user_name: 'Тестер',
+      }),
+      JSON.stringify({ is_user: true, mes: 'hi', send_date: '2026-01-01T00:00:01.000Z' }),
+    ]);
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/chats/bindings-missing-char-chat/bindings',
+      payload: { characterId: 'never-existed.png' },
+    });
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'character_not_found' });
+
+    await app.close();
+  });
+
   it('renames a chat via PATCH /title and surfaces the new title in subsequent reads', async () => {
     await writeGenericChatFile('rename-route-chat', [
       JSON.stringify({

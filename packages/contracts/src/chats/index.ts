@@ -96,6 +96,15 @@ export const UpdateChatTitleResponseSchema = z.object({
 });
 export type UpdateChatTitleResponse = z.infer<typeof UpdateChatTitleResponseSchema>;
 
+export const UpdateChatBindingsCommandSchema = z.object({
+  characterId: z.string().trim().min(1).max(200).nullable().optional(),
+  scenarioId: z.string().trim().min(1).max(200).nullable().optional(),
+});
+export type UpdateChatBindingsCommand = z.infer<typeof UpdateChatBindingsCommandSchema>;
+
+export const UpdateChatBindingsResponseSchema = ChatSessionDtoSchema;
+export type UpdateChatBindingsResponse = z.infer<typeof UpdateChatBindingsResponseSchema>;
+
 export const CreateChatResponseSchema = z.object({
   chat: ChatSummaryDtoSchema,
 });

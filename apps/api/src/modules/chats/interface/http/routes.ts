@@ -2,6 +2,7 @@ import {
   BranchChatCommandSchema,
   ChatIdSchema,
   CreateChatCommandSchema,
+  UpdateChatBindingsCommandSchema,
   UpdateChatLorebooksCommandSchema,
   UpdateChatMessageCommandSchema,
   UpdateChatTitleCommandSchema,
@@ -19,6 +20,7 @@ import { exportChat } from '../../application/export-chat.js';
 import { getChatSession } from '../../application/get-chat-session.js';
 import { listChats } from '../../application/list-chats.js';
 import { truncateChatMessages } from '../../application/truncate-chat-messages.js';
+import { updateChatBindings } from '../../application/update-chat-bindings.js';
 import {
   InvalidChatGenerationSettingsError,
   updateChatGenerationSettings,
@@ -212,6 +214,23 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return { chat };
     } catch (error) {
       request.log.error({ err: error }, 'Failed to update chat title');
+      const problem = toProblem(error);
+
+      return reply.status(problem.statusCode).send(problem.body);
+    }
+  });
+
+  app.patch('/:chatId/bindings', async (request, reply) => {
+    try {
+      const { chatId } = ChatRouteParamsSchema.parse(request.params);
+      const command = UpdateChatBindingsCommandSchema.parse(request.body);
+      return await updateChatBindings({
+        chatId,
+        ...(command.characterId !== undefined ? { characterId: command.characterId } : {}),
+        ...(command.scenarioId !== undefined ? { scenarioId: command.scenarioId } : {}),
+      });
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to update chat bindings');
       const problem = toProblem(error);
 
       return reply.status(problem.statusCode).send(problem.body);

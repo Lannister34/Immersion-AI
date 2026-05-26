@@ -688,6 +688,77 @@ export class FileChatRepository implements ChatRepository {
     });
   }
 
+  async updateGenericChatBindings(
+    chatId: string,
+    bindings: {
+      characterId?: string | null;
+      characterName?: string | null;
+      scenarioId?: string | null;
+      scenarioName?: string | null;
+    },
+    updatedAt: string,
+  ) {
+    return withChatWriteQueue(chatId, async () => {
+      const currentSession = await readChatFile(chatId);
+      if (!currentSession) {
+        return null;
+      }
+
+      const filePath = resolveChatFilePath(chatId);
+      const rawContent = await fs.readFile(filePath, 'utf8');
+      const lines = rawContent
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      const existingHeader = lines[0] ? parseStoredHeaderRecord(lines[0], filePath) : null;
+      const existingMessageLines = existingHeader ? lines.slice(1) : lines;
+
+      const nextHeaderRecord = { ...(existingHeader ?? {}) };
+      if (bindings.characterId !== undefined) {
+        nextHeaderRecord.character_id = bindings.characterId ?? '';
+      }
+      if (bindings.characterName !== undefined) {
+        nextHeaderRecord.character_name = bindings.characterName ?? '';
+      }
+      if (bindings.scenarioId !== undefined) {
+        nextHeaderRecord.scenario_id = bindings.scenarioId ?? '';
+      }
+      if (bindings.scenarioName !== undefined) {
+        nextHeaderRecord.scenario_name = bindings.scenarioName ?? '';
+      }
+
+      // Build a synthetic session record so updateHeaderRecord uses the new identifiers in its
+      // getString(headerValue, sessionFallback) calls instead of resurrecting the old ones.
+      const projectedCharacterId = getString(nextHeaderRecord.character_id).trim() || null;
+      const projectedCharacterName = getString(nextHeaderRecord.character_name).trim() || null;
+      const projectedScenarioId = getString(nextHeaderRecord.scenario_id).trim() || null;
+      const projectedScenarioName = getString(nextHeaderRecord.scenario_name).trim() || null;
+      const sessionWithNewBindings: ChatSessionRecord = {
+        ...currentSession,
+        characterId: projectedCharacterId,
+        characterName: projectedCharacterName,
+        scenarioId: projectedScenarioId,
+        scenarioName: projectedScenarioName,
+        chat: {
+          ...currentSession.chat,
+          characterId: projectedCharacterId,
+          characterName: projectedCharacterName,
+          scenarioId: projectedScenarioId,
+          scenarioName: projectedScenarioName,
+        },
+      };
+
+      const nextLines = [
+        JSON.stringify(updateHeaderRecord(nextHeaderRecord, sessionWithNewBindings, updatedAt)),
+        ...existingMessageLines,
+      ];
+
+      await writeChatFileAtomically(filePath, `${nextLines.join('\n')}\n`);
+
+      return readChatFile(chatId);
+    });
+  }
+
   async updateGenericChatMessage(chatId: string, messageIndex: number, content: string, updatedAt: string) {
     return withChatWriteQueue(chatId, async () => {
       const currentSession = await readChatFile(chatId);
