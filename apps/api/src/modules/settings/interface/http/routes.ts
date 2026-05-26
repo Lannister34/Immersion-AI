@@ -4,11 +4,17 @@ import {
   SetActiveSamplerPresetCommandSchema,
   UpdateSamplerPresetCommandSchema,
   UpdateSettingsProfileCommandSchema,
+  UpsertModelBindingCommandSchema,
 } from '@immersion/contracts/settings';
 import type { FastifyPluginAsync } from 'fastify';
 import { ZodError, z } from 'zod';
 
 import { getSettingsOverview } from '../../application/get-settings-overview.js';
+import {
+  deleteModelBinding,
+  ModelBindingNotFoundError,
+  upsertModelBinding,
+} from '../../application/model-binding-mutations.js';
 import {
   createSamplerPreset,
   deleteSamplerPreset,
@@ -45,6 +51,16 @@ function toProblem(error: unknown) {
       statusCode: 409,
       body: ApiProblemSchema.parse({
         code: 'last_sampler_preset',
+        message: error.message,
+      }),
+    };
+  }
+
+  if (error instanceof ModelBindingNotFoundError) {
+    return {
+      statusCode: 404,
+      body: ApiProblemSchema.parse({
+        code: 'model_binding_not_found',
         message: error.message,
       }),
     };
@@ -118,6 +134,33 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
       return await setActiveSamplerPreset(command.presetId);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to set active sampler preset');
+      const problem = toProblem(error);
+      return reply.status(problem.statusCode).send(problem.body);
+    }
+  });
+
+  const ModelBindingRouteParamsSchema = z.object({
+    modelName: z.string().trim().min(1),
+  });
+
+  app.put('/sampler/bindings/:modelName', async (request, reply) => {
+    try {
+      const { modelName } = ModelBindingRouteParamsSchema.parse(request.params);
+      const command = UpsertModelBindingCommandSchema.parse(request.body);
+      return await upsertModelBinding(modelName, command.presetId);
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to upsert model binding');
+      const problem = toProblem(error);
+      return reply.status(problem.statusCode).send(problem.body);
+    }
+  });
+
+  app.delete('/sampler/bindings/:modelName', async (request, reply) => {
+    try {
+      const { modelName } = ModelBindingRouteParamsSchema.parse(request.params);
+      return await deleteModelBinding(modelName);
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to delete model binding');
       const problem = toProblem(error);
       return reply.status(problem.statusCode).send(problem.body);
     }

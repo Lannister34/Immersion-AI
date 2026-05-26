@@ -112,3 +112,15 @@ export const SetActiveSamplerPresetResponseSchema = z.object({
 });
 
 export type SetActiveSamplerPresetResponse = z.infer<typeof SetActiveSamplerPresetResponseSchema>;
+
+export const UpsertModelBindingCommandSchema = z.object({
+  presetId: z.string().min(1),
+});
+
+export type UpsertModelBindingCommand = z.infer<typeof UpsertModelBindingCommandSchema>;
+
+export const ModelBindingMutationResponseSchema = z.object({
+  sampler: SettingsSamplerOverviewSchema,
+});
+
+export type ModelBindingMutationResponse = z.infer<typeof ModelBindingMutationResponseSchema>;
