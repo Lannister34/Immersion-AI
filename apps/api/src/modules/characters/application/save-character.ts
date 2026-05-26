@@ -4,6 +4,7 @@ import {
   createCharacterFile,
   readCharacterDetail,
   writeCharacterFile,
+  writePngCharacterFile,
 } from '../infrastructure/file-character-repository.js';
 import { CharacterNotFoundError } from './get-character-avatar.js';
 
@@ -32,6 +33,9 @@ export async function updateCharacter(id: string, input: SaveCharacterInput): Pr
   }
   if (!existing.isEditable) {
     throw new CharacterNotEditableError(id);
+  }
+  if (existing.source === 'png') {
+    return writePngCharacterFile(id, input);
   }
   return writeCharacterFile(id, input);
 }

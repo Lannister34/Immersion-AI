@@ -416,11 +416,17 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                       : 'Аватар появится, если рядом лежит PNG-карточка с тем же именем.'}
                   </div>
                 </div>
-                {!canEdit && detail ? (
+                {detail?.source === 'png' && canEdit ? (
                   <div className="card" style={{ padding: 12 }}>
                     <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-                      Карточка хранится в формате PNG и пока read-only. Чтобы редактировать поля, сохрани её рядом как
-                      .json (импорт SillyTavern card пока не реализован).
+                      Карточка хранится в формате PNG SillyTavern. Сохранение перезаписывает <code>chara</code>-чанк
+                      внутри файла — пиксели аватара не меняются.
+                    </div>
+                  </div>
+                ) : !canEdit && detail ? (
+                  <div className="card" style={{ padding: 12 }}>
+                    <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+                      Этот файл не похож на SillyTavern PNG — редактирование недоступно.
                     </div>
                   </div>
                 ) : null}

@@ -33,6 +33,34 @@ function buildChunk(type: string, data: Buffer): Buffer {
   return Buffer.concat([length, typeAndData, crcBuffer]);
 }
 
+function decodePngCharaChunk(buffer: Buffer): { data: Record<string, unknown> } {
+  let offset = 8;
+  while (offset + 8 <= buffer.length) {
+    const length = buffer.readUInt32BE(offset);
+    const type = buffer.toString('ascii', offset + 4, offset + 8);
+    const dataStart = offset + 8;
+    const dataEnd = dataStart + length;
+    if (type === 'tEXt') {
+      const data = buffer.subarray(dataStart, dataEnd);
+      const nullIndex = data.indexOf(0);
+      const keyword = data.subarray(0, nullIndex).toString('latin1');
+      if (keyword === 'chara' || keyword === 'ccv3') {
+        const text = data.subarray(nullIndex + 1).toString('latin1');
+        const decoded = Buffer.from(text, 'base64').toString('utf8');
+        const parsed = JSON.parse(decoded) as Record<string, unknown>;
+        const inner =
+          parsed && typeof parsed === 'object' && 'data' in parsed && parsed.data && typeof parsed.data === 'object'
+            ? (parsed.data as Record<string, unknown>)
+            : parsed;
+        return { data: inner };
+      }
+    }
+    offset = dataEnd + 4;
+    if (type === 'IEND') break;
+  }
+  throw new Error('Decoded PNG has no chara chunk.');
+}
+
 function buildPngWithCharaChunk(cardJson: string): Buffer {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(1, 0); // width
@@ -287,7 +315,7 @@ describe('library CRUD routes', () => {
 
       expect(response.statusCode).toBe(200);
       expect(payload.character.source).toBe('png');
-      expect(payload.character.isEditable).toBe(false);
+      expect(payload.character.isEditable).toBe(true);
       expect(payload.character.name).toBe('Мария Чернова');
       expect(payload.character.description).toContain('Художница');
       expect(payload.character.personality).toContain('наблюдательная');
@@ -324,7 +352,7 @@ describe('library CRUD routes', () => {
       await app.close();
     });
 
-    it('refuses to update a PNG character (read-only format)', async () => {
+    it('refuses to update a PNG file that is not a SillyTavern card (no chara chunk)', async () => {
       const charactersDir = path.join(temporaryDataRoot, 'characters');
       await fs.mkdir(charactersDir, { recursive: true });
       const png = Buffer.from(
@@ -350,6 +378,69 @@ describe('library CRUD routes', () => {
       });
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({ code: 'character_not_editable' });
+
+      await app.close();
+    });
+
+    it('rewrites the chara tEXt chunk of a SillyTavern PNG on update, keeping the pixel payload intact', async () => {
+      const charactersDir = path.join(temporaryDataRoot, 'characters');
+      await fs.mkdir(charactersDir, { recursive: true });
+      const cardJson = {
+        spec: 'chara_card_v2',
+        spec_version: '2.0',
+        data: {
+          name: 'Мария',
+          description: 'старая описание',
+          personality: 'старая личность',
+          scenario: 'мастерская',
+          first_mes: 'старая первая фраза',
+          creator: 'community',
+          alternate_greetings: ['hi', 'hey'],
+        },
+      };
+      const png = buildPngWithCharaChunk(JSON.stringify(cardJson));
+      await fs.writeFile(path.join(charactersDir, 'Мария Чернова.png'), png);
+
+      const app = buildApiApp();
+      const updateResponse = await app.inject({
+        method: 'PUT',
+        url: `/api/characters/${encodeURIComponent('Мария Чернова.png')}`,
+        payload: {
+          name: 'Мария Чернова',
+          description: 'обновлённое описание с {{user}} и {{char}}',
+          personality: 'обновлённая личность',
+          scenario: 'мастерская в Гавани, поздний вечер',
+          firstMessage: 'Чай завариваю — будешь?',
+          exampleDialogue: '<START>\n{{user}}: что?\n{{char}}: чай',
+          systemPrompt: 'Reply in Russian.',
+          tags: ['ru', 'slice-of-life'],
+        },
+      });
+      const updatePayload = CharacterDetailResponseSchema.parse(updateResponse.json());
+
+      expect(updateResponse.statusCode).toBe(200);
+      expect(updatePayload.character.source).toBe('png');
+      expect(updatePayload.character.isEditable).toBe(true);
+      expect(updatePayload.character.description).toContain('обновлённое описание');
+      expect(updatePayload.character.tags).toEqual(['ru', 'slice-of-life']);
+
+      // Detail GET reflects the new fields after re-reading the file.
+      const detailResponse = await app.inject({
+        method: 'GET',
+        url: `/api/characters/${encodeURIComponent('Мария Чернова.png')}`,
+      });
+      const detailPayload = CharacterDetailResponseSchema.parse(detailResponse.json());
+      expect(detailPayload.character.firstMessage).toBe('Чай завариваю — будешь?');
+      expect(detailPayload.character.personality).toBe('обновлённая личность');
+
+      // The on-disk PNG is still a valid PNG and preserves unknown chara fields (creator/alternate_greetings).
+      const persisted = await fs.readFile(path.join(charactersDir, 'Мария Чернова.png'));
+      expect(persisted.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+      const decoded = decodePngCharaChunk(persisted);
+      expect(decoded.data.creator).toBe('community');
+      expect(decoded.data.alternate_greetings).toEqual(['hi', 'hey']);
+      expect(decoded.data.name).toBe('Мария Чернова');
+      expect(decoded.data.scenario).toBe('мастерская в Гавани, поздний вечер');
 
       await app.close();
     });

@@ -5,7 +5,12 @@ import path from 'node:path';
 import type { CharacterDetailDto, CharacterSourceFormat, CharacterSummaryDto } from '@immersion/contracts/characters';
 
 import { resolveDataRoot } from '../../../lib/data-root.js';
-import { extractPngCharacterCard, InvalidCharacterCardError } from '../application/extract-png-character-card.js';
+import {
+  type CharacterCardPatch,
+  extractPngCharacterCard,
+  InvalidCharacterCardError,
+  writePngCharacterCard,
+} from '../application/extract-png-character-card.js';
 
 const CHARACTERS_DIRECTORY = 'characters';
 const JSON_EXTENSION = '.json';
@@ -132,6 +137,17 @@ async function writeJsonAtomic(filePath: string, payload: unknown) {
   }
 }
 
+async function writeBinaryAtomic(filePath: string, payload: Buffer) {
+  const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`);
+  try {
+    await fs.writeFile(tempPath, payload);
+    await fs.rename(tempPath, filePath);
+  } catch (error) {
+    await fs.rm(tempPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
 function detailFromStored(
   id: string,
   source: CharacterSourceFormat,
@@ -171,7 +187,8 @@ export async function readCharacterDetail(id: string): Promise<CharacterDetailDt
   }
   if (summary.source !== 'json') {
     const stored = await readPngStoredCharacter(summary.filePath);
-    return detailFromStored(id, summary.source, false, stored, summary.avatarUrl, stats.mtime.toISOString());
+    const isEditable = stored !== null;
+    return detailFromStored(id, summary.source, isEditable, stored, summary.avatarUrl, stats.mtime.toISOString());
   }
 
   let raw: string;
@@ -284,6 +301,42 @@ export async function createCharacterFile(input: SaveCharacterFileInput): Promis
   const base = sanitizeBaseName(input.name);
   const id = await generateUniqueId(directory, base);
   return writeCharacterFile(id, input);
+}
+
+export async function writePngCharacterFile(id: string, input: SaveCharacterFileInput): Promise<CharacterDetailDto> {
+  const filePath = resolveCharacterFilePath(id);
+  const original = await fs.readFile(filePath);
+  const patch: CharacterCardPatch = {
+    description: input.description,
+    exampleDialogue: input.exampleDialogue,
+    firstMessage: input.firstMessage,
+    name: input.name,
+    personality: input.personality,
+    scenario: input.scenario,
+    systemPrompt: input.systemPrompt,
+    tags: [...input.tags],
+  };
+  const next = writePngCharacterCard(original, patch);
+  await writeBinaryAtomic(filePath, next);
+
+  const stats = await fs.stat(filePath);
+  const avatarUrl = `/api/characters/${encodeURIComponent(id)}/avatar`;
+  return {
+    avatarUrl,
+    createdAt: null,
+    description: input.description,
+    exampleDialogue: input.exampleDialogue,
+    firstMessage: input.firstMessage,
+    id,
+    isEditable: true,
+    name: input.name,
+    personality: input.personality,
+    scenario: input.scenario,
+    source: 'png',
+    systemPrompt: input.systemPrompt,
+    tags: [...input.tags],
+    updatedAt: stats.mtime.toISOString(),
+  };
 }
 
 export async function deleteCharacterFile(id: string): Promise<boolean> {
