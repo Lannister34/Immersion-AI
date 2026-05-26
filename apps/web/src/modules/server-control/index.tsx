@@ -1,11 +1,13 @@
 import type {
+  ProviderConfig,
   ProviderMode,
   ProviderSettingsSnapshot,
+  ProviderType,
   UpdateProviderSettingsCommand,
 } from '@immersion/contracts/providers';
 import type { RuntimeOverviewResponse, RuntimeStartCommand } from '@immersion/contracts/runtime';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
 import {
@@ -323,7 +325,11 @@ export function ServerControlScreen() {
               </p>
             </div>
           ) : (
-            <ExternalProviderForm snapshot={snapshot} />
+            <ExternalProviderForm
+              isSaving={saveProviderMutation.isPending}
+              onSave={(command) => saveProviderMutation.mutateAsync(command)}
+              snapshot={snapshot}
+            />
           )}
         </div>
       </div>
@@ -331,7 +337,55 @@ export function ServerControlScreen() {
   );
 }
 
-function ExternalProviderForm({ snapshot }: { snapshot: ProviderSettingsSnapshot | undefined }) {
+interface ProviderFormState {
+  url: string;
+  apiKey: string;
+  model: string;
+}
+
+function configToFormState(config: ProviderConfig | undefined): ProviderFormState {
+  return {
+    url: config?.url ?? '',
+    apiKey: config?.apiKey ?? '',
+    model: config?.model ?? '',
+  };
+}
+
+function formsEqual(left: ProviderFormState, right: ProviderFormState): boolean {
+  return left.url === right.url && left.apiKey === right.apiKey && left.model === right.model;
+}
+
+function buildProviderConfig(form: ProviderFormState): ProviderConfig {
+  const config: ProviderConfig = { url: form.url.trim() };
+  const trimmedApiKey = form.apiKey.trim();
+  if (trimmedApiKey.length > 0) config.apiKey = trimmedApiKey;
+  const trimmedModel = form.model.trim();
+  if (trimmedModel.length > 0) config.model = trimmedModel;
+  return config;
+}
+
+interface ExternalProviderFormProps {
+  isSaving: boolean;
+  onSave: (command: UpdateProviderSettingsCommand) => Promise<unknown>;
+  snapshot: ProviderSettingsSnapshot | undefined;
+}
+
+function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFormProps) {
+  const [selectedProvider, setSelectedProvider] = useState<ProviderType>(snapshot?.activeProvider ?? 'custom');
+  const baseline = useMemo(
+    () => configToFormState(snapshot?.providerConfigs[selectedProvider]),
+    [selectedProvider, snapshot?.providerConfigs],
+  );
+  const [form, setForm] = useState<ProviderFormState>(baseline);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setForm(baseline);
+    setSavedAt(null);
+    setErrorMessage(null);
+  }, [baseline]);
+
   if (!snapshot) {
     return (
       <div className="empty" style={{ padding: 60 }}>
@@ -339,21 +393,122 @@ function ExternalProviderForm({ snapshot }: { snapshot: ProviderSettingsSnapshot
       </div>
     );
   }
-  const config = snapshot.providerConfigs.custom ?? snapshot.providerConfigs.koboldcpp;
+
+  const isDirty = !formsEqual(form, baseline) || selectedProvider !== snapshot.activeProvider;
+  const canSave = isDirty && form.url.trim().length > 0 && !isSaving;
+
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canSave) return;
+    setErrorMessage(null);
+    try {
+      const nextConfigs = {
+        ...snapshot.providerConfigs,
+        [selectedProvider]: buildProviderConfig(form),
+      };
+      await onSave({
+        mode: snapshot.mode,
+        activeProvider: selectedProvider,
+        providerConfigs: nextConfigs,
+      });
+      setSavedAt(Date.now());
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Не удалось сохранить настройки внешнего API.');
+    }
+  };
+
+  const definition = snapshot.providerDefinitions.find((entry) => entry.type === selectedProvider);
+  const hasApiKeyField = definition?.fields.some((field) => field.key === 'apiKey') ?? false;
+  const hasModelField = definition?.fields.some((field) => field.key === 'model') ?? false;
+
   return (
     <section className="card" style={{ padding: 18, display: 'grid', gap: 14 }}>
-      <h2 style={{ margin: 0, fontSize: 'var(--fz-xl)', fontWeight: 600 }}>Внешний API</h2>
-      <div className="field">
-        <label>Base URL</label>
-        <input className="input" defaultValue={config?.url ?? ''} readOnly />
+      <div className="between">
+        <h2 style={{ margin: 0, fontSize: 'var(--fz-xl)', fontWeight: 600 }}>Внешний API</h2>
+        <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+          {selectedProvider === snapshot.activeProvider ? 'активный провайдер' : 'переключим на этого при сохранении'}
+        </span>
       </div>
-      <div className="field">
-        <label>Модель</label>
-        <input className="input" defaultValue={config?.model ?? ''} readOnly />
-      </div>
-      <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-        Редактирование внешних провайдеров будет добавлено в следующей итерации.
-      </div>
+      <form className="col gap-12" onSubmit={onSubmit}>
+        <div className="field">
+          <label htmlFor="provider-type">Провайдер</label>
+          <select
+            className="input"
+            id="provider-type"
+            onChange={(event) => setSelectedProvider(event.currentTarget.value as ProviderType)}
+            value={selectedProvider}
+          >
+            {snapshot.providerDefinitions.map((entry) => (
+              <option key={entry.type} value={entry.type}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="provider-url">Base URL</label>
+          <input
+            className="input"
+            id="provider-url"
+            onChange={(event) => setForm((current) => ({ ...current, url: event.currentTarget.value }))}
+            placeholder="http://127.0.0.1:5001"
+            type="url"
+            value={form.url}
+          />
+        </div>
+        {hasApiKeyField ? (
+          <div className="field">
+            <label htmlFor="provider-api-key">API-ключ</label>
+            <input
+              autoComplete="off"
+              className="input"
+              id="provider-api-key"
+              onChange={(event) => setForm((current) => ({ ...current, apiKey: event.currentTarget.value }))}
+              placeholder="опционально"
+              type="password"
+              value={form.apiKey}
+            />
+          </div>
+        ) : null}
+        {hasModelField ? (
+          <div className="field">
+            <label htmlFor="provider-model">Модель</label>
+            <input
+              className="input"
+              id="provider-model"
+              onChange={(event) => setForm((current) => ({ ...current, model: event.currentTarget.value }))}
+              placeholder="опционально, например: local-model"
+              value={form.model}
+            />
+          </div>
+        ) : null}
+        {errorMessage ? (
+          <div className="card" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', padding: 10 }}>
+            {errorMessage}
+          </div>
+        ) : null}
+        <div className="row gap-8" style={{ justifyContent: 'flex-end', alignItems: 'center' }}>
+          {savedAt && !isDirty ? (
+            <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+              Настройки внешнего API сохранены.
+            </span>
+          ) : null}
+          <button
+            className="btn"
+            disabled={!isDirty || isSaving}
+            onClick={() => {
+              setForm(baseline);
+              setSelectedProvider(snapshot.activeProvider);
+            }}
+            type="button"
+          >
+            Отменить
+          </button>
+          <button className="btn btn--primary" disabled={!canSave} type="submit">
+            {isSaving ? 'Сохраняем…' : 'Сохранить'}
+          </button>
+        </div>
+      </form>
     </section>
   );
 }

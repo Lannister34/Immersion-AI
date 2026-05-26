@@ -9,14 +9,10 @@ import { type FormEvent, type JSX, useEffect, useMemo, useState } from 'react';
 import { Topbar } from '../../app/layout/topbar';
 import { ApiError } from '../../shared/api/client';
 import {
-  BoltIcon,
   CheckIcon,
   CodeIcon,
-  CommandIcon,
   CpuIcon,
-  FolderIcon,
   type IconProps,
-  LayersIcon,
   PlusIcon,
   SlidersIcon,
   TrashIcon,
@@ -47,10 +43,6 @@ const SECTIONS: SettingsSection[] = [
   { id: 'prompts', label: 'System Prompt', icon: CodeIcon },
   { id: 'sampler', label: 'Sampler Presets', icon: SlidersIcon },
   { id: 'models', label: 'Model Bindings', icon: CpuIcon },
-  { id: 'gen', label: 'Generation Defaults', icon: BoltIcon },
-  { id: 'ui', label: 'Интерфейс', icon: LayersIcon },
-  { id: 'hotkeys', label: 'Hotkeys', icon: CommandIcon },
-  { id: 'backup', label: 'Backups · данные', icon: FolderIcon },
 ];
 
 export function SettingsScreen() {
