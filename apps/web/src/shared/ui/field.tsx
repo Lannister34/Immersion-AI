@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 export interface FieldProps {
+  action?: ReactNode;
   children: ReactNode;
   hint?: string;
   id: string;
@@ -8,15 +9,18 @@ export interface FieldProps {
   required?: boolean;
 }
 
-export function Field({ children, hint, id, label, required }: FieldProps) {
+export function Field({ action, children, hint, id, label, required }: FieldProps) {
   return (
     <div className="field">
-      <label className="between" htmlFor={id}>
-        <span>
-          {label}
-          {required ? <span style={{ color: 'var(--danger)' }}> *</span> : null}
-        </span>
-      </label>
+      <div className="between">
+        <label htmlFor={id}>
+          <span>
+            {label}
+            {required ? <span style={{ color: 'var(--danger)' }}> *</span> : null}
+          </span>
+        </label>
+        {action}
+      </div>
       {children}
       {hint ? (
         <div className="muted" style={{ fontSize: 'var(--fz-2xs)', marginTop: 4 }}>

@@ -17,9 +17,14 @@ import { ChatMessageNotFoundError, ChatNotFoundError } from '../../../chats/appl
 import { ChatTitleConflictError } from '../../../chats/application/chat-conflicts.js';
 import { InvalidChatGenerationSettingsResolutionError } from '../../../prompting/application/resolve-chat-generation-settings.js';
 import { GenerationProviderUnavailableError } from '../../../providers/application/generation-provider.js';
+import { generateCharacterAvatarPrompt } from '../../application/generate-character-avatar-prompt.js';
+import { generateCharacterDraft } from '../../application/generate-character-draft.js';
+import { generateCharacterField } from '../../application/generate-character-field.js';
 import { generateChatReply } from '../../application/generate-chat-reply.js';
 import { generateChatTitle } from '../../application/generate-chat-title.js';
 import { generateFirstMessage } from '../../application/generate-first-message.js';
+import { generateLorebookDraft } from '../../application/generate-lorebook-draft.js';
+import { generateScenarioDraft } from '../../application/generate-scenario-draft.js';
 import {
   ChatNotEmptyError,
   ChatReplyGenerationFailedError,
@@ -189,6 +194,106 @@ export const generationRoutes: FastifyPluginAsync = async (app) => {
       });
     } catch (error) {
       request.log.error({ err: error }, 'Failed to generate first message');
+      const mapped = toProblem(error);
+
+      return reply.status(mapped.statusCode).send(mapped.body);
+    } finally {
+      request.raw.off('aborted', abortGeneration);
+    }
+  });
+
+  app.post('/character', async (request, reply) => {
+    const abortController = new AbortController();
+    const abortGeneration = () => abortController.abort();
+
+    request.raw.once('aborted', abortGeneration);
+
+    try {
+      return await generateCharacterDraft(request.body, {
+        signal: abortController.signal,
+      });
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to generate character draft');
+      const mapped = toProblem(error);
+
+      return reply.status(mapped.statusCode).send(mapped.body);
+    } finally {
+      request.raw.off('aborted', abortGeneration);
+    }
+  });
+
+  app.post('/character-field', async (request, reply) => {
+    const abortController = new AbortController();
+    const abortGeneration = () => abortController.abort();
+
+    request.raw.once('aborted', abortGeneration);
+
+    try {
+      return await generateCharacterField(request.body, {
+        signal: abortController.signal,
+      });
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to generate character field');
+      const mapped = toProblem(error);
+
+      return reply.status(mapped.statusCode).send(mapped.body);
+    } finally {
+      request.raw.off('aborted', abortGeneration);
+    }
+  });
+
+  app.post('/character-avatar-prompt', async (request, reply) => {
+    const abortController = new AbortController();
+    const abortGeneration = () => abortController.abort();
+
+    request.raw.once('aborted', abortGeneration);
+
+    try {
+      return await generateCharacterAvatarPrompt(request.body, {
+        signal: abortController.signal,
+      });
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to generate character avatar prompt');
+      const mapped = toProblem(error);
+
+      return reply.status(mapped.statusCode).send(mapped.body);
+    } finally {
+      request.raw.off('aborted', abortGeneration);
+    }
+  });
+
+  app.post('/scenario', async (request, reply) => {
+    const abortController = new AbortController();
+    const abortGeneration = () => abortController.abort();
+
+    request.raw.once('aborted', abortGeneration);
+
+    try {
+      return await generateScenarioDraft(request.body, {
+        signal: abortController.signal,
+      });
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to generate scenario draft');
+      const mapped = toProblem(error);
+
+      return reply.status(mapped.statusCode).send(mapped.body);
+    } finally {
+      request.raw.off('aborted', abortGeneration);
+    }
+  });
+
+  app.post('/lorebook', async (request, reply) => {
+    const abortController = new AbortController();
+    const abortGeneration = () => abortController.abort();
+
+    request.raw.once('aborted', abortGeneration);
+
+    try {
+      return await generateLorebookDraft(request.body, {
+        signal: abortController.signal,
+      });
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to generate lorebook draft');
       const mapped = toProblem(error);
 
       return reply.status(mapped.statusCode).send(mapped.body);

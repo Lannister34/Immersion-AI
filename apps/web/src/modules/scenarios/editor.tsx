@@ -7,9 +7,10 @@ import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { formatRelative } from '../../shared/lib/format-relative';
 import { Field } from '../../shared/ui/field';
-import { ChatIcon, TrashIcon } from '../../shared/ui/icons';
+import { ChatIcon, SparkleIcon, TrashIcon } from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
 import { chatListQueryKey } from '../chats/queries/chat-list-query';
+import { generateScenarioDraft, useGenerationAvailability } from '../generation';
 import { createScenario, updateScenario } from './api/save-scenario';
 import { useDeleteScenario } from './mutations/use-delete-scenario';
 import { scenarioDetailQueryKey, scenarioDetailQueryOptions } from './queries/scenario-detail-query';
@@ -125,6 +126,25 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
     },
   });
 
+  const generationAvailability = useGenerationAvailability();
+
+  const draftMutation = useMutation({
+    mutationFn: () => {
+      const concept = form.concept.trim();
+      const name = form.name.trim();
+      return generateScenarioDraft({ concept, ...(name.length > 0 ? { name } : {}) });
+    },
+    onSuccess: (draft) => {
+      // Черновик заполняет форму; название не трогаем, если пользователь его уже ввёл.
+      setForm((current) => ({
+        ...current,
+        content: draft.content,
+        name: current.name.trim().length > 0 ? current.name : draft.name,
+        tagsText: draft.tags.join(', '),
+      }));
+    },
+  });
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmed = form.name.trim();
@@ -137,6 +157,9 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
     : null;
   const deleteError = deleteMutation.error
     ? getApiErrorMessage(deleteMutation.error, 'Не удалось удалить сценарий.')
+    : null;
+  const draftGenerationError = draftMutation.error
+    ? getApiErrorMessage(draftMutation.error, 'Не удалось сгенерировать сценарий. Попробуйте ещё раз.')
     : null;
 
   return (
@@ -252,19 +275,42 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
                 />
               </Field>
               <Field
+                action={
+                  <button
+                    className="btn btn--xs"
+                    disabled={
+                      saveMutation.isPending ||
+                      draftMutation.isPending ||
+                      generationAvailability.isBlocked ||
+                      form.concept.trim().length === 0
+                    }
+                    onClick={() => {
+                      if (!draftMutation.isPending) {
+                        draftMutation.mutate();
+                      }
+                    }}
+                    title={generationAvailability.blockReason ?? 'Сгенерировать сцену, название и теги по концепту'}
+                    type="button"
+                  >
+                    <SparkleIcon size={12} /> {draftMutation.isPending ? 'Генерируем…' : 'Сгенерировать по концепту'}
+                  </button>
+                }
                 hint="Короткая фраза о ситуации — показывается в карточке сценария."
                 id="scenario-concept"
                 label="Концепт"
               >
                 <input
                   className="input"
-                  disabled={saveMutation.isPending}
+                  disabled={saveMutation.isPending || draftMutation.isPending}
                   id="scenario-concept"
                   maxLength={2000}
                   onChange={(event) => setField('concept', event.currentTarget.value)}
                   value={form.concept}
                 />
               </Field>
+              {draftGenerationError ? (
+                <div style={{ color: 'var(--danger)', fontSize: 'var(--fz-xs)' }}>{draftGenerationError}</div>
+              ) : null}
               <Field
                 hint="Полное описание сцены. Поддерживает плейсхолдеры {{user}} и {{char}}."
                 id="scenario-content"

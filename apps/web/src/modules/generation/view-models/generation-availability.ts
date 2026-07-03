@@ -6,7 +6,7 @@ interface GenerationAvailabilityInput {
   readiness: GenerationReadinessResponse | undefined;
 }
 
-interface GenerationAvailabilityViewModel {
+export interface GenerationAvailabilityViewModel {
   blockReason: string | undefined;
   isBlocked: boolean;
 }

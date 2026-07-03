@@ -1,4 +1,5 @@
 import type { CharacterDetailDto, SaveCharacterCommand } from '@immersion/contracts/characters';
+import type { CharacterDraftFieldName, CharacterDraftFields } from '@immersion/contracts/generation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
@@ -8,9 +9,15 @@ import { createApiUrl } from '../../shared/api/client';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { formatRelative } from '../../shared/lib/format-relative';
 import { Field } from '../../shared/ui/field';
-import { ChatIcon, TrashIcon } from '../../shared/ui/icons';
+import { ChatIcon, CopyIcon, SparkleIcon, TrashIcon } from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
 import { chatListQueryKey } from '../chats/queries/chat-list-query';
+import {
+  generateCharacterAvatarPrompt,
+  generateCharacterDraft,
+  generateCharacterField,
+  useGenerationAvailability,
+} from '../generation';
 import { createCharacter, updateCharacter } from './api/save-character';
 import { useDeleteCharacter } from './mutations/use-delete-character';
 import { characterDetailQueryKey, characterDetailQueryOptions } from './queries/character-detail-query';
@@ -72,6 +79,25 @@ function toCommand(state: CharacterFormState): SaveCharacterCommand {
   };
 }
 
+type AvatarCopyState = 'copied' | 'failed' | 'idle';
+
+const AVATAR_COPY_LABELS: Record<AvatarCopyState, string> = {
+  copied: 'Скопировано',
+  failed: 'Не удалось скопировать',
+  idle: 'Скопировать',
+};
+
+function toDraftFields(state: CharacterFormState): CharacterDraftFields {
+  return {
+    description: state.description,
+    exampleDialogue: state.exampleDialogue,
+    firstMessage: state.firstMessage,
+    name: state.name,
+    personality: state.personality,
+    scenario: state.scenario,
+  };
+}
+
 function formsEqual(left: CharacterFormState, right: CharacterFormState): boolean {
   return (
     left.description === right.description &&
@@ -98,6 +124,8 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
   const initialState = useMemo(() => toFormState(detail), [detail]);
   const [form, setForm] = useState<CharacterFormState>(initialState);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [draftConcept, setDraftConcept] = useState('');
+  const [avatarCopyState, setAvatarCopyState] = useState<AvatarCopyState>('idle');
   const appliedInitialStateRef = useRef(initialState);
 
   // Сбрасываем форму на серверное состояние только пока пользователь её не редактировал.
@@ -153,6 +181,91 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
     },
   });
 
+  const generationAvailability = useGenerationAvailability();
+
+  const draftMutation = useMutation({
+    mutationFn: (concept: string) => {
+      // Введённое имя закрепляем на сервере: он вернёт его без изменений,
+      // а остальные поля сгенерирует заново.
+      const pinnedName = form.name.trim();
+      return generateCharacterDraft({
+        concept,
+        ...(pinnedName.length > 0 ? { fields: { name: pinnedName } } : {}),
+      });
+    },
+    onSuccess: (draft) => {
+      setForm((current) => ({
+        ...current,
+        description: draft.description,
+        exampleDialogue: draft.exampleDialogue,
+        firstMessage: draft.firstMessage,
+        name: draft.name.trim().length > 0 ? draft.name : current.name,
+        personality: draft.personality,
+        scenario: draft.scenario,
+        tagsText: draft.tags.join(', '),
+      }));
+    },
+  });
+
+  const fieldMutation = useMutation({
+    mutationFn: (field: CharacterDraftFieldName) => {
+      const concept = draftConcept.trim();
+      return generateCharacterField({
+        ...(concept.length > 0 ? { concept } : {}),
+        current: toDraftFields(form),
+        field,
+      });
+    },
+    onSuccess: (response, field) => {
+      setField(field, response.value);
+    },
+  });
+
+  const avatarPromptMutation = useMutation({
+    mutationFn: () => generateCharacterAvatarPrompt(toDraftFields(form)),
+    onSuccess: () => {
+      setAvatarCopyState('idle');
+    },
+  });
+
+  const copyAvatarPrompt = async () => {
+    const prompt = avatarPromptMutation.data?.prompt;
+    if (!prompt) return;
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setAvatarCopyState('copied');
+    } catch {
+      setAvatarCopyState('failed');
+    }
+  };
+
+  const generationBusy = draftMutation.isPending || fieldMutation.isPending;
+  const generationDisabled = !canEdit || saveMutation.isPending || generationBusy || generationAvailability.isBlocked;
+
+  const fieldSparkleAction = (field: CharacterDraftFieldName, title: string) => (
+    <button
+      className="btn btn--xs"
+      disabled={generationDisabled}
+      onClick={() => {
+        if (!generationBusy) {
+          fieldMutation.mutate(field);
+        }
+      }}
+      title={generationAvailability.blockReason ?? title}
+      type="button"
+    >
+      <SparkleIcon size={12} />
+      {fieldMutation.isPending && fieldMutation.variables === field ? ' Генерируем…' : null}
+    </button>
+  );
+
+  const fieldErrorFor = (field: CharacterDraftFieldName) =>
+    fieldMutation.isError && fieldMutation.variables === field ? (
+      <div style={{ color: 'var(--danger)', fontSize: 'var(--fz-xs)' }}>
+        {getApiErrorMessage(fieldMutation.error, 'Не удалось сгенерировать поле. Попробуйте ещё раз.')}
+      </div>
+    ) : null;
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canEdit) return;
@@ -166,6 +279,12 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
     : null;
   const deleteError = deleteMutation.error
     ? getApiErrorMessage(deleteMutation.error, 'Не удалось удалить персонажа.')
+    : null;
+  const draftGenerationError = draftMutation.error
+    ? getApiErrorMessage(draftMutation.error, 'Не удалось сгенерировать карточку. Попробуйте ещё раз.')
+    : null;
+  const avatarPromptError = avatarPromptMutation.error
+    ? getApiErrorMessage(avatarPromptMutation.error, 'Не удалось сгенерировать промпт для аватара.')
     : null;
 
   return (
@@ -276,6 +395,47 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 280px', gap: 18, maxWidth: 1100 }}>
               <form className="col gap-12" id="character-editor-form" onSubmit={handleSubmit}>
+                <div className="card col gap-8" style={{ padding: 12 }}>
+                  <Field
+                    hint={
+                      generationAvailability.blockReason ??
+                      'Коротко опишите идею — модель заполнит карточку черновиком, сохранение остаётся за вами.'
+                    }
+                    id="character-draft-concept"
+                    label="Концепт для генерации"
+                  >
+                    <div className="row gap-8">
+                      <input
+                        className="input"
+                        disabled={!canEdit || draftMutation.isPending}
+                        id="character-draft-concept"
+                        maxLength={2000}
+                        onChange={(event) => setDraftConcept(event.currentTarget.value)}
+                        placeholder="Например: скромная керамистка из приморского городка"
+                        style={{ flex: 1 }}
+                        value={draftConcept}
+                      />
+                      <button
+                        className="btn"
+                        disabled={generationDisabled || draftConcept.trim().length === 0}
+                        onClick={() => {
+                          const concept = draftConcept.trim();
+                          if (!generationBusy && concept.length > 0) {
+                            draftMutation.mutate(concept);
+                          }
+                        }}
+                        title={generationAvailability.blockReason ?? 'Сгенерировать карточку персонажа по концепту'}
+                        type="button"
+                      >
+                        <SparkleIcon size={14} />{' '}
+                        {draftMutation.isPending ? 'Генерируем…' : 'Сгенерировать по концепту'}
+                      </button>
+                    </div>
+                  </Field>
+                  {draftGenerationError ? (
+                    <div style={{ color: 'var(--danger)', fontSize: 'var(--fz-xs)' }}>{draftGenerationError}</div>
+                  ) : null}
+                </div>
                 <Field id="character-name" label="Имя" required>
                   <input
                     className="input"
@@ -287,7 +447,12 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     value={form.name}
                   />
                 </Field>
-                <Field hint="Кто это, чем занимается, ключевые черты." id="character-description" label="Описание">
+                <Field
+                  action={fieldSparkleAction('description', 'Сгенерировать описание по текущей карточке')}
+                  hint="Кто это, чем занимается, ключевые черты."
+                  id="character-description"
+                  label="Описание"
+                >
                   <textarea
                     className="textarea"
                     disabled={!canEdit || saveMutation.isPending}
@@ -298,7 +463,13 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     value={form.description}
                   />
                 </Field>
-                <Field hint="Темперамент, манера речи, реакции." id="character-personality" label="Личность">
+                {fieldErrorFor('description')}
+                <Field
+                  action={fieldSparkleAction('personality', 'Сгенерировать личность по текущей карточке')}
+                  hint="Темперамент, манера речи, реакции."
+                  id="character-personality"
+                  label="Личность"
+                >
                   <textarea
                     className="textarea"
                     disabled={!canEdit || saveMutation.isPending}
@@ -309,7 +480,9 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     value={form.personality}
                   />
                 </Field>
+                {fieldErrorFor('personality')}
                 <Field
+                  action={fieldSparkleAction('scenario', 'Сгенерировать сцену по текущей карточке')}
                   hint="Стартовая сцена, в которой персонаж находится по умолчанию."
                   id="character-scenario"
                   label="Сцена"
@@ -324,7 +497,9 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     value={form.scenario}
                   />
                 </Field>
+                {fieldErrorFor('scenario')}
                 <Field
+                  action={fieldSparkleAction('firstMessage', 'Сгенерировать первую фразу по текущей карточке')}
                   hint="Первое сообщение, которое отправляет персонаж в начале чата."
                   id="character-first-mes"
                   label="Первая фраза"
@@ -339,7 +514,9 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     value={form.firstMessage}
                   />
                 </Field>
+                {fieldErrorFor('firstMessage')}
                 <Field
+                  action={fieldSparkleAction('exampleDialogue', 'Сгенерировать примеры диалогов по текущей карточке')}
                   hint="Примеры реплик в формате SillyTavern — помогают модели держать стиль."
                   id="character-mes-example"
                   label="Примеры диалогов"
@@ -354,6 +531,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     value={form.exampleDialogue}
                   />
                 </Field>
+                {fieldErrorFor('exampleDialogue')}
                 <Field
                   hint="System prompt именно для этого персонажа. Перекроет глобальный."
                   id="character-system-prompt"
@@ -409,6 +587,42 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     {detail?.avatarUrl
                       ? 'Аватар берётся из PNG-карточки той же библиотеки.'
                       : 'Аватар появится, если рядом лежит PNG-карточка с тем же именем.'}
+                  </div>
+                  <div className="col gap-8" style={{ marginTop: 10 }}>
+                    <button
+                      className="btn btn--xs"
+                      disabled={avatarPromptMutation.isPending || generationAvailability.isBlocked}
+                      onClick={() => {
+                        if (!avatarPromptMutation.isPending) {
+                          avatarPromptMutation.mutate();
+                        }
+                      }}
+                      title={
+                        generationAvailability.blockReason ??
+                        'Сгенерировать промпт для Stable Diffusion по текущей карточке'
+                      }
+                      type="button"
+                    >
+                      <SparkleIcon size={12} /> {avatarPromptMutation.isPending ? 'Генерируем…' : 'Промпт для аватара'}
+                    </button>
+                    {avatarPromptMutation.data ? (
+                      <>
+                        <textarea
+                          aria-label="Промпт для аватара"
+                          className="textarea"
+                          readOnly
+                          rows={5}
+                          style={{ fontSize: 'var(--fz-2xs)' }}
+                          value={avatarPromptMutation.data.prompt}
+                        />
+                        <button className="btn btn--xs" onClick={() => void copyAvatarPrompt()} type="button">
+                          <CopyIcon size={12} /> {AVATAR_COPY_LABELS[avatarCopyState]}
+                        </button>
+                      </>
+                    ) : null}
+                    {avatarPromptError ? (
+                      <div style={{ color: 'var(--danger)', fontSize: 'var(--fz-2xs)' }}>{avatarPromptError}</div>
+                    ) : null}
                   </div>
                 </div>
                 {detail?.source === 'png' && canEdit ? (

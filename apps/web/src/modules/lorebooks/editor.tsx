@@ -7,7 +7,8 @@ import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { formatRelative } from '../../shared/lib/format-relative';
 import { Field } from '../../shared/ui/field';
-import { PlusIcon, TrashIcon } from '../../shared/ui/icons';
+import { PlusIcon, SparkleIcon, TrashIcon } from '../../shared/ui/icons';
+import { generateLorebookDraft, useGenerationAvailability } from '../generation';
 import { createLorebook, updateLorebook } from './api/save-lorebook';
 import { useDeleteLorebook } from './mutations/use-delete-lorebook';
 import { lorebookDetailQueryKey, lorebookDetailQueryOptions } from './queries/lorebook-detail-query';
@@ -108,6 +109,7 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
   const initialState = useMemo(() => toFormState(detail), [detail]);
   const [form, setForm] = useState<LorebookFormState>(initialState);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [draftConcept, setDraftConcept] = useState('');
   const appliedInitialStateRef = useRef(initialState);
 
   // Сбрасываем форму на серверное состояние только пока пользователь её не редактировал.
@@ -148,6 +150,28 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
     },
   });
 
+  const generationAvailability = useGenerationAvailability();
+
+  const generateEntriesMutation = useMutation({
+    mutationFn: (concept: string) => generateLorebookDraft(concept),
+    onSuccess: (draft) => {
+      // Сгенерированные записи добавляем к существующим, пользовательские не трогаем.
+      setForm((current) => ({
+        ...current,
+        entries: [
+          ...current.entries,
+          ...draft.entries.map((entry) => ({
+            content: entry.content,
+            enabled: true,
+            keysText: entry.keys.join(', '),
+            priority: 0,
+          })),
+        ],
+        name: current.name.trim().length > 0 ? current.name : draft.name,
+      }));
+    },
+  });
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmed = form.name.trim();
@@ -178,6 +202,9 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
     : null;
   const deleteError = deleteMutation.error
     ? getApiErrorMessage(deleteMutation.error, 'Не удалось удалить лорбук.')
+    : null;
+  const generateEntriesError = generateEntriesMutation.error
+    ? getApiErrorMessage(generateEntriesMutation.error, 'Не удалось сгенерировать записи. Попробуйте ещё раз.')
     : null;
 
   return (
@@ -295,6 +322,51 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
                   </Field>
                 </div>
               </div>
+
+              <Field
+                hint={
+                  generationAvailability.blockReason ??
+                  'Опишите мир или тему — модель добавит черновые записи к существующим, сохранение остаётся за вами.'
+                }
+                id="lorebook-draft-concept"
+                label="Концепт для генерации"
+              >
+                <div className="row gap-8">
+                  <input
+                    className="input"
+                    disabled={saveMutation.isPending || generateEntriesMutation.isPending}
+                    id="lorebook-draft-concept"
+                    maxLength={2000}
+                    onChange={(event) => setDraftConcept(event.currentTarget.value)}
+                    placeholder="Например: портовый город на краю штормового моря"
+                    style={{ flex: 1 }}
+                    value={draftConcept}
+                  />
+                  <button
+                    className="btn"
+                    disabled={
+                      saveMutation.isPending ||
+                      generateEntriesMutation.isPending ||
+                      generationAvailability.isBlocked ||
+                      draftConcept.trim().length === 0
+                    }
+                    onClick={() => {
+                      const concept = draftConcept.trim();
+                      if (!generateEntriesMutation.isPending && concept.length > 0) {
+                        generateEntriesMutation.mutate(concept);
+                      }
+                    }}
+                    title={generationAvailability.blockReason ?? 'Сгенерировать черновые записи по концепту'}
+                    type="button"
+                  >
+                    <SparkleIcon size={14} />{' '}
+                    {generateEntriesMutation.isPending ? 'Генерируем…' : 'Сгенерировать записи'}
+                  </button>
+                </div>
+              </Field>
+              {generateEntriesError ? (
+                <div style={{ color: 'var(--danger)', fontSize: 'var(--fz-xs)' }}>{generateEntriesError}</div>
+              ) : null}
 
               <div className="between" style={{ marginTop: 8 }}>
                 <strong style={{ fontSize: 'var(--fz-md)' }}>Записи</strong>

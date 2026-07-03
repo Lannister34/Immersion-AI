@@ -1,6 +1,11 @@
 export { cancelGenerationJob } from './api/cancel-generation-job';
+export { generateCharacterAvatarPrompt } from './api/generate-character-avatar-prompt';
+export { generateCharacterDraft } from './api/generate-character-draft';
+export { generateCharacterField } from './api/generate-character-field';
 export { generateChatTitle } from './api/generate-chat-title';
 export { generateFirstMessage } from './api/generate-first-message';
+export { generateLorebookDraft } from './api/generate-lorebook-draft';
+export { generateScenarioDraft } from './api/generate-scenario-draft';
 export { previewChatReplyPrompt } from './api/preview-chat-reply-prompt';
 export { regenerateChatReply } from './api/regenerate-chat-reply';
 export { startChatReplyGenerationJob } from './api/start-chat-reply-generation-job';
@@ -21,8 +26,12 @@ export {
   generationReadinessQueryOptions,
 } from './queries/generation-readiness-query';
 export { useChatReplyGeneration } from './queries/use-chat-reply-generation';
+export { useGenerationAvailability } from './queries/use-generation-availability';
 export { useGenerationJobEvents } from './queries/use-generation-job-events';
-export { toGenerationAvailabilityViewModel } from './view-models/generation-availability';
+export {
+  type GenerationAvailabilityViewModel,
+  toGenerationAvailabilityViewModel,
+} from './view-models/generation-availability';
 export {
   getLatestGenerationJob,
   isActiveGenerationJob,

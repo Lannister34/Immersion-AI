@@ -195,6 +195,99 @@ export const GenerateFirstMessageResponseSchema = z.object({
 });
 export type GenerateFirstMessageResponse = z.infer<typeof GenerateFirstMessageResponseSchema>;
 
+export const CharacterDraftFieldNameSchema = z.enum([
+  'description',
+  'exampleDialogue',
+  'firstMessage',
+  'name',
+  'personality',
+  'scenario',
+]);
+export type CharacterDraftFieldName = z.infer<typeof CharacterDraftFieldNameSchema>;
+
+export const CharacterDraftFieldsSchema = z
+  .object({
+    description: z.string().max(20_000),
+    exampleDialogue: z.string().max(20_000),
+    firstMessage: z.string().max(20_000),
+    name: z.string().max(200),
+    personality: z.string().max(5_000),
+    scenario: z.string().max(5_000),
+  })
+  .partial();
+export type CharacterDraftFields = z.infer<typeof CharacterDraftFieldsSchema>;
+
+export const GenerateCharacterDraftCommandSchema = z.object({
+  concept: z.string().trim().min(1).max(2_000),
+  fields: CharacterDraftFieldsSchema.optional(),
+});
+export type GenerateCharacterDraftCommand = z.infer<typeof GenerateCharacterDraftCommandSchema>;
+
+export const GenerateCharacterDraftResponseSchema = z.object({
+  description: z.string().max(20_000),
+  exampleDialogue: z.string().max(20_000),
+  firstMessage: z.string().max(20_000),
+  name: z.string().min(1).max(200),
+  personality: z.string().max(5_000),
+  scenario: z.string().max(5_000),
+  tags: z.array(z.string().min(1).max(60)).max(50),
+});
+export type GenerateCharacterDraftResponse = z.infer<typeof GenerateCharacterDraftResponseSchema>;
+
+export const GenerateCharacterFieldCommandSchema = z.object({
+  concept: z.string().trim().max(2_000).optional(),
+  current: CharacterDraftFieldsSchema.default({}),
+  field: CharacterDraftFieldNameSchema,
+});
+export type GenerateCharacterFieldCommand = z.infer<typeof GenerateCharacterFieldCommandSchema>;
+
+export const GenerateCharacterFieldResponseSchema = z.object({
+  value: z.string().min(1).max(20_000),
+});
+export type GenerateCharacterFieldResponse = z.infer<typeof GenerateCharacterFieldResponseSchema>;
+
+export const GenerateCharacterAvatarPromptCommandSchema = z.object({
+  card: CharacterDraftFieldsSchema.default({}),
+});
+export type GenerateCharacterAvatarPromptCommand = z.infer<typeof GenerateCharacterAvatarPromptCommandSchema>;
+
+export const GenerateCharacterAvatarPromptResponseSchema = z.object({
+  prompt: z.string().min(1).max(2_000),
+});
+export type GenerateCharacterAvatarPromptResponse = z.infer<typeof GenerateCharacterAvatarPromptResponseSchema>;
+
+export const GenerateScenarioDraftCommandSchema = z.object({
+  concept: z.string().trim().min(1).max(2_000),
+  name: z.string().trim().min(1).max(200).optional(),
+});
+export type GenerateScenarioDraftCommand = z.infer<typeof GenerateScenarioDraftCommandSchema>;
+
+export const GenerateScenarioDraftResponseSchema = z.object({
+  content: z.string().min(1).max(20_000),
+  name: z.string().min(1).max(200),
+  tags: z.array(z.string().min(1).max(60)).max(50),
+});
+export type GenerateScenarioDraftResponse = z.infer<typeof GenerateScenarioDraftResponseSchema>;
+
+export const GeneratedLorebookEntryDraftSchema = z.object({
+  comment: z.string().min(1).max(200).optional(),
+  content: z.string().min(1).max(20_000),
+  keys: z.array(z.string().min(1).max(200)).max(100),
+});
+export type GeneratedLorebookEntryDraft = z.infer<typeof GeneratedLorebookEntryDraftSchema>;
+
+export const GenerateLorebookDraftCommandSchema = z.object({
+  concept: z.string().trim().min(1).max(2_000),
+  entryCount: z.number().int().min(1).max(20).default(8),
+});
+export type GenerateLorebookDraftCommand = z.infer<typeof GenerateLorebookDraftCommandSchema>;
+
+export const GenerateLorebookDraftResponseSchema = z.object({
+  entries: z.array(GeneratedLorebookEntryDraftSchema).min(1).max(20),
+  name: z.string().min(1).max(200),
+});
+export type GenerateLorebookDraftResponse = z.infer<typeof GenerateLorebookDraftResponseSchema>;
+
 export const GenerationJobIdSchema = z.string().uuid();
 export type GenerationJobId = z.infer<typeof GenerationJobIdSchema>;
 
