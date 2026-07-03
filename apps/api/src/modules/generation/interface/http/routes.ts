@@ -14,10 +14,18 @@ import { z } from 'zod';
 
 import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
 import { ChatMessageNotFoundError, ChatNotFoundError } from '../../../chats/application/append-chat-messages.js';
+import { ChatTitleConflictError } from '../../../chats/application/chat-conflicts.js';
 import { InvalidChatGenerationSettingsResolutionError } from '../../../prompting/application/resolve-chat-generation-settings.js';
 import { GenerationProviderUnavailableError } from '../../../providers/application/generation-provider.js';
 import { generateChatReply } from '../../application/generate-chat-reply.js';
-import { ChatReplyGenerationFailedError, ProviderGenerationError } from '../../application/generation-errors.js';
+import { generateChatTitle } from '../../application/generate-chat-title.js';
+import { generateFirstMessage } from '../../application/generate-first-message.js';
+import {
+  ChatNotEmptyError,
+  ChatReplyGenerationFailedError,
+  ChatTranscriptEmptyError,
+  ProviderGenerationError,
+} from '../../application/generation-errors.js';
 import { ActiveGenerationJobExistsError } from '../../application/generation-job-registry.js';
 import { getGenerationReadiness } from '../../application/get-generation-readiness.js';
 import { previewChatReplyPrompt } from '../../application/preview-chat-reply-prompt.js';
@@ -51,6 +59,18 @@ const toProblem = createToProblem((error) => {
       'no_assistant_message_to_regenerate',
       'There is no assistant message to regenerate in this chat.',
     );
+  }
+
+  if (error instanceof ChatTranscriptEmptyError) {
+    return problem(409, 'chat_empty', error.message);
+  }
+
+  if (error instanceof ChatNotEmptyError) {
+    return problem(409, 'chat_not_empty', error.message);
+  }
+
+  if (error instanceof ChatTitleConflictError) {
+    return problem(409, 'chat_title_conflict', 'Chat was renamed while the title was being generated.');
   }
 
   if (error instanceof GenerationProviderUnavailableError) {
@@ -129,6 +149,46 @@ export const generationRoutes: FastifyPluginAsync = async (app) => {
       });
     } catch (error) {
       request.log.error({ err: error }, 'Failed to generate chat reply');
+      const mapped = toProblem(error);
+
+      return reply.status(mapped.statusCode).send(mapped.body);
+    } finally {
+      request.raw.off('aborted', abortGeneration);
+    }
+  });
+
+  app.post('/chat-title', async (request, reply) => {
+    const abortController = new AbortController();
+    const abortGeneration = () => abortController.abort();
+
+    request.raw.once('aborted', abortGeneration);
+
+    try {
+      return await generateChatTitle(request.body, {
+        signal: abortController.signal,
+      });
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to generate chat title');
+      const mapped = toProblem(error);
+
+      return reply.status(mapped.statusCode).send(mapped.body);
+    } finally {
+      request.raw.off('aborted', abortGeneration);
+    }
+  });
+
+  app.post('/first-message', async (request, reply) => {
+    const abortController = new AbortController();
+    const abortGeneration = () => abortController.abort();
+
+    request.raw.once('aborted', abortGeneration);
+
+    try {
+      return await generateFirstMessage(request.body, {
+        signal: abortController.signal,
+      });
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to generate first message');
       const mapped = toProblem(error);
 
       return reply.status(mapped.statusCode).send(mapped.body);

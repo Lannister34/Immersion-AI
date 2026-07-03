@@ -1,7 +1,11 @@
 export { cancelGenerationJob } from './api/cancel-generation-job';
+export { generateChatTitle } from './api/generate-chat-title';
+export { generateFirstMessage } from './api/generate-first-message';
 export { previewChatReplyPrompt } from './api/preview-chat-reply-prompt';
 export { regenerateChatReply } from './api/regenerate-chat-reply';
 export { startChatReplyGenerationJob } from './api/start-chat-reply-generation-job';
+export { useGenerateChatTitle } from './mutations/use-generate-chat-title';
+export { useGenerateFirstMessage } from './mutations/use-generate-first-message';
 export {
   chatReplyPromptPreviewQueryBaseKey,
   chatReplyPromptPreviewQueryKey,

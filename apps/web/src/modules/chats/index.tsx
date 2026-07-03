@@ -19,7 +19,7 @@ import {
 
 import { Topbar } from '../../app/layout/topbar';
 import { useUiShellStore } from '../../app/store/ui-shell';
-import { createApiUrl } from '../../shared/api/client';
+import { ApiError, createApiUrl } from '../../shared/api/client';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { avatarColor, avatarInitial } from '../../shared/lib/avatar';
 import { formatRelative } from '../../shared/lib/format-relative';
@@ -41,6 +41,7 @@ import {
   SendIcon,
   SlidersIcon,
   SortIcon,
+  SparkleIcon,
   StopIcon,
   TrashIcon,
   UserIcon,
@@ -52,6 +53,8 @@ import {
   generationReadinessQueryOptions,
   toGenerationAvailabilityViewModel,
   useChatReplyGeneration,
+  useGenerateChatTitle,
+  useGenerateFirstMessage,
 } from '../generation';
 import { lorebookListQueryOptions } from '../lorebooks/queries/lorebook-list-query';
 import { scenarioListQueryOptions } from '../scenarios/queries/scenario-list-query';
@@ -405,6 +408,16 @@ function ChatListSkeleton() {
 
 type RightPanelSection = 'settings' | 'character' | 'lorebooks' | 'context' | null;
 
+function describeGenerateTitleError(error: unknown): string | null {
+  if (!error) {
+    return null;
+  }
+  if (error instanceof ApiError && error.code === 'chat_title_conflict') {
+    return 'Чат уже переименовали вручную — оставили ваш вариант.';
+  }
+  return getApiErrorMessage(error, 'Не удалось сгенерировать название.');
+}
+
 export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const [draftMessage, setDraftMessage] = useState('');
   const debouncedDraftMessage = useDebouncedValue(draftMessage, 400);
@@ -436,6 +449,8 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
     },
   });
   const chatReplyGeneration = useChatReplyGeneration(chatId);
+  const generateTitleMutation = useGenerateChatTitle(chatId);
+  const generateFirstMessageMutation = useGenerateFirstMessage(chatId);
 
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -486,6 +501,10 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const renameChatErrorMessage = renameChatMutation.error
     ? getApiErrorMessage(renameChatMutation.error, 'Не удалось переименовать чат.')
     : null;
+  const generateTitleErrorMessage = describeGenerateTitleError(generateTitleMutation.error);
+  const generateFirstMessageErrorMessage = generateFirstMessageMutation.error
+    ? getApiErrorMessage(generateFirstMessageMutation.error, 'Не удалось сгенерировать первое сообщение.')
+    : null;
 
   const commitRename = () => {
     if (renamingTitle === null || renameChatMutation.isPending) {
@@ -501,7 +520,11 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
 
   const blockReason = generationAvailability.blockReason;
   const isStreaming = Boolean(chatReplyGeneration.activeJob);
-  const canSend = draftMessage.trim().length > 0 && !chatReplyGeneration.isPending && !blockReason;
+  const canSend =
+    draftMessage.trim().length > 0 &&
+    !chatReplyGeneration.isPending &&
+    !generateFirstMessageMutation.isPending &&
+    !blockReason;
 
   const onSubmit = async (event?: FormEvent) => {
     event?.preventDefault();
@@ -640,6 +663,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                   />
                 ) : (
                   <button
+                    disabled={generateTitleMutation.isPending}
                     onClick={() => setRenamingTitle(session.chat.title)}
                     style={{
                       background: 'transparent',
@@ -656,11 +680,31 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                     {session.chat.title}
                   </button>
                 )}
+                {!isStreaming && renamingTitle === null ? (
+                  <button
+                    className="btn"
+                    disabled={generateTitleMutation.isPending || generationAvailability.isBlocked || messageCount === 0}
+                    onClick={() => {
+                      if (!generateTitleMutation.isPending) {
+                        generateTitleMutation.mutate();
+                      }
+                    }}
+                    style={{ fontSize: 'var(--fz-xs)', height: 24, padding: '2px 8px' }}
+                    title="Сгенерировать название чата по переписке"
+                    type="button"
+                  >
+                    <SparkleIcon size={12} />{' '}
+                    {generateTitleMutation.isPending ? 'Генерируем…' : 'Сгенерировать название'}
+                  </button>
+                ) : null}
                 <span>
                   · {messageCount} сообщ. · ред. {formatRelative(lastUpdated)}
                 </span>
                 {renameChatErrorMessage ? (
                   <span style={{ color: 'var(--danger)' }}>{renameChatErrorMessage}</span>
+                ) : null}
+                {generateTitleErrorMessage ? (
+                  <span style={{ color: 'var(--danger)' }}>{generateTitleErrorMessage}</span>
                 ) : null}
               </div>
             </div>
@@ -692,6 +736,29 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                       ? `Напишите ${session.characterName} первое сообщение — модель ответит в роли персонажа.`
                       : 'Свободный чат: модель отвечает без привязки к персонажу или сценарию.'}
                   </p>
+                  {!isStreaming ? (
+                    <>
+                      <button
+                        className="btn"
+                        disabled={generateFirstMessageMutation.isPending || generationAvailability.isBlocked}
+                        onClick={() => {
+                          if (!generateFirstMessageMutation.isPending) {
+                            generateFirstMessageMutation.mutate();
+                          }
+                        }}
+                        style={{ marginTop: 12 }}
+                        type="button"
+                      >
+                        <SparkleIcon size={14} />{' '}
+                        {generateFirstMessageMutation.isPending ? 'Генерируем…' : 'Сгенерировать первое сообщение'}
+                      </button>
+                      {generateFirstMessageErrorMessage ? (
+                        <p style={{ color: 'var(--danger)', fontSize: 'var(--fz-xs)', marginTop: 8 }}>
+                          {generateFirstMessageErrorMessage}
+                        </p>
+                      ) : null}
+                    </>
+                  ) : null}
                 </div>
               ) : (
                 (() => {

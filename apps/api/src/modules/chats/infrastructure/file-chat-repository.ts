@@ -5,6 +5,7 @@ import { ChatGenerationSettingsDtoSchema } from '@immersion/contracts/chats';
 
 import { writeFileAtomically } from '../../../lib/atomic-file.js';
 import { resolveDataRoot } from '../../../lib/data-root.js';
+import { ChatTitleConflictError, ChatTranscriptNotEmptyError } from '../application/chat-conflicts.js';
 import type {
   AppendChatMessageInput,
   ChatGenerationSettingsRecord,
@@ -412,12 +413,22 @@ async function readChatFile(chatId: string): Promise<ChatSessionRecord | null> {
 }
 
 export class FileChatRepository implements ChatRepository {
-  async appendGenericChatMessages(chatId: string, messages: AppendChatMessageInput[]) {
+  async appendGenericChatMessages(
+    chatId: string,
+    messages: AppendChatMessageInput[],
+    options?: { requireEmptyTranscript?: boolean },
+  ) {
     return withChatWriteQueue(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 
       if (!currentSession) {
         return null;
+      }
+
+      // Инвариант проверяется внутри очереди записи: проверка до вызова провайдера
+      // не защищает от сообщений, добавленных за время генерации.
+      if (options?.requireEmptyTranscript && currentSession.messages.length > 0) {
+        throw new ChatTranscriptNotEmptyError(chatId);
       }
 
       if (messages.length === 0) {
@@ -638,12 +649,22 @@ export class FileChatRepository implements ChatRepository {
     });
   }
 
-  async updateGenericChatTitle(chatId: string, title: string, updatedAt: string) {
+  async updateGenericChatTitle(
+    chatId: string,
+    title: string,
+    updatedAt: string,
+    options?: { expectedCurrentTitle?: string },
+  ) {
     return withChatWriteQueue(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 
       if (!currentSession) {
         return null;
+      }
+
+      // Прекондиция против молчаливой перезаписи параллельного ручного переименования.
+      if (options?.expectedCurrentTitle !== undefined && currentSession.chat.title !== options.expectedCurrentTitle) {
+        throw new ChatTitleConflictError(chatId);
       }
 
       const filePath = resolveChatFilePath(chatId);

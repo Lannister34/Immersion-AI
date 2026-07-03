@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { ChatIdSchema, ChatMessageRoleSchema, ChatSessionDtoSchema } from '../chats/index.js';
+import { ChatIdSchema, ChatMessageRoleSchema, ChatSessionDtoSchema, ChatSummaryDtoSchema } from '../chats/index.js';
 import { ApiProblemSchema } from '../common/index.js';
 import { ProviderModeSchema, ProviderTypeSchema } from '../providers/settings.js';
 import { RuntimeServerStatusSchema } from '../runtime/overview.js';
@@ -173,6 +173,27 @@ export const ChatReplyPromptPreviewResponseSchema = z.object({
   }),
 });
 export type ChatReplyPromptPreviewResponse = z.infer<typeof ChatReplyPromptPreviewResponseSchema>;
+
+export const GenerateChatTitleCommandSchema = z.object({
+  chatId: ChatIdSchema,
+});
+export type GenerateChatTitleCommand = z.infer<typeof GenerateChatTitleCommandSchema>;
+
+export const GenerateChatTitleResponseSchema = z.object({
+  chat: ChatSummaryDtoSchema,
+  title: z.string().min(1).max(120),
+});
+export type GenerateChatTitleResponse = z.infer<typeof GenerateChatTitleResponseSchema>;
+
+export const GenerateFirstMessageCommandSchema = z.object({
+  chatId: ChatIdSchema,
+});
+export type GenerateFirstMessageCommand = z.infer<typeof GenerateFirstMessageCommandSchema>;
+
+export const GenerateFirstMessageResponseSchema = z.object({
+  session: ChatSessionDtoSchema,
+});
+export type GenerateFirstMessageResponse = z.infer<typeof GenerateFirstMessageResponseSchema>;
 
 export const GenerationJobIdSchema = z.string().uuid();
 export type GenerationJobId = z.infer<typeof GenerationJobIdSchema>;

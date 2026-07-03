@@ -8,6 +8,20 @@ export class ProviderGenerationError extends Error {
   }
 }
 
+export class ChatTranscriptEmptyError extends Error {
+  constructor(readonly chatId: string) {
+    super('Chat has no messages to derive a title from.');
+    this.name = 'ChatTranscriptEmptyError';
+  }
+}
+
+export class ChatNotEmptyError extends Error {
+  constructor(readonly chatId: string) {
+    super('Chat already has messages; a first message can only be generated for an empty chat.');
+    this.name = 'ChatNotEmptyError';
+  }
+}
+
 export class ChatReplyGenerationFailedError extends Error {
   declare readonly session: ChatSessionDto;
 
