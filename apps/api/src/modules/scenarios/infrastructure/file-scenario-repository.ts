@@ -4,6 +4,8 @@ import path from 'node:path';
 
 import type { ScenarioDetailDto, ScenarioSummaryDto } from '@immersion/contracts/scenarios';
 
+import { writeJsonFileAtomically } from '../../../lib/atomic-file.js';
+import { resolveContainedFilePath } from '../../../lib/contained-path.js';
 import { resolveDataRoot } from '../../../lib/data-root.js';
 
 const SCENARIOS_DIRECTORY = 'scenarios';
@@ -58,7 +60,9 @@ function sanitizeBaseName(name: string): string {
   const collapsed = name
     .trim()
     .replace(/[\\/:*?"<>|]+/gu, '_')
-    .replace(/\s+/gu, '_');
+    .replace(/\s+/gu, '_')
+    .replace(/\.{2,}/gu, '.')
+    .replace(/^\.+/u, '');
   const trimmed = collapsed.length > 0 ? collapsed : 'scenario';
   return trimmed.length > 80 ? trimmed.slice(0, 80) : trimmed;
 }
@@ -72,17 +76,6 @@ async function generateUniqueId(directory: string, base: string): Promise<string
   }
   const suffix = randomUUID().slice(0, 8);
   return `${base}-${suffix}${FILE_EXTENSION}`;
-}
-
-async function writeJsonAtomic(filePath: string, payload: unknown) {
-  const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`);
-  try {
-    await fs.writeFile(tempPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
-    await fs.rename(tempPath, filePath);
-  } catch (error) {
-    await fs.rm(tempPath, { force: true }).catch(() => undefined);
-    throw error;
-  }
 }
 
 export async function listScenarioFiles(): Promise<ScenarioSummaryDto[]> {
@@ -136,7 +129,7 @@ function detailFromStored(id: string, stored: StoredScenario, fallbackUpdatedAt:
 }
 
 export async function readScenarioDetail(id: string): Promise<ScenarioDetailDto | null> {
-  const filePath = path.join(resolveScenariosDirectory(), id);
+  const filePath = resolveContainedFilePath(resolveScenariosDirectory(), id);
   let raw: string;
   let stats: Awaited<ReturnType<typeof fs.stat>>;
   try {
@@ -167,7 +160,7 @@ export interface SaveScenarioFileInput {
 export async function writeScenarioFile(id: string, input: SaveScenarioFileInput): Promise<ScenarioDetailDto> {
   const directory = resolveScenariosDirectory();
   await fs.mkdir(directory, { recursive: true });
-  const filePath = path.join(directory, id);
+  const filePath = resolveContainedFilePath(directory, id);
 
   let existing: StoredScenario | null = null;
   try {
@@ -186,7 +179,7 @@ export async function writeScenarioFile(id: string, input: SaveScenarioFileInput
     createdAt,
     updatedAt: now,
   };
-  await writeJsonAtomic(filePath, payload);
+  await writeJsonFileAtomically(filePath, payload);
 
   return {
     concept: input.concept,
@@ -208,7 +201,7 @@ export async function createScenarioFile(input: SaveScenarioFileInput): Promise<
 }
 
 export async function deleteScenarioFile(id: string): Promise<boolean> {
-  const filePath = path.join(resolveScenariosDirectory(), id);
+  const filePath = resolveContainedFilePath(resolveScenariosDirectory(), id);
   try {
     await fs.unlink(filePath);
     return true;

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { RuntimeConfigCommand, RuntimeEngineInfo, RuntimeStatusSnapshot } from '@immersion/contracts/runtime';
 
 import { resolveDataRoot } from './data-root.js';
+import { getSharedApiLogger } from './logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -80,7 +81,7 @@ function savePidFile(data: PidFileData) {
   try {
     fs.writeFileSync(getPidFilePath(), JSON.stringify(data), 'utf8');
   } catch (error) {
-    console.error('[llm-process] failed to save PID file:', (error as Error).message);
+    getSharedApiLogger().error({ err: error }, 'llm-process: failed to save PID file');
   }
 }
 
@@ -281,7 +282,7 @@ async function killByPid(pid: number) {
       process.kill(pid, 'SIGKILL');
     }
   } catch (error) {
-    console.error('[llm-process] failed to kill pid=%d: %s', pid, (error as Error).message);
+    getSharedApiLogger().error({ err: error, pid }, 'llm-process: failed to kill process');
   }
 }
 
@@ -308,6 +309,15 @@ async function killCurrentProcess() {
     });
   } else if (activePid) {
     await killByPid(activePid);
+  } else {
+    // After an API restart the in-memory state is empty, but a detached
+    // llama-server from the previous API process may still be tracked in the
+    // PID file. Stop must reach it too instead of silently no-oping.
+    const pidFile = readPidFile();
+
+    if (pidFile) {
+      await killByPid(pidFile.pid);
+    }
   }
 
   childProcess = null;
@@ -321,7 +331,10 @@ async function killCurrentProcess() {
 }
 
 export async function start(config: LlmStartConfig) {
-  if (state.status === 'running' || state.status === 'starting' || state.pid) {
+  // Consult the PID file as well: right after an API restart the in-memory state
+  // is still idle while a detached llama-server from the previous process is
+  // alive. Starting without stopping it first would orphan that process.
+  if (state.status === 'running' || state.status === 'starting' || state.pid || getDetachedRuntimeState()) {
     await stop();
   }
 
@@ -474,7 +487,7 @@ async function tryReconnect() {
 }
 
 void tryReconnect().catch((error) => {
-  console.error('[llm-process] reconnect error:', error);
+  getSharedApiLogger().error({ err: error }, 'llm-process: reconnect error');
 });
 
 export function setupGracefulShutdown() {

@@ -21,6 +21,10 @@ interface StartChatReplyGenerationMutationVariables {
   message: string;
 }
 
+interface StartChatReplyGenerationContext {
+  previousSession: ChatSessionDto | undefined;
+}
+
 function createOptimisticMessageId() {
   return `optimistic:${
     typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}:${Math.random()}`
@@ -41,56 +45,54 @@ export function useChatReplyGeneration(chatId: string) {
         chatId,
         message,
       }),
-    onMutate: async ({ message }) => {
+    onMutate: async ({ message }): Promise<StartChatReplyGenerationContext> => {
       await queryClient.cancelQueries({
         queryKey: chatSessionQueryKey(chatId),
       });
 
-      const currentSession = queryClient.getQueryData<ChatSessionDto>(chatSessionQueryKey(chatId));
+      const previousSession = queryClient.getQueryData<ChatSessionDto>(chatSessionQueryKey(chatId));
 
-      if (!currentSession) {
-        return;
+      if (previousSession) {
+        queryClient.setQueryData(
+          chatSessionQueryKey(chatId),
+          appendOptimisticUserMessage(previousSession, {
+            content: message,
+            createdAt: new Date().toISOString(),
+            id: createOptimisticMessageId(),
+          }),
+        );
       }
 
-      queryClient.setQueryData(
-        chatSessionQueryKey(chatId),
-        appendOptimisticUserMessage(currentSession, {
-          content: message,
-          createdAt: new Date().toISOString(),
-          id: createOptimisticMessageId(),
-        }),
-      );
+      return { previousSession };
     },
-    onError: async () => {
+    onError: async (_error, _variables, context) => {
+      if (context?.previousSession) {
+        queryClient.setQueryData<ChatSessionDto>(chatSessionQueryKey(chatId), context.previousSession);
+      }
       await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: chatListQueryKey,
-        }),
-        queryClient.invalidateQueries({
-          queryKey: chatSessionQueryKey(chatId),
-        }),
         queryClient.invalidateQueries({
           queryKey: generationReadinessQueryKey,
         }),
         queryClient.invalidateQueries({
           queryKey: chatGenerationJobsQueryKey(chatId),
         }),
+      ]);
+    },
+    onSuccess: async (response) => {
+      queryClient.setQueryData<ListGenerationJobsResponse>(chatGenerationJobsQueryKey(chatId), (current) => ({
+        items: upsertGenerationJob(current?.items ?? [], response.job),
+      }));
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: chatSessionQueryKey(chatId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: chatListQueryKey,
+        }),
         queryClient.invalidateQueries({
           queryKey: chatReplyPromptPreviewQueryBaseKey(chatId),
         }),
       ]);
-    },
-    onSuccess: async (response) => {
-      queryClient.setQueryData(chatSessionQueryKey(chatId), response.session);
-      queryClient.setQueryData<ListGenerationJobsResponse>(chatGenerationJobsQueryKey(chatId), (current) => ({
-        items: upsertGenerationJob(current?.items ?? [], response.job),
-      }));
-      await queryClient.invalidateQueries({
-        queryKey: chatListQueryKey,
-      });
-      await queryClient.invalidateQueries({
-        queryKey: chatReplyPromptPreviewQueryBaseKey(chatId),
-      });
     },
   });
   const cancelGenerationMutation = useMutation({
@@ -110,16 +112,20 @@ export function useChatReplyGeneration(chatId: string) {
   const regenerateGenerationMutation = useMutation({
     mutationFn: () => regenerateChatReply({ chatId }),
     onSuccess: async (response) => {
-      queryClient.setQueryData(chatSessionQueryKey(chatId), response.session);
       queryClient.setQueryData<ListGenerationJobsResponse>(chatGenerationJobsQueryKey(chatId), (current) => ({
         items: upsertGenerationJob(current?.items ?? [], response.job),
       }));
-      await queryClient.invalidateQueries({
-        queryKey: chatListQueryKey,
-      });
-      await queryClient.invalidateQueries({
-        queryKey: chatReplyPromptPreviewQueryBaseKey(chatId),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: chatSessionQueryKey(chatId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: chatListQueryKey,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: chatReplyPromptPreviewQueryBaseKey(chatId),
+        }),
+      ]);
     },
     onError: async () => {
       await queryClient.invalidateQueries({

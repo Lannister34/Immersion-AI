@@ -6,10 +6,7 @@ import type {
   UpdateSamplerPresetCommand,
 } from '@immersion/contracts/settings';
 
-import {
-  readLegacyUserSettingsSource,
-  writeLegacyUserSettingsSource,
-} from '../../../shared/infrastructure/legacy-settings-source.js';
+import { updateLegacyUserSettingsSource } from '../../../shared/infrastructure/legacy-settings-source.js';
 import { getSettingsOverview } from './get-settings-overview.js';
 import { encodeSamplerPreset, generateUniquePresetId, type StoredSamplerPreset } from './sampler-preset-encoding.js';
 
@@ -64,16 +61,18 @@ function projectMutationResponse(presetId: string): SamplerPresetMutationRespons
 }
 
 export async function createSamplerPreset(input: CreateSamplerPresetCommand): Promise<SamplerPresetMutationResponse> {
-  const source = readLegacyUserSettingsSource();
-  const existing = readStoredPresets(source);
-  const existingIds = new Set(existing.map((preset) => preset.id));
-  const id = generateUniquePresetId(input.name, existingIds);
-  const nextPreset = encodeSamplerPreset(id, input);
-  const nextPresets = [...existing, nextPreset];
+  let id = '';
 
-  await writeLegacyUserSettingsSource({
-    ...source,
-    samplerPresets: nextPresets,
+  await updateLegacyUserSettingsSource((source) => {
+    const existing = readStoredPresets(source);
+    const existingIds = new Set(existing.map((preset) => preset.id));
+    id = generateUniquePresetId(input.name, existingIds);
+    const nextPreset = encodeSamplerPreset(id, input);
+
+    return {
+      ...source,
+      samplerPresets: [...existing, nextPreset],
+    };
   });
 
   return projectMutationResponse(id);
@@ -83,68 +82,72 @@ export async function updateSamplerPreset(
   presetId: string,
   input: UpdateSamplerPresetCommand,
 ): Promise<SamplerPresetMutationResponse> {
-  const source = readLegacyUserSettingsSource();
-  const existing = readStoredPresets(source);
-  const index = existing.findIndex((preset) => preset.id === presetId);
-  if (index < 0) {
-    throw new SamplerPresetNotFoundError(presetId);
-  }
-  const nextPresets = [...existing];
-  nextPresets[index] = encodeSamplerPreset(presetId, input);
+  await updateLegacyUserSettingsSource((source) => {
+    const existing = readStoredPresets(source);
+    const index = existing.findIndex((preset) => preset.id === presetId);
+    if (index < 0) {
+      throw new SamplerPresetNotFoundError(presetId);
+    }
+    const nextPresets = [...existing];
+    nextPresets[index] = encodeSamplerPreset(presetId, input);
 
-  await writeLegacyUserSettingsSource({
-    ...source,
-    samplerPresets: nextPresets,
+    return {
+      ...source,
+      samplerPresets: nextPresets,
+    };
   });
 
   return projectMutationResponse(presetId);
 }
 
 export async function deleteSamplerPreset(presetId: string): Promise<DeleteSamplerPresetResponse> {
-  const source = readLegacyUserSettingsSource();
-  const existing = readStoredPresets(source);
-  const index = existing.findIndex((preset) => preset.id === presetId);
-  if (index < 0) {
-    throw new SamplerPresetNotFoundError(presetId);
-  }
-  if (existing.length <= 1) {
-    throw new LastSamplerPresetError();
-  }
-
-  const nextPresets = existing.filter((preset) => preset.id !== presetId);
-  const currentActiveId = typeof source.activePresetId === 'string' ? source.activePresetId : null;
-  const nextActiveId = currentActiveId === presetId ? (nextPresets[0]?.id ?? null) : currentActiveId;
-  const modelPresetMap = readStoredModelPresetMap(source);
-  const nextModelPresetMap: Record<string, string> = {};
-  for (const [modelName, mappedPresetId] of Object.entries(modelPresetMap)) {
-    if (mappedPresetId !== presetId) {
-      nextModelPresetMap[modelName] = mappedPresetId;
+  await updateLegacyUserSettingsSource((source) => {
+    const existing = readStoredPresets(source);
+    const index = existing.findIndex((preset) => preset.id === presetId);
+    if (index < 0) {
+      throw new SamplerPresetNotFoundError(presetId);
     }
-  }
+    if (existing.length <= 1) {
+      throw new LastSamplerPresetError();
+    }
 
-  const nextSource: Record<string, unknown> = {
-    ...source,
-    samplerPresets: nextPresets,
-    modelPresetMap: nextModelPresetMap,
-  };
-  if (nextActiveId !== null) {
-    nextSource.activePresetId = nextActiveId;
-  }
-  await writeLegacyUserSettingsSource(nextSource);
+    const nextPresets = existing.filter((preset) => preset.id !== presetId);
+    const currentActiveId = typeof source.activePresetId === 'string' ? source.activePresetId : null;
+    const nextActiveId = currentActiveId === presetId ? (nextPresets[0]?.id ?? null) : currentActiveId;
+    const modelPresetMap = readStoredModelPresetMap(source);
+    const nextModelPresetMap: Record<string, string> = {};
+    for (const [modelName, mappedPresetId] of Object.entries(modelPresetMap)) {
+      if (mappedPresetId !== presetId) {
+        nextModelPresetMap[modelName] = mappedPresetId;
+      }
+    }
+
+    const nextSource: Record<string, unknown> = {
+      ...source,
+      samplerPresets: nextPresets,
+      modelPresetMap: nextModelPresetMap,
+    };
+    if (nextActiveId !== null) {
+      nextSource.activePresetId = nextActiveId;
+    }
+
+    return nextSource;
+  });
 
   return { sampler: getSettingsOverview().sampler };
 }
 
 export async function setActiveSamplerPreset(presetId: string): Promise<SetActiveSamplerPresetResponse> {
-  const source = readLegacyUserSettingsSource();
-  const existing = readStoredPresets(source);
-  if (!existing.some((preset) => preset.id === presetId)) {
-    throw new SamplerPresetNotFoundError(presetId);
-  }
+  await updateLegacyUserSettingsSource((source) => {
+    const existing = readStoredPresets(source);
+    if (!existing.some((preset) => preset.id === presetId)) {
+      throw new SamplerPresetNotFoundError(presetId);
+    }
 
-  await writeLegacyUserSettingsSource({
-    ...source,
-    activePresetId: presetId,
+    return {
+      ...source,
+      activePresetId: presetId,
+    };
   });
 
   return { sampler: getSettingsOverview().sampler };

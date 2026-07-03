@@ -1,11 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
+import type { RuntimeOverviewResponse } from '@immersion/contracts/runtime';
+import { type UseQueryResult, useQuery } from '@tanstack/react-query';
 import { Outlet } from '@tanstack/react-router';
 
 import { characterListQueryOptions } from '../../modules/characters/queries/character-list-query';
 import { chatListQueryOptions } from '../../modules/chats/queries/chat-list-query';
 import { lorebookListQueryOptions } from '../../modules/lorebooks/queries/lorebook-list-query';
 import { scenarioListQueryOptions } from '../../modules/scenarios/queries/scenario-list-query';
-import { getRuntimeOverview } from '../../modules/server-control/api/get-runtime-overview';
+import { runtimeOverviewQueryOptions } from '../../modules/server-control/queries/runtime-overview-query';
 import { settingsOverviewQueryOptions } from '../../modules/settings';
 import { type RuntimeBadgeStatus, Sidebar } from './sidebar';
 
@@ -15,9 +16,7 @@ interface RuntimeBadge {
   detail?: string | undefined;
 }
 
-type RuntimeOverviewQuery = ReturnType<typeof useQuery<Awaited<ReturnType<typeof getRuntimeOverview>>>>;
-
-function describeRuntime(query: RuntimeOverviewQuery): RuntimeBadge {
+function describeRuntime(query: UseQueryResult<RuntimeOverviewResponse>): RuntimeBadge {
   if (query.isError) {
     return { status: 'error', label: 'Ошибка runtime', detail: 'API не отвечает' };
   }
@@ -49,8 +48,7 @@ function describeRuntime(query: RuntimeOverviewQuery): RuntimeBadge {
 
 export function RootLayout() {
   const runtimeOverviewQuery = useQuery({
-    queryKey: ['runtime', 'overview'],
-    queryFn: getRuntimeOverview,
+    ...runtimeOverviewQueryOptions(),
     refetchInterval: 5000,
   });
   const settingsQuery = useQuery(settingsOverviewQueryOptions());

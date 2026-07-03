@@ -147,7 +147,7 @@ export async function testProviderConnection(
   const settings = await getProviderSettings();
 
   if (settings.mode === 'builtin') {
-    const runtimeBaseUrl = getRunningRuntimeBaseUrl();
+    const runtimeBaseUrl = await getRunningRuntimeBaseUrl();
 
     if (!runtimeBaseUrl) {
       return createErrorResponse(settings, 'builtin_runtime_not_running', 'Встроенный сервер не запущен.', null);

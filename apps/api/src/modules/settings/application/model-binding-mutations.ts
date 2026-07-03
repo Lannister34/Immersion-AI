@@ -1,9 +1,6 @@
 import type { ModelBindingMutationResponse } from '@immersion/contracts/settings';
 
-import {
-  readLegacyUserSettingsSource,
-  writeLegacyUserSettingsSource,
-} from '../../../shared/infrastructure/legacy-settings-source.js';
+import { updateLegacyUserSettingsSource } from '../../../shared/infrastructure/legacy-settings-source.js';
 import { getSettingsOverview } from './get-settings-overview.js';
 import { SamplerPresetNotFoundError } from './sampler-preset-mutations.js';
 
@@ -44,33 +41,34 @@ export async function upsertModelBinding(modelName: string, presetId: string): P
   if (trimmedModelName.length === 0) {
     throw new ModelBindingNotFoundError(modelName);
   }
-  const source = readLegacyUserSettingsSource();
-  const presetIds = readPresetIds(source);
-  if (!presetIds.has(presetId)) {
-    throw new SamplerPresetNotFoundError(presetId);
-  }
 
-  const nextMap = { ...readBindingMap(source), [trimmedModelName]: presetId };
+  await updateLegacyUserSettingsSource((source) => {
+    const presetIds = readPresetIds(source);
+    if (!presetIds.has(presetId)) {
+      throw new SamplerPresetNotFoundError(presetId);
+    }
 
-  await writeLegacyUserSettingsSource({
-    ...source,
-    modelPresetMap: nextMap,
+    return {
+      ...source,
+      modelPresetMap: { ...readBindingMap(source), [trimmedModelName]: presetId },
+    };
   });
 
   return { sampler: getSettingsOverview().sampler };
 }
 
 export async function deleteModelBinding(modelName: string): Promise<ModelBindingMutationResponse> {
-  const source = readLegacyUserSettingsSource();
-  const existing = readBindingMap(source);
-  if (!(modelName in existing)) {
-    throw new ModelBindingNotFoundError(modelName);
-  }
-  const { [modelName]: _removed, ...nextMap } = existing;
+  await updateLegacyUserSettingsSource((source) => {
+    const existing = readBindingMap(source);
+    if (!(modelName in existing)) {
+      throw new ModelBindingNotFoundError(modelName);
+    }
+    const { [modelName]: _removed, ...nextMap } = existing;
 
-  await writeLegacyUserSettingsSource({
-    ...source,
-    modelPresetMap: nextMap,
+    return {
+      ...source,
+      modelPresetMap: nextMap,
+    };
   });
 
   return { sampler: getSettingsOverview().sampler };

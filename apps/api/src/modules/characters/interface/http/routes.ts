@@ -4,10 +4,10 @@ import {
   ImportCharacterCardCommandSchema,
   SaveCharacterCommandSchema,
 } from '@immersion/contracts/characters';
-import { ApiProblemSchema } from '@immersion/contracts/common';
 import type { FastifyPluginAsync } from 'fastify';
-import { ZodError, z } from 'zod';
+import { z } from 'zod';
 
+import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
 import { deleteCharacter } from '../../application/delete-character.js';
 import { InvalidCharacterCardError } from '../../application/extract-png-character-card.js';
 import { getCharacter } from '../../application/get-character.js';
@@ -20,55 +20,21 @@ const CharacterRouteParamsSchema = z.object({
   characterId: CharacterIdSchema,
 });
 
-function toProblem(error: unknown) {
-  if (error instanceof ZodError) {
-    return {
-      statusCode: 400,
-      body: ApiProblemSchema.parse({
-        code: 'validation_error',
-        message: error.issues[0]?.message ?? 'Invalid request payload.',
-      }),
-    };
-  }
-
+const toProblem = createToProblem((error) => {
   if (error instanceof CharacterNotFoundError) {
-    return {
-      statusCode: 404,
-      body: ApiProblemSchema.parse({
-        code: 'character_not_found',
-        message: 'Character not found.',
-      }),
-    };
+    return problem(404, 'character_not_found', 'Character not found.');
   }
 
   if (error instanceof CharacterNotEditableError) {
-    return {
-      statusCode: 409,
-      body: ApiProblemSchema.parse({
-        code: 'character_not_editable',
-        message: 'This character is stored in a non-editable format (PNG card).',
-      }),
-    };
+    return problem(409, 'character_not_editable', 'This character is stored in a non-editable format (PNG card).');
   }
 
   if (error instanceof InvalidCharacterCardError) {
-    return {
-      statusCode: 400,
-      body: ApiProblemSchema.parse({
-        code: 'invalid_character_card',
-        message: error.message,
-      }),
-    };
+    return problem(400, 'invalid_character_card', error.message);
   }
 
-  return {
-    statusCode: 500,
-    body: ApiProblemSchema.parse({
-      code: 'internal_error',
-      message: 'Unexpected error.',
-    }),
-  };
-}
+  return null;
+});
 
 export const charactersRoutes: FastifyPluginAsync = async (app) => {
   app.get('/', async (request, reply) => {
@@ -76,9 +42,9 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       return await listCharacters();
     } catch (error) {
       request.log.error({ err: error }, 'Failed to list characters');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -89,9 +55,9 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(201).send(CharacterDetailResponseSchema.parse({ character }));
     } catch (error) {
       request.log.error({ err: error }, 'Failed to create character');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -102,9 +68,9 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(201).send(CharacterDetailResponseSchema.parse({ character }));
     } catch (error) {
       request.log.error({ err: error }, 'Failed to import character card');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -115,9 +81,9 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       return CharacterDetailResponseSchema.parse({ character });
     } catch (error) {
       request.log.error({ err: error }, 'Failed to load character');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -129,9 +95,9 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       return CharacterDetailResponseSchema.parse({ character });
     } catch (error) {
       request.log.error({ err: error }, 'Failed to update character');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -142,9 +108,9 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(204).send();
     } catch (error) {
       request.log.error({ err: error }, 'Failed to delete character');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -159,9 +125,9 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       return reply.send(payload.body);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to load character avatar');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 };

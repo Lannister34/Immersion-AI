@@ -4,6 +4,8 @@ import path from 'node:path';
 
 import type { CharacterDetailDto, CharacterSourceFormat, CharacterSummaryDto } from '@immersion/contracts/characters';
 
+import { writeFileAtomically, writeJsonFileAtomically } from '../../../lib/atomic-file.js';
+import { resolveContainedFilePath } from '../../../lib/contained-path.js';
 import { resolveDataRoot } from '../../../lib/data-root.js';
 import {
   type CharacterCardPatch,
@@ -110,7 +112,9 @@ function sanitizeBaseName(name: string): string {
   const collapsed = name
     .trim()
     .replace(/[\\/:*?"<>|]+/gu, '_')
-    .replace(/\s+/gu, '_');
+    .replace(/\s+/gu, '_')
+    .replace(/\.{2,}/gu, '.')
+    .replace(/^\.+/u, '');
   const trimmed = collapsed.length > 0 ? collapsed : 'character';
   return trimmed.length > 80 ? trimmed.slice(0, 80) : trimmed;
 }
@@ -124,28 +128,6 @@ async function generateUniqueId(directory: string, base: string): Promise<string
   }
   const suffix = randomUUID().slice(0, 8);
   return `${base}-${suffix}${JSON_EXTENSION}`;
-}
-
-async function writeJsonAtomic(filePath: string, payload: unknown) {
-  const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`);
-  try {
-    await fs.writeFile(tempPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
-    await fs.rename(tempPath, filePath);
-  } catch (error) {
-    await fs.rm(tempPath, { force: true }).catch(() => undefined);
-    throw error;
-  }
-}
-
-async function writeBinaryAtomic(filePath: string, payload: Buffer) {
-  const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`);
-  try {
-    await fs.writeFile(tempPath, payload);
-    await fs.rename(tempPath, filePath);
-  } catch (error) {
-    await fs.rm(tempPath, { force: true }).catch(() => undefined);
-    throw error;
-  }
 }
 
 function detailFromStored(
@@ -246,7 +228,7 @@ export interface SaveCharacterFileInput {
 }
 
 function resolveCharacterFilePath(id: string) {
-  return path.join(resolveCharactersDirectory(), id);
+  return resolveContainedFilePath(resolveCharactersDirectory(), id);
 }
 
 export async function writeCharacterFile(id: string, input: SaveCharacterFileInput): Promise<CharacterDetailDto> {
@@ -275,7 +257,7 @@ export async function writeCharacterFile(id: string, input: SaveCharacterFileInp
     createdAt,
     updatedAt: now,
   };
-  await writeJsonAtomic(filePath, payload);
+  await writeJsonFileAtomically(filePath, payload);
 
   return {
     avatarUrl: null,
@@ -317,7 +299,7 @@ export async function writePngCharacterFile(id: string, input: SaveCharacterFile
     tags: [...input.tags],
   };
   const next = writePngCharacterCard(original, patch);
-  await writeBinaryAtomic(filePath, next);
+  await writeFileAtomically(filePath, next);
 
   const stats = await fs.stat(filePath);
   const avatarUrl = `/api/characters/${encodeURIComponent(id)}/avatar`;

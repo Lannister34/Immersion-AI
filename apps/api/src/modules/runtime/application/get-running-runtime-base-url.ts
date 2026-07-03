@@ -8,18 +8,19 @@ export interface RunningRuntimeEndpoint {
   model: string | null;
 }
 
-function resolveCanonicalModelName(modelPath: string | null, fallbackModel: string | null) {
+async function resolveCanonicalModelName(modelPath: string | null, fallbackModel: string | null) {
   if (!modelPath) {
     return fallbackModel;
   }
 
   const normalizedModelPath = path.normalize(modelPath);
-  const runtimeModel = getRuntimeOverview().models.find((model) => path.normalize(model.path) === normalizedModelPath);
+  const overview = await getRuntimeOverview();
+  const runtimeModel = overview.models.find((model) => path.normalize(model.path) === normalizedModelPath);
 
   return runtimeModel?.name ?? fallbackModel;
 }
 
-export function getRunningRuntimeEndpoint(): RunningRuntimeEndpoint | null {
+export async function getRunningRuntimeEndpoint(): Promise<RunningRuntimeEndpoint | null> {
   const state = getState();
 
   if (state.status !== 'running') {
@@ -28,12 +29,12 @@ export function getRunningRuntimeEndpoint(): RunningRuntimeEndpoint | null {
 
   return {
     baseUrl: `http://127.0.0.1:${state.port}`,
-    model: resolveCanonicalModelName(state.modelPath, state.model),
+    model: await resolveCanonicalModelName(state.modelPath, state.model),
   };
 }
 
-export function getRunningRuntimeBaseUrl() {
-  const endpoint = getRunningRuntimeEndpoint();
+export async function getRunningRuntimeBaseUrl() {
+  const endpoint = await getRunningRuntimeEndpoint();
 
   return endpoint?.baseUrl ?? null;
 }

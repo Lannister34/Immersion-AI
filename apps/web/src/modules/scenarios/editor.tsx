@@ -1,10 +1,12 @@
 import type { SaveScenarioCommand, ScenarioDetailDto } from '@immersion/contracts/scenarios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
-import { ApiError } from '../../shared/api/client';
+import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
+import { formatRelative } from '../../shared/lib/format-relative';
+import { Field } from '../../shared/ui/field';
 import { ChatIcon, TrashIcon } from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
 import { chatListQueryKey } from '../chats/queries/chat-list-query';
@@ -48,19 +50,13 @@ function toCommand(state: ScenarioFormState): SaveScenarioCommand {
   };
 }
 
-function formatRelative(iso: string | null, now: Date = new Date()): string {
-  if (!iso) return '—';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.round(diffMs / 60_000);
-  if (diffMin < 1) return 'только что';
-  if (diffMin < 60) return `${diffMin} мин назад`;
-  const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24 && now.getDate() === date.getDate()) {
-    return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  }
-  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' });
+function formsEqual(left: ScenarioFormState, right: ScenarioFormState): boolean {
+  return (
+    left.concept === right.concept &&
+    left.content === right.content &&
+    left.name === right.name &&
+    left.tagsText === right.tagsText
+  );
 }
 
 export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) {
@@ -76,16 +72,22 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
   const initialState = useMemo(() => toFormState(detail), [detail]);
   const [form, setForm] = useState<ScenarioFormState>(initialState);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const appliedInitialStateRef = useRef(initialState);
 
+  // Сбрасываем форму на серверное состояние только пока пользователь её не редактировал.
   useEffect(() => {
-    setForm(initialState);
+    const previousInitialState = appliedInitialStateRef.current;
+    appliedInitialStateRef.current = initialState;
+    setForm((current) => (formsEqual(current, previousInitialState) ? initialState : current));
   }, [initialState]);
 
-  const isDirty =
-    form.name !== initialState.name ||
-    form.concept !== initialState.concept ||
-    form.content !== initialState.content ||
-    form.tagsText !== initialState.tagsText;
+  const isDirty = !formsEqual(form, initialState);
+
+  // Значение читаем из события синхронно: внутри отложенного апдейтера
+  // event.currentTarget уже null, и чтение .value роняет экран.
+  const setField = <K extends keyof ScenarioFormState>(field: K, value: ScenarioFormState[K]) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -130,18 +132,12 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
     saveMutation.mutate();
   };
 
-  const errorMessage =
-    saveMutation.error instanceof ApiError
-      ? saveMutation.error.message
-      : saveMutation.error
-        ? 'Не удалось сохранить сценарий. Проверьте поля и повторите.'
-        : null;
-  const deleteError =
-    deleteMutation.error instanceof ApiError
-      ? deleteMutation.error.message
-      : deleteMutation.error
-        ? 'Не удалось удалить сценарий.'
-        : null;
+  const errorMessage = saveMutation.error
+    ? getApiErrorMessage(saveMutation.error, 'Не удалось сохранить сценарий. Проверьте поля и повторите.')
+    : null;
+  const deleteError = deleteMutation.error
+    ? getApiErrorMessage(deleteMutation.error, 'Не удалось удалить сценарий.')
+    : null;
 
   return (
     <main className="main">
@@ -250,7 +246,7 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
                   disabled={saveMutation.isPending}
                   id="scenario-name"
                   maxLength={200}
-                  onChange={(event) => setForm((current) => ({ ...current, name: event.currentTarget.value }))}
+                  onChange={(event) => setField('name', event.currentTarget.value)}
                   placeholder="Например: Анонимный чат"
                   value={form.name}
                 />
@@ -265,7 +261,7 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
                   disabled={saveMutation.isPending}
                   id="scenario-concept"
                   maxLength={2000}
-                  onChange={(event) => setForm((current) => ({ ...current, concept: event.currentTarget.value }))}
+                  onChange={(event) => setField('concept', event.currentTarget.value)}
                   value={form.concept}
                 />
               </Field>
@@ -279,7 +275,7 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
                   disabled={saveMutation.isPending}
                   id="scenario-content"
                   maxLength={20_000}
-                  onChange={(event) => setForm((current) => ({ ...current, content: event.currentTarget.value }))}
+                  onChange={(event) => setField('content', event.currentTarget.value)}
                   rows={10}
                   value={form.content}
                 />
@@ -289,7 +285,7 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
                   className="input"
                   disabled={saveMutation.isPending}
                   id="scenario-tags"
-                  onChange={(event) => setForm((current) => ({ ...current, tagsText: event.currentTarget.value }))}
+                  onChange={(event) => setField('tagsText', event.currentTarget.value)}
                   placeholder="онлайн, знакомство, любопытство"
                   value={form.tagsText}
                 />
@@ -309,32 +305,5 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
         </div>
       </div>
     </main>
-  );
-}
-
-interface FieldProps {
-  children: ReactNode;
-  hint?: string;
-  id: string;
-  label: string;
-  required?: boolean;
-}
-
-function Field({ children, hint, id, label, required }: FieldProps) {
-  return (
-    <div className="field">
-      <label className="between" htmlFor={id}>
-        <span>
-          {label}
-          {required ? <span style={{ color: 'var(--danger)' }}> *</span> : null}
-        </span>
-      </label>
-      {children}
-      {hint ? (
-        <div className="muted" style={{ fontSize: 'var(--fz-2xs)', marginTop: 4 }}>
-          {hint}
-        </div>
-      ) : null}
-    </div>
   );
 }

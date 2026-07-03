@@ -4,7 +4,10 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { type ChangeEvent, type DragEvent, type MouseEvent, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
-import { ApiError, createApiUrl } from '../../shared/api/client';
+import { createApiUrl } from '../../shared/api/client';
+import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
+import { avatarColor, avatarInitial } from '../../shared/lib/avatar';
+import { formatRelative } from '../../shared/lib/format-relative';
 import {
   ChatIcon,
   LayersIcon,
@@ -38,36 +41,6 @@ function readFileAsBase64(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error('Failed to read file.'));
     reader.readAsDataURL(file);
   });
-}
-
-function avatarColor(seed: string): string {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i += 1) {
-    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-  }
-  const hue = hash % 360;
-  return `oklch(0.45 0.1 ${hue})`;
-}
-
-function avatarInitial(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return '?';
-  const words = trimmed.split(/\s+/u);
-  if (words.length > 1 && words[1] && words[1].length > 0) {
-    return `${words[0]?.charAt(0) ?? ''}${words[1].charAt(0)}`.toUpperCase();
-  }
-  return trimmed.charAt(0).toUpperCase();
-}
-
-function formatRelative(iso: string, now: Date = new Date()): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.round(diffMs / 86_400_000);
-  if (diffDays === 0) return 'сегодня';
-  if (diffDays === 1) return 'вчера';
-  if (diffDays < 7) return `${diffDays} д`;
-  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
 }
 
 export function CharactersScreen() {
@@ -121,7 +94,9 @@ export function CharactersScreen() {
   };
 
   const handleDragLeave = (event: DragEvent<HTMLElement>) => {
-    if (event.currentTarget === event.target) {
+    // relatedTarget === null означает уход курсора за пределы окна.
+    const nextTarget = event.relatedTarget as Node | null;
+    if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
       setDragActive(false);
     }
   };
@@ -137,12 +112,9 @@ export function CharactersScreen() {
     }
   };
 
-  const importErrorMessage =
-    importMutation.error instanceof ApiError
-      ? importMutation.error.message
-      : importMutation.error
-        ? 'Не удалось импортировать карточку.'
-        : null;
+  const importErrorMessage = importMutation.error
+    ? getApiErrorMessage(importMutation.error, 'Не удалось импортировать карточку.')
+    : null;
 
   return (
     <main

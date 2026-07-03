@@ -424,7 +424,7 @@ describe('provider settings routes', () => {
     await app.close();
   });
 
-  it('returns an explicit error when the canonical source file contains invalid JSON', async () => {
+  it('falls back to default settings when the canonical source file contains invalid JSON', async () => {
     await fs.writeFile(path.join(dataRoot, 'user-settings.json'), '{ invalid json', 'utf8');
 
     const app = buildApiApp();
@@ -433,9 +433,10 @@ describe('provider settings routes', () => {
       url: '/api/providers/settings',
     });
 
-    expect(response.statusCode).toBe(500);
+    expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
-      code: 'internal_error',
+      mode: 'builtin',
+      activeProvider: 'custom',
     });
 
     await app.close();

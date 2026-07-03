@@ -1,10 +1,12 @@
 import type { LorebookDetailDto, LorebookEntryDto, SaveLorebookCommand } from '@immersion/contracts/lorebooks';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
-import { ApiError } from '../../shared/api/client';
+import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
+import { formatRelative } from '../../shared/lib/format-relative';
+import { Field } from '../../shared/ui/field';
 import { PlusIcon, TrashIcon } from '../../shared/ui/icons';
 import { createLorebook, updateLorebook } from './api/save-lorebook';
 import { useDeleteLorebook } from './mutations/use-delete-lorebook';
@@ -71,19 +73,26 @@ function toCommand(state: LorebookFormState): SaveLorebookCommand {
   };
 }
 
-function formatRelative(iso: string | null, now: Date = new Date()): string {
-  if (!iso) return '—';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.round(diffMs / 60_000);
-  if (diffMin < 1) return 'только что';
-  if (diffMin < 60) return `${diffMin} мин назад`;
-  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
 function emptyEntry(): EditorEntry {
   return { content: '', enabled: true, keysText: '', priority: 0 };
+}
+
+function entriesEqual(left: EditorEntry[], right: EditorEntry[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((entry, index) => {
+    const other = right[index];
+    return (
+      other !== undefined &&
+      entry.content === other.content &&
+      entry.enabled === other.enabled &&
+      entry.keysText === other.keysText &&
+      entry.priority === other.priority
+    );
+  });
+}
+
+function formsEqual(left: LorebookFormState, right: LorebookFormState): boolean {
+  return left.name === right.name && left.tagsText === right.tagsText && entriesEqual(left.entries, right.entries);
 }
 
 export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) {
@@ -99,25 +108,22 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
   const initialState = useMemo(() => toFormState(detail), [detail]);
   const [form, setForm] = useState<LorebookFormState>(initialState);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const appliedInitialStateRef = useRef(initialState);
 
+  // Сбрасываем форму на серверное состояние только пока пользователь её не редактировал.
   useEffect(() => {
-    setForm(initialState);
+    const previousInitialState = appliedInitialStateRef.current;
+    appliedInitialStateRef.current = initialState;
+    setForm((current) => (formsEqual(current, previousInitialState) ? initialState : current));
   }, [initialState]);
 
-  const isDirty = useMemo(() => {
-    if (form.name !== initialState.name || form.tagsText !== initialState.tagsText) return true;
-    if (form.entries.length !== initialState.entries.length) return true;
-    return form.entries.some((entry, index) => {
-      const base = initialState.entries[index];
-      if (!base) return true;
-      return (
-        entry.content !== base.content ||
-        entry.enabled !== base.enabled ||
-        entry.keysText !== base.keysText ||
-        entry.priority !== base.priority
-      );
-    });
-  }, [form, initialState]);
+  const isDirty = useMemo(() => !formsEqual(form, initialState), [form, initialState]);
+
+  // Значение читаем из события синхронно: внутри отложенного апдейтера
+  // event.currentTarget уже null, и чтение .value роняет экран.
+  const setField = <K extends keyof LorebookFormState>(field: K, value: LorebookFormState[K]) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -167,18 +173,12 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
     }));
   };
 
-  const errorMessage =
-    saveMutation.error instanceof ApiError
-      ? saveMutation.error.message
-      : saveMutation.error
-        ? 'Не удалось сохранить лорбук.'
-        : null;
-  const deleteError =
-    deleteMutation.error instanceof ApiError
-      ? deleteMutation.error.message
-      : deleteMutation.error
-        ? 'Не удалось удалить лорбук.'
-        : null;
+  const errorMessage = saveMutation.error
+    ? getApiErrorMessage(saveMutation.error, 'Не удалось сохранить лорбук.')
+    : null;
+  const deleteError = deleteMutation.error
+    ? getApiErrorMessage(deleteMutation.error, 'Не удалось удалить лорбук.')
+    : null;
 
   return (
     <main className="main">
@@ -276,7 +276,7 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
                       disabled={saveMutation.isPending}
                       id="lorebook-name"
                       maxLength={200}
-                      onChange={(event) => setForm((current) => ({ ...current, name: event.currentTarget.value }))}
+                      onChange={(event) => setField('name', event.currentTarget.value)}
                       placeholder="Например: Студия «Меандр»"
                       value={form.name}
                     />
@@ -288,7 +288,7 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
                       className="input"
                       disabled={saveMutation.isPending}
                       id="lorebook-tags"
-                      onChange={(event) => setForm((current) => ({ ...current, tagsText: event.currentTarget.value }))}
+                      onChange={(event) => setField('tagsText', event.currentTarget.value)}
                       placeholder="город, ремесло"
                       value={form.tagsText}
                     />
@@ -412,33 +412,6 @@ function EntryCard({ busy, entry, index, onChange, onRemove }: EntryCardProps) {
           value={entry.content}
         />
       </Field>
-    </div>
-  );
-}
-
-interface FieldProps {
-  children: ReactNode;
-  hint?: string;
-  id: string;
-  label: string;
-  required?: boolean;
-}
-
-function Field({ children, hint, id, label, required }: FieldProps) {
-  return (
-    <div className="field">
-      <label className="between" htmlFor={id}>
-        <span>
-          {label}
-          {required ? <span style={{ color: 'var(--danger)' }}> *</span> : null}
-        </span>
-      </label>
-      {children}
-      {hint ? (
-        <div className="muted" style={{ fontSize: 'var(--fz-2xs)', marginTop: 4 }}>
-          {hint}
-        </div>
-      ) : null}
     </div>
   );
 }

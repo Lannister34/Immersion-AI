@@ -10,8 +10,9 @@ import {
   ListGenerationJobsResponseSchema,
 } from '@immersion/contracts/generation';
 import type { FastifyPluginAsync } from 'fastify';
-import { ZodError, z } from 'zod';
+import { z } from 'zod';
 
+import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
 import { ChatMessageNotFoundError, ChatNotFoundError } from '../../../chats/application/append-chat-messages.js';
 import { InvalidChatGenerationSettingsResolutionError } from '../../../prompting/application/resolve-chat-generation-settings.js';
 import { GenerationProviderUnavailableError } from '../../../providers/application/generation-provider.js';
@@ -35,65 +36,29 @@ const GenerationJobsQuerySchema = z.object({
   chatId: ChatIdSchema.optional(),
 });
 
-function toProblem(error: unknown) {
-  if (error instanceof ZodError) {
-    return {
-      statusCode: 400,
-      body: ApiProblemSchema.parse({
-        code: 'validation_error',
-        message: error.issues[0]?.message ?? 'Invalid request payload.',
-      }),
-    };
-  }
-
+const toProblem = createToProblem((error) => {
   if (error instanceof ChatNotFoundError) {
-    return {
-      statusCode: 404,
-      body: ApiProblemSchema.parse({
-        code: 'chat_not_found',
-        message: 'Chat session not found.',
-      }),
-    };
+    return problem(404, 'chat_not_found', 'Chat session not found.');
   }
 
   if (error instanceof ChatMessageNotFoundError) {
-    return {
-      statusCode: 404,
-      body: ApiProblemSchema.parse({
-        code: 'chat_message_not_found',
-        message: 'Chat message not found.',
-      }),
-    };
+    return problem(404, 'chat_message_not_found', 'Chat message not found.');
   }
 
   if (error instanceof NoAssistantMessageToRegenerateError) {
-    return {
-      statusCode: 409,
-      body: ApiProblemSchema.parse({
-        code: 'no_assistant_message_to_regenerate',
-        message: 'There is no assistant message to regenerate in this chat.',
-      }),
-    };
+    return problem(
+      409,
+      'no_assistant_message_to_regenerate',
+      'There is no assistant message to regenerate in this chat.',
+    );
   }
 
   if (error instanceof GenerationProviderUnavailableError) {
-    return {
-      statusCode: 409,
-      body: ApiProblemSchema.parse({
-        code: 'generation_provider_unavailable',
-        message: error.message,
-      }),
-    };
+    return problem(409, 'generation_provider_unavailable', error.message);
   }
 
   if (error instanceof InvalidChatGenerationSettingsResolutionError) {
-    return {
-      statusCode: 409,
-      body: ApiProblemSchema.parse({
-        code: 'invalid_chat_generation_settings',
-        message: error.message,
-      }),
-    };
+    return problem(409, 'invalid_chat_generation_settings', error.message);
   }
 
   if (error instanceof ActiveGenerationJobExistsError) {
@@ -121,23 +86,11 @@ function toProblem(error: unknown) {
   }
 
   if (error instanceof ProviderGenerationError) {
-    return {
-      statusCode: 502,
-      body: ApiProblemSchema.parse({
-        code: 'provider_generation_failed',
-        message: error.message,
-      }),
-    };
+    return problem(502, 'provider_generation_failed', error.message);
   }
 
-  return {
-    statusCode: 500,
-    body: ApiProblemSchema.parse({
-      code: 'internal_error',
-      message: 'Unexpected error.',
-    }),
-  };
-}
+  return null;
+});
 
 function writeSseEvent(raw: NodeJS.WritableStream, event: unknown) {
   const parsedEvent = GenerationJobEventSchema.parse(event);
@@ -158,9 +111,9 @@ export const generationRoutes: FastifyPluginAsync = async (app) => {
       return ChatReplyPromptPreviewResponseSchema.parse(await previewChatReplyPrompt(command));
     } catch (error) {
       request.log.error({ err: error }, 'Failed to preview chat reply prompt');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -176,9 +129,9 @@ export const generationRoutes: FastifyPluginAsync = async (app) => {
       });
     } catch (error) {
       request.log.error({ err: error }, 'Failed to generate chat reply');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     } finally {
       request.raw.off('aborted', abortGeneration);
     }
@@ -193,9 +146,9 @@ export const generationRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(202).send(response);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to start chat reply generation job');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -208,9 +161,9 @@ export const generationRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(202).send(response);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to regenerate chat reply');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -223,9 +176,9 @@ export const generationRoutes: FastifyPluginAsync = async (app) => {
       });
     } catch (error) {
       request.log.error({ err: error }, 'Failed to list generation jobs');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -248,9 +201,9 @@ export const generationRoutes: FastifyPluginAsync = async (app) => {
       });
     } catch (error) {
       request.log.error({ err: error }, 'Failed to load generation job');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -273,13 +226,15 @@ export const generationRoutes: FastifyPluginAsync = async (app) => {
       });
     } catch (error) {
       request.log.error({ err: error }, 'Failed to cancel generation job');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
   app.get('/jobs/:jobId/events', async (request, reply) => {
+    let hijacked = false;
+
     try {
       const { jobId } = GenerationJobRouteParamsSchema.parse(request.params);
       const job = generationJobRegistry.get(jobId);
@@ -293,35 +248,83 @@ export const generationRoutes: FastifyPluginAsync = async (app) => {
         );
       }
 
+      let heartbeat: ReturnType<typeof setInterval> | null = null;
+      let unsubscribe: (() => void) | null = null;
+      let closed = false;
+      const cleanup = () => {
+        if (closed) {
+          return;
+        }
+
+        closed = true;
+
+        if (heartbeat) {
+          clearInterval(heartbeat);
+          heartbeat = null;
+        }
+
+        unsubscribe?.();
+        unsubscribe = null;
+      };
+
+      // Register the close handler before the first write so an immediately
+      // dropped connection still releases the subscription and heartbeat.
+      request.raw.once('close', cleanup);
+
       reply.hijack();
+      hijacked = true;
       reply.raw.writeHead(200, {
         'Cache-Control': 'no-cache, no-transform',
         Connection: 'keep-alive',
         'Content-Type': 'text/event-stream; charset=utf-8',
         'X-Accel-Buffering': 'no',
       });
-      writeSseEvent(reply.raw, {
+
+      const writeEvent = (event: unknown) => {
+        if (closed || !reply.raw.writable) {
+          cleanup();
+          return;
+        }
+
+        try {
+          writeSseEvent(reply.raw, event);
+        } catch (error) {
+          request.log.warn({ err: error }, 'Failed to write generation job event; closing stream');
+          cleanup();
+        }
+      };
+
+      writeEvent({
         job,
         type: 'generation.job.snapshot',
       });
 
-      const unsubscribe = generationJobRegistry.subscribe(jobId, (event) => {
-        writeSseEvent(reply.raw, event);
-      });
-      const heartbeat = setInterval(() => {
+      if (closed) {
+        return;
+      }
+
+      unsubscribe = generationJobRegistry.subscribe(jobId, writeEvent);
+      heartbeat = setInterval(() => {
+        if (closed || !reply.raw.writable) {
+          cleanup();
+          return;
+        }
+
         reply.raw.write(': keepalive\n\n');
       }, 15_000);
-      const cleanup = () => {
-        clearInterval(heartbeat);
-        unsubscribe();
-      };
-
-      request.raw.once('close', cleanup);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to open generation job event stream');
-      const problem = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      if (hijacked) {
+        // After hijack the reply object no longer owns the response; the raw
+        // socket is all we can close.
+        reply.raw.end();
+        return;
+      }
+
+      const mapped = toProblem(error);
+
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 };

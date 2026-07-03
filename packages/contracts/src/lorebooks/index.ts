@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
-export const LorebookIdSchema = z.string().min(1).max(200);
+import { createFileIdSchema } from '../common/file-id.js';
+
+export const LorebookIdSchema = createFileIdSchema('Lorebook id');
 export type LorebookId = z.infer<typeof LorebookIdSchema>;
 
 export const LorebookSummaryDtoSchema = z.object({

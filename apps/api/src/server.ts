@@ -7,7 +7,9 @@ setupGracefulShutdown();
 async function startServer() {
   try {
     await app.listen({
-      host: '0.0.0.0',
+      // Local-only by default: the API serves stored provider credentials and file
+      // mutations. Opt in to LAN exposure explicitly via IMMERSION_API_HOST.
+      host: process.env.IMMERSION_API_HOST ?? '127.0.0.1',
       port: Number.parseInt(process.env.IMMERSION_API_PORT ?? '4787', 10),
     });
   } catch (error) {

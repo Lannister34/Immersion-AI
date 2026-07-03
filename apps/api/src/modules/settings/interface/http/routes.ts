@@ -1,4 +1,3 @@
-import { ApiProblemSchema } from '@immersion/contracts/common';
 import {
   CreateSamplerPresetCommandSchema,
   SetActiveSamplerPresetCommandSchema,
@@ -7,8 +6,9 @@ import {
   UpsertModelBindingCommandSchema,
 } from '@immersion/contracts/settings';
 import type { FastifyPluginAsync } from 'fastify';
-import { ZodError, z } from 'zod';
+import { z } from 'zod';
 
+import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
 import { getSettingsOverview } from '../../application/get-settings-overview.js';
 import {
   deleteModelBinding,
@@ -25,55 +25,21 @@ import {
 } from '../../application/sampler-preset-mutations.js';
 import { updateSettingsProfile } from '../../application/update-settings-profile.js';
 
-function toProblem(error: unknown) {
-  if (error instanceof ZodError) {
-    return {
-      statusCode: 400,
-      body: ApiProblemSchema.parse({
-        code: 'validation_error',
-        message: error.issues[0]?.message ?? 'Invalid request payload.',
-      }),
-    };
-  }
-
+const toProblem = createToProblem((error) => {
   if (error instanceof SamplerPresetNotFoundError) {
-    return {
-      statusCode: 404,
-      body: ApiProblemSchema.parse({
-        code: 'sampler_preset_not_found',
-        message: error.message,
-      }),
-    };
+    return problem(404, 'sampler_preset_not_found', error.message);
   }
 
   if (error instanceof LastSamplerPresetError) {
-    return {
-      statusCode: 409,
-      body: ApiProblemSchema.parse({
-        code: 'last_sampler_preset',
-        message: error.message,
-      }),
-    };
+    return problem(409, 'last_sampler_preset', error.message);
   }
 
   if (error instanceof ModelBindingNotFoundError) {
-    return {
-      statusCode: 404,
-      body: ApiProblemSchema.parse({
-        code: 'model_binding_not_found',
-        message: error.message,
-      }),
-    };
+    return problem(404, 'model_binding_not_found', error.message);
   }
 
-  return {
-    statusCode: 500,
-    body: ApiProblemSchema.parse({
-      code: 'internal_error',
-      message: 'Unexpected error.',
-    }),
-  };
-}
+  return null;
+});
 
 const PresetRouteParamsSchema = z.object({
   presetId: z.string().trim().min(1),
@@ -88,8 +54,8 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
       return await updateSettingsProfile(command);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to update settings profile');
-      const problem = toProblem(error);
-      return reply.status(problem.statusCode).send(problem.body);
+      const mapped = toProblem(error);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -100,8 +66,8 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(201).send(response);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to create sampler preset');
-      const problem = toProblem(error);
-      return reply.status(problem.statusCode).send(problem.body);
+      const mapped = toProblem(error);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -112,8 +78,8 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
       return await updateSamplerPreset(presetId, command);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to update sampler preset');
-      const problem = toProblem(error);
-      return reply.status(problem.statusCode).send(problem.body);
+      const mapped = toProblem(error);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -123,8 +89,8 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
       return await deleteSamplerPreset(presetId);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to delete sampler preset');
-      const problem = toProblem(error);
-      return reply.status(problem.statusCode).send(problem.body);
+      const mapped = toProblem(error);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -134,8 +100,8 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
       return await setActiveSamplerPreset(command.presetId);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to set active sampler preset');
-      const problem = toProblem(error);
-      return reply.status(problem.statusCode).send(problem.body);
+      const mapped = toProblem(error);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -150,8 +116,8 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
       return await upsertModelBinding(modelName, command.presetId);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to upsert model binding');
-      const problem = toProblem(error);
-      return reply.status(problem.statusCode).send(problem.body);
+      const mapped = toProblem(error);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -161,8 +127,8 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
       return await deleteModelBinding(modelName);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to delete model binding');
-      const problem = toProblem(error);
-      return reply.status(problem.statusCode).send(problem.body);
+      const mapped = toProblem(error);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 };

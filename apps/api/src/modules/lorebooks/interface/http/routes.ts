@@ -1,12 +1,12 @@
-import { ApiProblemSchema } from '@immersion/contracts/common';
 import {
   LorebookDetailResponseSchema,
   LorebookIdSchema,
   SaveLorebookCommandSchema,
 } from '@immersion/contracts/lorebooks';
 import type { FastifyPluginAsync } from 'fastify';
-import { ZodError, z } from 'zod';
+import { z } from 'zod';
 
+import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
 import { deleteLorebook } from '../../application/delete-lorebook.js';
 import { getLorebook, LorebookNotFoundError } from '../../application/get-lorebook.js';
 import { listLorebooks } from '../../application/list-lorebooks.js';
@@ -16,35 +16,13 @@ const LorebookRouteParamsSchema = z.object({
   lorebookId: LorebookIdSchema,
 });
 
-function toProblem(error: unknown) {
-  if (error instanceof ZodError) {
-    return {
-      statusCode: 400,
-      body: ApiProblemSchema.parse({
-        code: 'validation_error',
-        message: error.issues[0]?.message ?? 'Invalid request payload.',
-      }),
-    };
-  }
-
+const toProblem = createToProblem((error) => {
   if (error instanceof LorebookNotFoundError) {
-    return {
-      statusCode: 404,
-      body: ApiProblemSchema.parse({
-        code: 'lorebook_not_found',
-        message: 'Lorebook not found.',
-      }),
-    };
+    return problem(404, 'lorebook_not_found', 'Lorebook not found.');
   }
 
-  return {
-    statusCode: 500,
-    body: ApiProblemSchema.parse({
-      code: 'internal_error',
-      message: 'Unexpected error.',
-    }),
-  };
-}
+  return null;
+});
 
 export const lorebooksRoutes: FastifyPluginAsync = async (app) => {
   app.get('/', async (request, reply) => {
@@ -52,9 +30,9 @@ export const lorebooksRoutes: FastifyPluginAsync = async (app) => {
       return await listLorebooks();
     } catch (error) {
       request.log.error({ err: error }, 'Failed to list lorebooks');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -65,9 +43,9 @@ export const lorebooksRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(201).send(LorebookDetailResponseSchema.parse({ lorebook }));
     } catch (error) {
       request.log.error({ err: error }, 'Failed to create lorebook');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -78,9 +56,9 @@ export const lorebooksRoutes: FastifyPluginAsync = async (app) => {
       return LorebookDetailResponseSchema.parse({ lorebook });
     } catch (error) {
       request.log.error({ err: error }, 'Failed to load lorebook');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -92,9 +70,9 @@ export const lorebooksRoutes: FastifyPluginAsync = async (app) => {
       return LorebookDetailResponseSchema.parse({ lorebook });
     } catch (error) {
       request.log.error({ err: error }, 'Failed to update lorebook');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -105,9 +83,9 @@ export const lorebooksRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(204).send();
     } catch (error) {
       request.log.error({ err: error }, 'Failed to delete lorebook');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 };

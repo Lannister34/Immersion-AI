@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
-export const CharacterIdSchema = z.string().min(1).max(200);
+import { createFileIdSchema } from '../common/file-id.js';
+
+export const CharacterIdSchema = createFileIdSchema('Character id');
 export type CharacterId = z.infer<typeof CharacterIdSchema>;
 
 export const CharacterSourceFormatSchema = z.enum(['png', 'json']);

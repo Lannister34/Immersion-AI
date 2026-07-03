@@ -4,10 +4,10 @@ import type {
   UpdateSettingsProfileCommand,
 } from '@immersion/contracts/settings';
 import { useQuery } from '@tanstack/react-query';
-import { type FormEvent, type JSX, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, type JSX, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
-import { ApiError } from '../../shared/api/client';
+import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import {
   CheckIcon,
   CodeIcon,
@@ -140,6 +140,18 @@ function profileToFormState(profile: SettingsOverviewResponse['profile']): Profi
   };
 }
 
+function profileFormsEqual(left: ProfileFormState, right: ProfileFormState): boolean {
+  return (
+    left.userName === right.userName &&
+    left.userPersona === right.userPersona &&
+    left.systemPromptTemplate === right.systemPromptTemplate &&
+    left.uiLanguage === right.uiLanguage &&
+    left.responseLanguage === right.responseLanguage &&
+    left.streamingEnabled === right.streamingEnabled &&
+    left.thinkingEnabled === right.thinkingEnabled
+  );
+}
+
 function profileFormToCommand(form: ProfileFormState): UpdateSettingsProfileCommand {
   return {
     userName: form.userName.trim(),
@@ -160,9 +172,13 @@ function ProfileCard({ data }: SettingsDataProps) {
   const baseline = useMemo(() => profileToFormState(data.profile), [data.profile]);
   const [form, setForm] = useState<ProfileFormState>(baseline);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const appliedBaselineRef = useRef(baseline);
 
+  // Сбрасываем форму на серверное состояние только пока пользователь её не редактировал.
   useEffect(() => {
-    setForm(baseline);
+    const previousBaseline = appliedBaselineRef.current;
+    appliedBaselineRef.current = baseline;
+    setForm((current) => (profileFormsEqual(current, previousBaseline) ? baseline : current));
   }, [baseline]);
 
   const mutation = useUpdateSettingsProfile({
@@ -171,15 +187,14 @@ function ProfileCard({ data }: SettingsDataProps) {
     },
   });
 
-  const isDirty =
-    form.userName !== baseline.userName ||
-    form.userPersona !== baseline.userPersona ||
-    form.systemPromptTemplate !== baseline.systemPromptTemplate ||
-    form.uiLanguage !== baseline.uiLanguage ||
-    form.responseLanguage !== baseline.responseLanguage ||
-    form.streamingEnabled !== baseline.streamingEnabled ||
-    form.thinkingEnabled !== baseline.thinkingEnabled;
+  const isDirty = !profileFormsEqual(form, baseline);
   const canSave = isDirty && form.userName.trim().length > 0 && !mutation.isPending;
+
+  // Значение читаем из события синхронно: внутри отложенного апдейтера
+  // event.currentTarget уже null, и чтение .value роняет экран.
+  const setField = <K extends keyof ProfileFormState>(field: K, value: ProfileFormState[K]) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -187,12 +202,7 @@ function ProfileCard({ data }: SettingsDataProps) {
     mutation.mutate(profileFormToCommand(form));
   };
 
-  const errorMessage =
-    mutation.error instanceof ApiError
-      ? mutation.error.message
-      : mutation.error
-        ? 'Не удалось сохранить настройки.'
-        : null;
+  const errorMessage = mutation.error ? getApiErrorMessage(mutation.error, 'Не удалось сохранить настройки.') : null;
 
   return (
     <>
@@ -217,7 +227,7 @@ function ProfileCard({ data }: SettingsDataProps) {
                 className="input"
                 id="profile-user-name"
                 maxLength={120}
-                onChange={(event) => setForm((current) => ({ ...current, userName: event.currentTarget.value }))}
+                onChange={(event) => setField('userName', event.currentTarget.value)}
                 placeholder="Например: Миша"
                 value={form.userName}
               />
@@ -228,7 +238,7 @@ function ProfileCard({ data }: SettingsDataProps) {
                 className="textarea"
                 id="profile-user-persona"
                 maxLength={20_000}
-                onChange={(event) => setForm((current) => ({ ...current, userPersona: event.currentTarget.value }))}
+                onChange={(event) => setField('userPersona', event.currentTarget.value)}
                 placeholder="Как модель должна представлять пользователя"
                 rows={4}
                 value={form.userPersona}
@@ -243,12 +253,7 @@ function ProfileCard({ data }: SettingsDataProps) {
             <select
               className="input"
               id="profile-ui-language"
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  uiLanguage: event.currentTarget.value as ProfileFormState['uiLanguage'],
-                }))
-              }
+              onChange={(event) => setField('uiLanguage', event.currentTarget.value as ProfileFormState['uiLanguage'])}
               value={form.uiLanguage}
             >
               <option value="ru">RU</option>
@@ -261,10 +266,7 @@ function ProfileCard({ data }: SettingsDataProps) {
               className="input"
               id="profile-response-language"
               onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  responseLanguage: event.currentTarget.value as ProfileFormState['responseLanguage'],
-                }))
+                setField('responseLanguage', event.currentTarget.value as ProfileFormState['responseLanguage'])
               }
               value={form.responseLanguage}
             >
@@ -463,8 +465,9 @@ function SamplerCard({ data }: SettingsDataProps) {
   };
 
   const mutationError = createMutation.error ?? updateMutation.error ?? deleteMutation.error ?? setActiveMutation.error;
-  const mutationErrorMessage =
-    mutationError instanceof ApiError ? mutationError.message : mutationError ? 'Не удалось применить операцию.' : null;
+  const mutationErrorMessage = mutationError
+    ? getApiErrorMessage(mutationError, 'Не удалось применить операцию.')
+    : null;
 
   return (
     <section className="card" id="sampler" style={{ padding: 18, display: 'grid', gap: 14 }}>
@@ -517,7 +520,10 @@ function SamplerCard({ data }: SettingsDataProps) {
               className="input"
               id="sampler-name"
               maxLength={120}
-              onChange={(event) => setForm((current) => ({ ...current, name: event.currentTarget.value }))}
+              onChange={(event) => {
+                const { value } = event.currentTarget;
+                setForm((current) => ({ ...current, name: value }));
+              }}
               placeholder="Например: Roleplay long"
               value={form.name}
             />
@@ -527,12 +533,10 @@ function SamplerCard({ data }: SettingsDataProps) {
             <select
               className="input"
               id="sampler-trim"
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  contextTrimStrategy: event.currentTarget.value as SamplerFormState['contextTrimStrategy'],
-                }))
-              }
+              onChange={(event) => {
+                const value = event.currentTarget.value as SamplerFormState['contextTrimStrategy'];
+                setForm((current) => ({ ...current, contextTrimStrategy: value }));
+              }}
               value={form.contextTrimStrategy}
             >
               <option value="trim_middle">trim_middle</option>
@@ -771,8 +775,9 @@ function ModelBindingsCard({ data }: SettingsDataProps) {
   });
 
   const mutationError = upsertMutation.error ?? deleteMutation.error;
-  const mutationErrorMessage =
-    mutationError instanceof ApiError ? mutationError.message : mutationError ? 'Не удалось обновить привязку.' : null;
+  const mutationErrorMessage = mutationError
+    ? getApiErrorMessage(mutationError, 'Не удалось обновить привязку.')
+    : null;
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

@@ -19,11 +19,14 @@ import {
 
 import { Topbar } from '../../app/layout/topbar';
 import { useUiShellStore } from '../../app/store/ui-shell';
-import { ApiError, createApiUrl } from '../../shared/api/client';
+import { createApiUrl } from '../../shared/api/client';
+import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
+import { avatarColor, avatarInitial } from '../../shared/lib/avatar';
+import { formatRelative } from '../../shared/lib/format-relative';
+import { useDebouncedValue } from '../../shared/lib/use-debounced-value';
 import {
   BookIcon,
   BranchIcon,
-  ChatIcon,
   ChevronRightIcon,
   CopyIcon,
   CpuIcon,
@@ -40,13 +43,11 @@ import {
   SortIcon,
   StopIcon,
   TrashIcon,
-  UploadIcon,
   UserIcon,
   XIcon,
 } from '../../shared/ui/icons';
 import { characterListQueryOptions } from '../characters/queries/character-list-query';
 import {
-  chatReplyPromptPreviewQueryBaseKey,
   chatReplyPromptPreviewQueryOptions,
   generationReadinessQueryOptions,
   toGenerationAvailabilityViewModel,
@@ -60,7 +61,6 @@ import { useBranchChat } from './mutations/use-branch-chat';
 import { useDeleteChat } from './mutations/use-delete-chat';
 import { useDeleteChatMessage } from './mutations/use-delete-chat-message';
 import { useUpdateChatBindings } from './mutations/use-update-chat-bindings';
-import { useUpdateChatGenerationSettings } from './mutations/use-update-chat-generation-settings';
 import { useUpdateChatLorebooks } from './mutations/use-update-chat-lorebooks';
 import { useUpdateChatMessage } from './mutations/use-update-chat-message';
 import { useUpdateChatTitle } from './mutations/use-update-chat-title';
@@ -69,53 +69,6 @@ import { chatSessionQueryOptions } from './queries/chat-session-query';
 
 interface ChatSessionScreenProps {
   chatId: string;
-}
-
-function getGenerationErrorMessage(error: unknown) {
-  if (error instanceof ApiError) {
-    return error.message;
-  }
-
-  return 'Не удалось получить ответ модели. Проверьте API и повторите попытку.';
-}
-
-function avatarColor(seed: string): string {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i += 1) {
-    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-  }
-  const hue = hash % 360;
-  return `oklch(0.45 0.1 ${hue})`;
-}
-
-function avatarInitial(value: string | null | undefined): string {
-  if (!value) {
-    return '?';
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return '?';
-  }
-  return trimmed.slice(0, 1).toUpperCase();
-}
-
-function formatRelative(iso: string, now: Date = new Date()): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return iso;
-  }
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.round(diffMs / 60_000);
-  if (diffMin < 1) return 'только что';
-  if (diffMin < 60) return `${diffMin} мин`;
-  const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24 && now.getDate() === date.getDate()) {
-    return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  }
-  if (diffHr < 48) return 'вчера';
-  const diffDays = Math.round(diffHr / 24);
-  if (diffDays < 7) return `${diffDays} д`;
-  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
 }
 
 function formatTime(iso: string): string {
@@ -218,24 +171,26 @@ export function ChatListScreen() {
           </div>
           {characterCounts.length > 0 ? (
             <div className="filters">
-              <span
+              <button
+                aria-pressed={characterFilter === null}
                 className="filter-chip"
                 data-active={characterFilter === null ? 'true' : 'false'}
                 onClick={() => setCharacterFilter(null)}
-                style={{ cursor: 'pointer' }}
+                type="button"
               >
                 Все
-              </span>
+              </button>
               {characterCounts.map(([name, count]) => (
-                <span
+                <button
+                  aria-pressed={characterFilter === name}
                   className="filter-chip"
                   data-active={characterFilter === name ? 'true' : 'false'}
                   key={name}
                   onClick={() => setCharacterFilter((current) => (current === name ? null : name))}
-                  style={{ cursor: 'pointer' }}
+                  type="button"
                 >
                   {name} <span className="dim">{count}</span>
-                </span>
+                </button>
               ))}
             </div>
           ) : null}
@@ -452,23 +407,15 @@ type RightPanelSection = 'settings' | 'character' | 'lorebooks' | 'context' | nu
 
 export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const [draftMessage, setDraftMessage] = useState('');
-  const deferredDraftMessage = useDeferredValue(draftMessage);
+  const debouncedDraftMessage = useDebouncedValue(draftMessage, 400);
   const openSection = useUiShellStore((state) => state.chatRightPanelSection);
   const setOpenSection = useUiShellStore((state) => state.setChatRightPanelSection);
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
 
   const chatSessionQuery = useQuery(chatSessionQueryOptions(chatId));
   const generationReadinessQuery = useQuery(generationReadinessQueryOptions());
-  const promptPreviewQuery = useQuery(chatReplyPromptPreviewQueryOptions(chatId, deferredDraftMessage));
+  const promptPreviewQuery = useQuery(chatReplyPromptPreviewQueryOptions(chatId, debouncedDraftMessage));
   const settingsOverviewQuery = useQuery(settingsOverviewQueryOptions());
-  const updateGenerationSettingsMutation = useUpdateChatGenerationSettings(chatId, {
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: chatReplyPromptPreviewQueryBaseKey(chatId),
-      });
-    },
-  });
   const updateMessageMutation = useUpdateChatMessage(chatId);
   const deleteMessageMutation = useDeleteChatMessage(chatId);
   const branchChatMutation = useBranchChat(chatId, {
@@ -528,8 +475,29 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const jobErrorMessage =
     chatReplyGeneration.latestJob?.status === 'failed' ? chatReplyGeneration.latestJob.error?.message : undefined;
   const generationErrorMessage = chatReplyGeneration.error
-    ? getGenerationErrorMessage(chatReplyGeneration.error)
+    ? getApiErrorMessage(
+        chatReplyGeneration.error,
+        'Не удалось получить ответ модели. Проверьте API и повторите попытку.',
+      )
     : jobErrorMessage;
+  const deleteChatErrorMessage = deleteChatMutation.error
+    ? getApiErrorMessage(deleteChatMutation.error, 'Не удалось удалить чат.')
+    : null;
+  const renameChatErrorMessage = renameChatMutation.error
+    ? getApiErrorMessage(renameChatMutation.error, 'Не удалось переименовать чат.')
+    : null;
+
+  const commitRename = () => {
+    if (renamingTitle === null || renameChatMutation.isPending) {
+      return;
+    }
+    const value = renamingTitle.trim();
+    if (value.length > 0 && value !== session.chat.title) {
+      renameChatMutation.mutate({ title: value });
+    } else {
+      setRenamingTitle(null);
+    }
+  };
 
   const blockReason = generationAvailability.blockReason;
   const isStreaming = Boolean(chatReplyGeneration.activeJob);
@@ -573,6 +541,9 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
           crumbs={[{ label: 'Чаты' }, { label: `${characterDisplay} · ${session.chat.title}`, strong: true }]}
           actions={
             <>
+              {deleteChatErrorMessage ? (
+                <span style={{ color: 'var(--danger)', fontSize: 'var(--fz-xs)' }}>{deleteChatErrorMessage}</span>
+              ) : null}
               <a
                 className="btn"
                 download
@@ -653,24 +624,12 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                     autoFocus
                     className="input"
                     disabled={renameChatMutation.isPending}
-                    onBlur={() => {
-                      const value = renamingTitle.trim();
-                      if (value.length > 0 && value !== session.chat.title) {
-                        renameChatMutation.mutate({ title: value });
-                      } else {
-                        setRenamingTitle(null);
-                      }
-                    }}
+                    onBlur={commitRename}
                     onChange={(event) => setRenamingTitle(event.currentTarget.value)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') {
                         event.preventDefault();
-                        const value = renamingTitle.trim();
-                        if (value.length > 0 && value !== session.chat.title) {
-                          renameChatMutation.mutate({ title: value });
-                        } else {
-                          setRenamingTitle(null);
-                        }
+                        commitRename();
                       } else if (event.key === 'Escape') {
                         event.preventDefault();
                         setRenamingTitle(null);
@@ -700,6 +659,9 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                 <span>
                   · {messageCount} сообщ. · ред. {formatRelative(lastUpdated)}
                 </span>
+                {renameChatErrorMessage ? (
+                  <span style={{ color: 'var(--danger)' }}>{renameChatErrorMessage}</span>
+                ) : null}
               </div>
             </div>
             {tokenStats ? (
@@ -901,8 +863,9 @@ function BubbleMessage({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [branchDraft, setBranchDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const deferredDraft = useDeferredValue(draft);
-  const trimmedDraft = deferredDraft.trim();
+  const [actionError, setActionError] = useState<string | null>(null);
+  const debouncedDraft = useDebouncedValue(draft, 400);
+  const trimmedDraft = debouncedDraft.trim();
   const editPreviewQuery = useQuery({
     ...chatReplyPromptPreviewQueryOptions(chatId, undefined, [{ content: trimmedDraft, messageIndex }]),
     enabled: mode === 'edit' && trimmedDraft.length > 0 && trimmedDraft !== text,
@@ -926,9 +889,12 @@ function BubbleMessage({
       return;
     }
     setBusy(true);
+    setActionError(null);
     try {
       await onSave(trimmed);
       setMode('view');
+    } catch (error) {
+      setActionError(getApiErrorMessage(error, 'Не удалось сохранить сообщение.'));
     } finally {
       setBusy(false);
     }
@@ -936,6 +902,7 @@ function BubbleMessage({
 
   const handleCancel = () => {
     setDraft(text);
+    setActionError(null);
     setMode('view');
   };
 
@@ -949,8 +916,11 @@ function BubbleMessage({
 
   const handleConfirmDelete = async () => {
     setBusy(true);
+    setActionError(null);
     try {
       await onDelete();
+    } catch (error) {
+      setActionError(getApiErrorMessage(error, 'Не удалось удалить сообщение.'));
     } finally {
       setBusy(false);
       setConfirmDelete(false);
@@ -977,9 +947,12 @@ function BubbleMessage({
   const handleBranchSubmit = async () => {
     const title = (branchDraft ?? '').trim();
     setBusy(true);
+    setActionError(null);
     try {
       await onBranch(title.length > 0 ? title : undefined);
       setBranchDraft(null);
+    } catch (error) {
+      setActionError(getApiErrorMessage(error, 'Не удалось создать ветку.'));
     } finally {
       setBusy(false);
     }
@@ -1191,6 +1164,17 @@ function BubbleMessage({
             )}
           </div>
         ) : null}
+        {actionError ? (
+          <div
+            style={{
+              color: 'var(--danger)',
+              fontSize: 'var(--fz-2xs)',
+              textAlign: isUser ? 'right' : 'left',
+            }}
+          >
+            {actionError}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -1217,7 +1201,6 @@ function Composer({
   onSubmit,
   value,
 }: ComposerProps) {
-  const tokens = value.length;
   return (
     <form
       className="card"
@@ -1246,8 +1229,8 @@ function Composer({
           <button className="btn btn--icon" title="Настройки" type="button">
             <SlidersIcon size={14} />
           </button>
-          <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
-            {tokens.toLocaleString('ru-RU')} / 4096
+          <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }} title="Длина сообщения в символах">
+            {value.length.toLocaleString('ru-RU')} симв.
           </span>
         </div>
         <div className="row gap-8">
@@ -1545,9 +1528,7 @@ function CharacterSectionContent({
   };
 
   const mutationError = bindingsMutation.error
-    ? bindingsMutation.error instanceof ApiError
-      ? bindingsMutation.error.message
-      : 'Не удалось обновить привязку.'
+    ? getApiErrorMessage(bindingsMutation.error, 'Не удалось обновить привязку.')
     : null;
 
   return (

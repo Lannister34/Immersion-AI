@@ -1,9 +1,9 @@
-import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { ChatGenerationSettingsDtoSchema } from '@immersion/contracts/chats';
 
+import { writeFileAtomically } from '../../../lib/atomic-file.js';
 import { resolveDataRoot } from '../../../lib/data-root.js';
 import type {
   AppendChatMessageInput,
@@ -108,21 +108,6 @@ async function withChatWriteQueue<T>(chatId: string, operation: () => Promise<T>
     if (chatWriteQueues.get(chatId) === next) {
       chatWriteQueues.delete(chatId);
     }
-  }
-}
-
-async function writeChatFileAtomically(filePath: string, content: string) {
-  const temporaryPath = path.join(
-    path.dirname(filePath),
-    `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`,
-  );
-
-  try {
-    await fs.writeFile(temporaryPath, content, 'utf8');
-    await fs.rename(temporaryPath, filePath);
-  } catch (error) {
-    await fs.rm(temporaryPath, { force: true }).catch(() => undefined);
-    throw error;
   }
 }
 
@@ -454,7 +439,7 @@ export class FileChatRepository implements ChatRepository {
         ...messages.map((message) => JSON.stringify(createStoredChatLine(message))),
       ];
 
-      await writeChatFileAtomically(filePath, `${nextLines.join('\n')}\n`);
+      await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
 
       return readChatFile(chatId);
     });
@@ -497,7 +482,7 @@ export class FileChatRepository implements ChatRepository {
       const newFilePath = resolveChatFilePath(input.newChatId);
 
       await fs.mkdir(resolveChatsDirectory(), { recursive: true });
-      await writeChatFileAtomically(newFilePath, `${nextLines.join('\n')}\n`);
+      await writeFileAtomically(newFilePath, `${nextLines.join('\n')}\n`);
 
       const newSession = await readChatFile(input.newChatId);
       return newSession?.chat ?? null;
@@ -616,7 +601,7 @@ export class FileChatRepository implements ChatRepository {
         ...existingMessageLines,
       ];
 
-      await writeChatFileAtomically(filePath, `${nextLines.join('\n')}\n`);
+      await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
 
       return readChatFile(chatId);
     });
@@ -647,7 +632,7 @@ export class FileChatRepository implements ChatRepository {
         ...existingMessageLines,
       ];
 
-      await writeChatFileAtomically(filePath, `${nextLines.join('\n')}\n`);
+      await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
 
       return readChatFile(chatId);
     });
@@ -682,7 +667,7 @@ export class FileChatRepository implements ChatRepository {
         ...existingMessageLines,
       ];
 
-      await writeChatFileAtomically(filePath, `${nextLines.join('\n')}\n`);
+      await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
 
       return readChatFile(chatId);
     });
@@ -753,7 +738,7 @@ export class FileChatRepository implements ChatRepository {
         ...existingMessageLines,
       ];
 
-      await writeChatFileAtomically(filePath, `${nextLines.join('\n')}\n`);
+      await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
 
       return readChatFile(chatId);
     });
@@ -800,7 +785,7 @@ export class FileChatRepository implements ChatRepository {
         ...existingMessageLines,
       ];
 
-      await writeChatFileAtomically(filePath, `${nextLines.join('\n')}\n`);
+      await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
 
       return readChatFile(chatId);
     });
@@ -832,7 +817,7 @@ export class FileChatRepository implements ChatRepository {
         ...keptMessageLines,
       ];
 
-      await writeChatFileAtomically(filePath, `${nextLines.join('\n')}\n`);
+      await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
 
       return readChatFile(chatId);
     });

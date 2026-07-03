@@ -1,10 +1,13 @@
 import type { CharacterDetailDto, SaveCharacterCommand } from '@immersion/contracts/characters';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
-import { ApiError, createApiUrl } from '../../shared/api/client';
+import { createApiUrl } from '../../shared/api/client';
+import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
+import { formatRelative } from '../../shared/lib/format-relative';
+import { Field } from '../../shared/ui/field';
 import { ChatIcon, TrashIcon } from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
 import { chatListQueryKey } from '../chats/queries/chat-list-query';
@@ -69,15 +72,17 @@ function toCommand(state: CharacterFormState): SaveCharacterCommand {
   };
 }
 
-function formatRelative(iso: string | null, now: Date = new Date()): string {
-  if (!iso) return '—';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.round(diffMs / 60_000);
-  if (diffMin < 1) return 'только что';
-  if (diffMin < 60) return `${diffMin} мин назад`;
-  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' });
+function formsEqual(left: CharacterFormState, right: CharacterFormState): boolean {
+  return (
+    left.description === right.description &&
+    left.exampleDialogue === right.exampleDialogue &&
+    left.firstMessage === right.firstMessage &&
+    left.name === right.name &&
+    left.personality === right.personality &&
+    left.scenario === right.scenario &&
+    left.systemPrompt === right.systemPrompt &&
+    left.tagsText === right.tagsText
+  );
 }
 
 export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProps) {
@@ -93,20 +98,22 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
   const initialState = useMemo(() => toFormState(detail), [detail]);
   const [form, setForm] = useState<CharacterFormState>(initialState);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const appliedInitialStateRef = useRef(initialState);
 
+  // Сбрасываем форму на серверное состояние только пока пользователь её не редактировал.
   useEffect(() => {
-    setForm(initialState);
+    const previousInitialState = appliedInitialStateRef.current;
+    appliedInitialStateRef.current = initialState;
+    setForm((current) => (formsEqual(current, previousInitialState) ? initialState : current));
   }, [initialState]);
 
-  const isDirty =
-    form.name !== initialState.name ||
-    form.description !== initialState.description ||
-    form.personality !== initialState.personality ||
-    form.scenario !== initialState.scenario ||
-    form.firstMessage !== initialState.firstMessage ||
-    form.exampleDialogue !== initialState.exampleDialogue ||
-    form.systemPrompt !== initialState.systemPrompt ||
-    form.tagsText !== initialState.tagsText;
+  const isDirty = !formsEqual(form, initialState);
+
+  // Значение читаем из события синхронно: внутри отложенного апдейтера
+  // event.currentTarget уже null, и чтение .value роняет экран.
+  const setField = <K extends keyof CharacterFormState>(field: K, value: CharacterFormState[K]) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
 
   const canEdit = isNew || detail?.isEditable === true;
 
@@ -154,18 +161,12 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
     saveMutation.mutate();
   };
 
-  const errorMessage =
-    saveMutation.error instanceof ApiError
-      ? saveMutation.error.message
-      : saveMutation.error
-        ? 'Не удалось сохранить персонажа.'
-        : null;
-  const deleteError =
-    deleteMutation.error instanceof ApiError
-      ? deleteMutation.error.message
-      : deleteMutation.error
-        ? 'Не удалось удалить персонажа.'
-        : null;
+  const errorMessage = saveMutation.error
+    ? getApiErrorMessage(saveMutation.error, 'Не удалось сохранить персонажа.')
+    : null;
+  const deleteError = deleteMutation.error
+    ? getApiErrorMessage(deleteMutation.error, 'Не удалось удалить персонажа.')
+    : null;
 
   return (
     <main className="main">
@@ -281,7 +282,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     disabled={!canEdit || saveMutation.isPending}
                     id="character-name"
                     maxLength={200}
-                    onChange={(event) => setForm((current) => ({ ...current, name: event.currentTarget.value }))}
+                    onChange={(event) => setField('name', event.currentTarget.value)}
                     placeholder="Например: Эля"
                     value={form.name}
                   />
@@ -292,7 +293,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     disabled={!canEdit || saveMutation.isPending}
                     id="character-description"
                     maxLength={20_000}
-                    onChange={(event) => setForm((current) => ({ ...current, description: event.currentTarget.value }))}
+                    onChange={(event) => setField('description', event.currentTarget.value)}
                     rows={6}
                     value={form.description}
                   />
@@ -303,7 +304,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     disabled={!canEdit || saveMutation.isPending}
                     id="character-personality"
                     maxLength={5_000}
-                    onChange={(event) => setForm((current) => ({ ...current, personality: event.currentTarget.value }))}
+                    onChange={(event) => setField('personality', event.currentTarget.value)}
                     rows={4}
                     value={form.personality}
                   />
@@ -318,7 +319,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     disabled={!canEdit || saveMutation.isPending}
                     id="character-scenario"
                     maxLength={5_000}
-                    onChange={(event) => setForm((current) => ({ ...current, scenario: event.currentTarget.value }))}
+                    onChange={(event) => setField('scenario', event.currentTarget.value)}
                     rows={3}
                     value={form.scenario}
                   />
@@ -333,9 +334,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     disabled={!canEdit || saveMutation.isPending}
                     id="character-first-mes"
                     maxLength={20_000}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, firstMessage: event.currentTarget.value }))
-                    }
+                    onChange={(event) => setField('firstMessage', event.currentTarget.value)}
                     rows={4}
                     value={form.firstMessage}
                   />
@@ -350,9 +349,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     disabled={!canEdit || saveMutation.isPending}
                     id="character-mes-example"
                     maxLength={20_000}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, exampleDialogue: event.currentTarget.value }))
-                    }
+                    onChange={(event) => setField('exampleDialogue', event.currentTarget.value)}
                     rows={5}
                     value={form.exampleDialogue}
                   />
@@ -367,9 +364,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     disabled={!canEdit || saveMutation.isPending}
                     id="character-system-prompt"
                     maxLength={20_000}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, systemPrompt: event.currentTarget.value }))
-                    }
+                    onChange={(event) => setField('systemPrompt', event.currentTarget.value)}
                     rows={4}
                     value={form.systemPrompt}
                   />
@@ -379,7 +374,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     className="input"
                     disabled={!canEdit || saveMutation.isPending}
                     id="character-tags"
-                    onChange={(event) => setForm((current) => ({ ...current, tagsText: event.currentTarget.value }))}
+                    onChange={(event) => setField('tagsText', event.currentTarget.value)}
                     placeholder="ru, slice-of-life, ремесло"
                     value={form.tagsText}
                   />
@@ -436,32 +431,5 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
         </div>
       </div>
     </main>
-  );
-}
-
-interface FieldProps {
-  children: ReactNode;
-  hint?: string;
-  id: string;
-  label: string;
-  required?: boolean;
-}
-
-function Field({ children, hint, id, label, required }: FieldProps) {
-  return (
-    <div className="field">
-      <label className="between" htmlFor={id}>
-        <span>
-          {label}
-          {required ? <span style={{ color: 'var(--danger)' }}> *</span> : null}
-        </span>
-      </label>
-      {children}
-      {hint ? (
-        <div className="muted" style={{ fontSize: 'var(--fz-2xs)', marginTop: 4 }}>
-          {hint}
-        </div>
-      ) : null}
-    </div>
   );
 }

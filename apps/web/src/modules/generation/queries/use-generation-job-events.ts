@@ -28,6 +28,9 @@ export function useGenerationJobEvents(chatId: string, jobId: string | undefined
         void queryClient.invalidateQueries({
           queryKey: chatListQueryKey,
         });
+        void queryClient.invalidateQueries({
+          queryKey: chatSessionQueryKey(chatId),
+        });
       }
     };
     const handleJobEvent = (message: MessageEvent) => {

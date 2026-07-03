@@ -80,7 +80,9 @@ async function resolvePreviewModelName(): Promise<string | null> {
   const providerSettings = await getProviderSettings();
 
   if (providerSettings.mode === 'builtin') {
-    return getRuntimeOverview().serverStatus.model?.trim() || null;
+    const overview = await getRuntimeOverview();
+
+    return overview.serverStatus.model?.trim() || null;
   }
 
   const config = providerSettings.providerConfigs[providerSettings.activeProvider];

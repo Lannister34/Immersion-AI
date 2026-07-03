@@ -1,12 +1,12 @@
-import { ApiProblemSchema } from '@immersion/contracts/common';
 import {
   SaveScenarioCommandSchema,
   ScenarioDetailResponseSchema,
   ScenarioIdSchema,
 } from '@immersion/contracts/scenarios';
 import type { FastifyPluginAsync } from 'fastify';
-import { ZodError, z } from 'zod';
+import { z } from 'zod';
 
+import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
 import { deleteScenario } from '../../application/delete-scenario.js';
 import { getScenario, ScenarioNotFoundError } from '../../application/get-scenario.js';
 import { listScenarios } from '../../application/list-scenarios.js';
@@ -16,35 +16,13 @@ const ScenarioRouteParamsSchema = z.object({
   scenarioId: ScenarioIdSchema,
 });
 
-function toProblem(error: unknown) {
-  if (error instanceof ZodError) {
-    return {
-      statusCode: 400,
-      body: ApiProblemSchema.parse({
-        code: 'validation_error',
-        message: error.issues[0]?.message ?? 'Invalid request payload.',
-      }),
-    };
-  }
-
+const toProblem = createToProblem((error) => {
   if (error instanceof ScenarioNotFoundError) {
-    return {
-      statusCode: 404,
-      body: ApiProblemSchema.parse({
-        code: 'scenario_not_found',
-        message: 'Scenario not found.',
-      }),
-    };
+    return problem(404, 'scenario_not_found', 'Scenario not found.');
   }
 
-  return {
-    statusCode: 500,
-    body: ApiProblemSchema.parse({
-      code: 'internal_error',
-      message: 'Unexpected error.',
-    }),
-  };
-}
+  return null;
+});
 
 export const scenariosRoutes: FastifyPluginAsync = async (app) => {
   app.get('/', async (request, reply) => {
@@ -52,9 +30,9 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
       return await listScenarios();
     } catch (error) {
       request.log.error({ err: error }, 'Failed to list scenarios');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -65,9 +43,9 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(201).send(ScenarioDetailResponseSchema.parse({ scenario }));
     } catch (error) {
       request.log.error({ err: error }, 'Failed to create scenario');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -78,9 +56,9 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
       return ScenarioDetailResponseSchema.parse({ scenario });
     } catch (error) {
       request.log.error({ err: error }, 'Failed to load scenario');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -92,9 +70,9 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
       return ScenarioDetailResponseSchema.parse({ scenario });
     } catch (error) {
       request.log.error({ err: error }, 'Failed to update scenario');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -105,9 +83,9 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(204).send();
     } catch (error) {
       request.log.error({ err: error }, 'Failed to delete scenario');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 };

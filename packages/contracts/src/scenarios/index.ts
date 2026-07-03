@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
-export const ScenarioIdSchema = z.string().min(1).max(200);
+import { createFileIdSchema } from '../common/file-id.js';
+
+export const ScenarioIdSchema = createFileIdSchema('Scenario id');
 export type ScenarioId = z.infer<typeof ScenarioIdSchema>;
 
 export const ScenarioSummaryDtoSchema = z.object({

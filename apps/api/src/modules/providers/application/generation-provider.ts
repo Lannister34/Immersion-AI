@@ -51,7 +51,7 @@ export async function resolveGenerationProviderEndpoint(): Promise<GenerationPro
   const settings = await getProviderSettings();
 
   if (settings.mode === 'builtin') {
-    const runtimeEndpoint = getRunningRuntimeEndpoint();
+    const runtimeEndpoint = await getRunningRuntimeEndpoint();
 
     if (!runtimeEndpoint) {
       throw new GenerationProviderUnavailableError('Встроенный сервер не запущен.');

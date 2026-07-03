@@ -48,8 +48,8 @@ function getConfiguredExternalUrl(settings: ProviderSettingsSnapshot) {
   return typeof url === 'string' ? url.trim() : '';
 }
 
-function getBuiltinReadiness(settings: ProviderSettingsSnapshot): GenerationReadinessResponse {
-  const runtime = getRuntimeOverview();
+async function getBuiltinReadiness(settings: ProviderSettingsSnapshot): Promise<GenerationReadinessResponse> {
+  const runtime = await getRuntimeOverview();
 
   if (runtime.serverStatus.status === 'running') {
     return GenerationReadinessResponseSchema.parse({
@@ -159,5 +159,5 @@ function getExternalReadiness(settings: ProviderSettingsSnapshot): GenerationRea
 export async function getGenerationReadiness(): Promise<GenerationReadinessResponse> {
   const settings = await getProviderSettings();
 
-  return settings.mode === 'builtin' ? getBuiltinReadiness(settings) : getExternalReadiness(settings);
+  return settings.mode === 'builtin' ? await getBuiltinReadiness(settings) : getExternalReadiness(settings);
 }

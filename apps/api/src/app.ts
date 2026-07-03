@@ -13,13 +13,41 @@ import { settingsRoutes } from './modules/settings/interface/http/routes.js';
 import { healthRoute } from './routes/health.js';
 import { rootRoute } from './routes/root.js';
 
+// Character card imports arrive as base64 JSON (up to ~10M characters), so the
+// default 1 MiB Fastify body limit is far too small.
+const API_BODY_LIMIT_BYTES = 16 * 1024 * 1024;
+
+// Dev web server (4788) and Playwright smoke preview (4173).
+const DEFAULT_WEB_ORIGINS = [
+  'http://localhost:4788',
+  'http://127.0.0.1:4788',
+  'http://localhost:4173',
+  'http://127.0.0.1:4173',
+];
+
+export function resolveAllowedWebOrigins(): string[] {
+  const configured = process.env.IMMERSION_WEB_ORIGINS;
+
+  if (!configured) {
+    return DEFAULT_WEB_ORIGINS;
+  }
+
+  const origins = configured
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+
+  return origins.length > 0 ? origins : DEFAULT_WEB_ORIGINS;
+}
+
 export function buildApiApp() {
   const app = Fastify({
+    bodyLimit: API_BODY_LIMIT_BYTES,
     loggerInstance: buildApiLogger(),
   });
 
   app.register(cors, {
-    origin: true,
+    origin: resolveAllowedWebOrigins(),
   });
   app.register(rootRoute);
   app.register(healthRoute, { prefix: '/health' });

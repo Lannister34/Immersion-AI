@@ -7,9 +7,9 @@ import {
   UpdateChatMessageCommandSchema,
   UpdateChatTitleCommandSchema,
 } from '@immersion/contracts/chats';
-import { ApiProblemSchema } from '@immersion/contracts/common';
 import type { FastifyPluginAsync } from 'fastify';
-import { ZodError, z } from 'zod';
+import { z } from 'zod';
+import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
 import { CharacterNotFoundError } from '../../../characters/application/get-character-avatar.js';
 import { ScenarioNotFoundError } from '../../../scenarios/application/get-scenario.js';
 import { ChatMessageNotFoundError, ChatNotFoundError } from '../../application/append-chat-messages.js';
@@ -42,75 +42,29 @@ const ChatListQuerySchema = z.object({
   q: z.string().trim().max(200).optional(),
 });
 
-function toProblem(error: unknown) {
-  if (error instanceof ZodError) {
-    return {
-      statusCode: 400,
-      body: ApiProblemSchema.parse({
-        code: 'validation_error',
-        message: error.issues[0]?.message ?? 'Invalid request payload.',
-      }),
-    };
-  }
-
+const toProblem = createToProblem((error) => {
   if (error instanceof ChatNotFoundError) {
-    return {
-      statusCode: 404,
-      body: ApiProblemSchema.parse({
-        code: 'chat_not_found',
-        message: 'Chat session not found.',
-      }),
-    };
+    return problem(404, 'chat_not_found', 'Chat session not found.');
   }
 
   if (error instanceof ChatMessageNotFoundError) {
-    return {
-      statusCode: 404,
-      body: ApiProblemSchema.parse({
-        code: 'chat_message_not_found',
-        message: 'Chat message not found.',
-      }),
-    };
+    return problem(404, 'chat_message_not_found', 'Chat message not found.');
   }
 
   if (error instanceof CharacterNotFoundError) {
-    return {
-      statusCode: 404,
-      body: ApiProblemSchema.parse({
-        code: 'character_not_found',
-        message: 'Character not found.',
-      }),
-    };
+    return problem(404, 'character_not_found', 'Character not found.');
   }
 
   if (error instanceof ScenarioNotFoundError) {
-    return {
-      statusCode: 404,
-      body: ApiProblemSchema.parse({
-        code: 'scenario_not_found',
-        message: 'Scenario not found.',
-      }),
-    };
+    return problem(404, 'scenario_not_found', 'Scenario not found.');
   }
 
   if (error instanceof InvalidChatGenerationSettingsError) {
-    return {
-      statusCode: 400,
-      body: ApiProblemSchema.parse({
-        code: 'invalid_chat_generation_settings',
-        message: error.message,
-      }),
-    };
+    return problem(400, 'invalid_chat_generation_settings', error.message);
   }
 
-  return {
-    statusCode: 500,
-    body: ApiProblemSchema.parse({
-      code: 'internal_error',
-      message: 'Unexpected error.',
-    }),
-  };
-}
+  return null;
+});
 
 export const chatsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/', async (request, reply) => {
@@ -119,9 +73,9 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return await listChats(query.q ? { searchText: query.q } : {});
     } catch (error) {
       request.log.error({ err: error }, 'Failed to list generic chats');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -133,9 +87,9 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(201).send(response);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to create generic chat');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -153,9 +107,9 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return session;
     } catch (error) {
       request.log.error({ err: error }, 'Failed to load generic chat session');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -173,9 +127,9 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return exported.body;
     } catch (error) {
       request.log.error({ err: error }, 'Failed to export chat');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -186,9 +140,9 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(204).send();
     } catch (error) {
       request.log.error({ err: error }, 'Failed to delete chat');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -200,9 +154,9 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return session;
     } catch (error) {
       request.log.error({ err: error }, 'Failed to update chat lorebooks');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -214,9 +168,9 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return { chat };
     } catch (error) {
       request.log.error({ err: error }, 'Failed to update chat title');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -231,9 +185,9 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       });
     } catch (error) {
       request.log.error({ err: error }, 'Failed to update chat bindings');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -244,9 +198,9 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return await updateChatGenerationSettings(chatId, request.body);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to update generic chat generation settings');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -264,9 +218,9 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return { session };
     } catch (error) {
       request.log.error({ err: error }, 'Failed to update chat message');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -282,9 +236,9 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return { session };
     } catch (error) {
       request.log.error({ err: error }, 'Failed to truncate chat messages');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -302,9 +256,9 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(201).send({ chat });
     } catch (error) {
       request.log.error({ err: error }, 'Failed to branch chat');
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 };

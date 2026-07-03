@@ -6,18 +6,13 @@ import {
 } from '@immersion/contracts/settings';
 import type { z } from 'zod';
 
-import {
-  readLegacyUserSettingsSource,
-  writeLegacyUserSettingsSource,
-} from '../../../shared/infrastructure/legacy-settings-source.js';
+import { updateLegacyUserSettingsSource } from '../../../shared/infrastructure/legacy-settings-source.js';
 
 type SettingsProfile = z.infer<typeof SettingsProfileSchema>;
 
 export async function updateSettingsProfile(
   command: UpdateSettingsProfileCommand,
 ): Promise<UpdateSettingsProfileResponse> {
-  const existing = readLegacyUserSettingsSource();
-
   const nextProfile: SettingsProfile = {
     userName: command.userName.trim(),
     userPersona: command.userPersona,
@@ -28,7 +23,7 @@ export async function updateSettingsProfile(
     thinkingEnabled: command.thinkingEnabled,
   };
 
-  const next: Record<string, unknown> = {
+  await updateLegacyUserSettingsSource((existing) => ({
     ...existing,
     userName: nextProfile.userName,
     userPersona: nextProfile.userPersona,
@@ -37,9 +32,7 @@ export async function updateSettingsProfile(
     responseLanguage: nextProfile.responseLanguage,
     streamingEnabled: nextProfile.streamingEnabled,
     thinkingEnabled: nextProfile.thinkingEnabled,
-  };
-
-  await writeLegacyUserSettingsSource(next);
+  }));
 
   return UpdateSettingsProfileResponseSchema.parse({ profile: nextProfile });
 }

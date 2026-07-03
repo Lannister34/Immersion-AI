@@ -9,23 +9,13 @@ import { type ChangeEvent, type MouseEvent, useMemo, useRef, useState } from 're
 
 import { Topbar } from '../../app/layout/topbar';
 import { ApiError } from '../../shared/api/client';
+import { formatRelative } from '../../shared/lib/format-relative';
 import { BookIcon, PlusIcon, SearchIcon, TrashIcon, UploadIcon, XIcon } from '../../shared/ui/icons';
 import { createLorebook } from './api/save-lorebook';
 import { useDeleteLorebook } from './mutations/use-delete-lorebook';
 import { lorebookListQueryKey, lorebookListQueryOptions } from './queries/lorebook-list-query';
 
 export { LorebookEditorScreen } from './editor';
-
-function formatRelative(iso: string, now: Date = new Date()): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.round(diffMs / 86_400_000);
-  if (diffDays === 0) return 'сегодня';
-  if (diffDays === 1) return 'вчера';
-  if (diffDays < 7) return `${diffDays} д`;
-  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
-}
 
 function normalizeLorebookEntry(raw: unknown) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -201,24 +191,26 @@ export function LorebooksScreen() {
           </div>
           {tagCloud.length > 0 ? (
             <div className="filters" style={{ marginTop: 8 }}>
-              <span
+              <button
+                aria-pressed={activeTags.length === 0}
                 className="filter-chip"
                 data-active={activeTags.length === 0 ? 'true' : 'false'}
                 onClick={() => setActiveTags([])}
-                style={{ cursor: 'pointer' }}
+                type="button"
               >
                 Все
-              </span>
+              </button>
               {tagCloud.map(([tag, count]) => (
-                <span
+                <button
+                  aria-pressed={activeTags.includes(tag)}
                   className="filter-chip"
                   data-active={activeTags.includes(tag) ? 'true' : 'false'}
                   key={tag}
                   onClick={() => toggleTag(tag)}
-                  style={{ cursor: 'pointer' }}
+                  type="button"
                 >
                   {tag} <span className="dim">{count}</span>
-                </span>
+                </button>
               ))}
             </div>
           ) : null}

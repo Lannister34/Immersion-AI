@@ -10,6 +10,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
+import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import {
   CpuIcon,
   FolderIcon,
@@ -20,11 +21,11 @@ import {
   RefreshIcon,
   SearchIcon,
 } from '../../shared/ui/icons';
-import { getRuntimeOverview } from './api/get-runtime-overview';
 import { saveProviderSettings } from './api/save-provider-settings';
 import { startRuntime } from './api/start-runtime';
 import { stopRuntime } from './api/stop-runtime';
 import { providerSettingsQueryKey, providerSettingsQueryOptions } from './queries/provider-settings-query';
+import { runtimeOverviewQueryKey, runtimeOverviewQueryOptions } from './queries/runtime-overview-query';
 
 function toProviderCommand(snapshot: ProviderSettingsSnapshot, mode: ProviderMode): UpdateProviderSettingsCommand {
   return {
@@ -70,8 +71,7 @@ export function ServerControlScreen() {
   const [search, setSearch] = useState('');
   const providerSettingsQuery = useQuery(providerSettingsQueryOptions());
   const runtimeOverviewQuery = useQuery({
-    queryKey: ['runtime', 'overview'],
-    queryFn: getRuntimeOverview,
+    ...runtimeOverviewQueryOptions(),
     refetchInterval: 2500,
   });
 
@@ -86,16 +86,18 @@ export function ServerControlScreen() {
   const startRuntimeMutation = useMutation({
     mutationFn: startRuntime,
     onSuccess: (overview: RuntimeOverviewResponse) => {
-      queryClient.setQueryData(['runtime', 'overview'], overview);
+      queryClient.setQueryData(runtimeOverviewQueryKey, overview);
     },
   });
 
   const stopRuntimeMutation = useMutation({
     mutationFn: stopRuntime,
     onSuccess: (overview: RuntimeOverviewResponse) => {
-      queryClient.setQueryData(['runtime', 'overview'], overview);
+      queryClient.setQueryData(runtimeOverviewQueryKey, overview);
     },
   });
+
+  const [modeChangeError, setModeChangeError] = useState<string | null>(null);
 
   const snapshot = providerSettingsQuery.data;
   const overview = runtimeOverviewQuery.data;
@@ -104,16 +106,28 @@ export function ServerControlScreen() {
 
   const handleModeChange = async (mode: ProviderMode) => {
     if (!snapshot || mode === activeMode || saveProviderMutation.isPending) return;
-    await saveProviderMutation.mutateAsync(toProviderCommand(snapshot, mode));
+    setModeChangeError(null);
+    try {
+      await saveProviderMutation.mutateAsync(toProviderCommand(snapshot, mode));
+    } catch (error) {
+      setModeChangeError(getApiErrorMessage(error, 'Не удалось переключить режим провайдера.'));
+    }
   };
 
-  const handleRuntimeStart = async (command: RuntimeStartCommand) => {
-    await startRuntimeMutation.mutateAsync(command);
+  const handleRuntimeStart = (command: RuntimeStartCommand) => {
+    startRuntimeMutation.mutate(command);
   };
 
-  const handleRuntimeStop = async () => {
-    await stopRuntimeMutation.mutateAsync();
+  const handleRuntimeStop = () => {
+    stopRuntimeMutation.mutate();
   };
+
+  let runtimeActionErrorMessage: string | null = null;
+  if (startRuntimeMutation.error) {
+    runtimeActionErrorMessage = getApiErrorMessage(startRuntimeMutation.error, 'Не удалось запустить модель.');
+  } else if (stopRuntimeMutation.error) {
+    runtimeActionErrorMessage = getApiErrorMessage(stopRuntimeMutation.error, 'Не удалось остановить сервер.');
+  }
 
   const filteredModels = (overview?.models ?? []).filter((model) => {
     if (!search.trim()) return true;
@@ -166,8 +180,21 @@ export function ServerControlScreen() {
               </button>
             </div>
           </div>
+          {modeChangeError ? (
+            <div
+              className="card"
+              style={{ borderColor: 'var(--danger)', color: 'var(--danger)', marginTop: 10, padding: 10 }}
+            >
+              {modeChangeError}
+            </div>
+          ) : null}
         </div>
         <div className="page__body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {runtimeActionErrorMessage ? (
+            <div className="card" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', padding: 10 }}>
+              {runtimeActionErrorMessage}
+            </div>
+          ) : null}
           {activeMode === 'builtin' && overview ? (
             <>
               <section
@@ -201,7 +228,7 @@ export function ServerControlScreen() {
                     <button
                       className="btn btn--danger"
                       disabled={stopRuntimeMutation.isPending}
-                      onClick={() => void handleRuntimeStop()}
+                      onClick={handleRuntimeStop}
                       type="button"
                     >
                       <PowerIcon size={13} /> Остановить
@@ -292,7 +319,7 @@ export function ServerControlScreen() {
                                   className="btn btn--xs btn--ghost-bordered"
                                   disabled={startRuntimeMutation.isPending}
                                   onClick={() =>
-                                    void handleRuntimeStart({
+                                    handleRuntimeStart({
                                       contextSize: overview.serverConfig.contextSize,
                                       flashAttention: overview.serverConfig.flashAttention,
                                       gpuLayers: overview.serverConfig.gpuLayers,
@@ -450,7 +477,11 @@ function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFo
           <input
             className="input"
             id="provider-url"
-            onChange={(event) => setForm((current) => ({ ...current, url: event.currentTarget.value }))}
+            onChange={(event) => {
+              // Значение читаем синхронно: в отложенном апдейтере event.currentTarget уже null.
+              const { value } = event.currentTarget;
+              setForm((current) => ({ ...current, url: value }));
+            }}
             placeholder="http://127.0.0.1:5001"
             type="url"
             value={form.url}
@@ -463,7 +494,10 @@ function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFo
               autoComplete="off"
               className="input"
               id="provider-api-key"
-              onChange={(event) => setForm((current) => ({ ...current, apiKey: event.currentTarget.value }))}
+              onChange={(event) => {
+                const { value } = event.currentTarget;
+                setForm((current) => ({ ...current, apiKey: value }));
+              }}
               placeholder="опционально"
               type="password"
               value={form.apiKey}
@@ -476,7 +510,10 @@ function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFo
             <input
               className="input"
               id="provider-model"
-              onChange={(event) => setForm((current) => ({ ...current, model: event.currentTarget.value }))}
+              onChange={(event) => {
+                const { value } = event.currentTarget;
+                setForm((current) => ({ ...current, model: value }));
+              }}
               placeholder="опционально, например: local-model"
               value={form.model}
             />
