@@ -1,4 +1,4 @@
-import { getRunningRuntimeEndpoint } from '../../runtime/application/get-running-runtime-base-url.js';
+import { getRunningRuntimeEndpoint } from '../../runtime/application/get-running-runtime-endpoint.js';
 import type { RuntimeEndpointPort } from '../application/runtime-endpoint-port.js';
 
 /**
