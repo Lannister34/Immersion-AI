@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import {
   type RuntimeModelSummary,
+  type RuntimeModelsDirStatus,
   type RuntimeOverviewResponse,
   RuntimeOverviewResponseSchema,
 } from '@immersion/contracts/runtime';
@@ -14,10 +15,15 @@ import { normalizeRuntimeConfig } from './runtime-config.js';
 
 const MODEL_SCAN_TTL_MS = 3_000;
 
+interface RuntimeModelScanResult {
+  directories: RuntimeModelsDirStatus[];
+  models: RuntimeModelSummary[];
+}
+
 interface ModelScanCacheEntry {
   expiresAt: number;
   key: string;
-  models: RuntimeModelSummary[];
+  scan: RuntimeModelScanResult;
 }
 
 let modelScanCache: ModelScanCacheEntry | null = null;
@@ -26,11 +32,13 @@ export function invalidateRuntimeModelScanCache() {
   modelScanCache = null;
 }
 
+// null означает недоступный каталог (отсутствует или нет прав) — скан
+// деградирует до пустого списка, а overview помечает каталог как отсутствующий.
 async function readDirectoryEntries(directory: string) {
   try {
     return await fs.readdir(directory, { withFileTypes: true });
   } catch {
-    return [];
+    return null;
   }
 }
 
@@ -42,14 +50,16 @@ async function statFileSize(filePath: string) {
   }
 }
 
-async function scanModels(modelsDirs: string[]): Promise<RuntimeModelSummary[]> {
+async function scanModels(modelsDirs: string[]): Promise<RuntimeModelScanResult> {
+  const directories: RuntimeModelsDirStatus[] = [];
   const models: RuntimeModelSummary[] = [];
   const seenPaths = new Set<string>();
 
   for (const modelsDir of modelsDirs) {
     const entries = await readDirectoryEntries(modelsDir);
+    directories.push({ path: modelsDir, exists: entries !== null });
 
-    for (const entry of entries) {
+    for (const entry of entries ?? []) {
       const entryPath = path.join(modelsDir, entry.name);
 
       if (entry.isFile() && entry.name.endsWith('.gguf') && !seenPaths.has(entryPath)) {
@@ -74,7 +84,7 @@ async function scanModels(modelsDirs: string[]): Promise<RuntimeModelSummary[]> 
 
       const nestedEntries = await readDirectoryEntries(entryPath);
 
-      for (const nestedEntry of nestedEntries) {
+      for (const nestedEntry of nestedEntries ?? []) {
         if (!nestedEntry.isFile() || !nestedEntry.name.endsWith('.gguf')) {
           continue;
         }
@@ -101,26 +111,28 @@ async function scanModels(modelsDirs: string[]): Promise<RuntimeModelSummary[]> 
     }
   }
 
-  return models.sort((left, right) => left.name.localeCompare(right.name));
+  models.sort((left, right) => left.name.localeCompare(right.name));
+
+  return { directories, models };
 }
 
-async function scanModelsCached(modelsDirs: string[]): Promise<RuntimeModelSummary[]> {
+async function scanModelsCached(modelsDirs: string[]): Promise<RuntimeModelScanResult> {
   const key = modelsDirs.join('|');
   const now = Date.now();
 
   if (modelScanCache && modelScanCache.key === key && modelScanCache.expiresAt > now) {
-    return modelScanCache.models;
+    return modelScanCache.scan;
   }
 
-  const models = await scanModels(modelsDirs);
+  const scan = await scanModels(modelsDirs);
 
   modelScanCache = {
     expiresAt: now + MODEL_SCAN_TTL_MS,
     key,
-    models,
+    scan,
   };
 
-  return models;
+  return scan;
 }
 
 export async function getRuntimeOverview(): Promise<RuntimeOverviewResponse> {
@@ -136,6 +148,8 @@ export async function getRuntimeOverview(): Promise<RuntimeOverviewResponse> {
     return path.resolve(resolveDataRoot(), directory);
   });
 
+  const scan = await scanModelsCached(modelsDirs);
+
   return RuntimeOverviewResponseSchema.parse({
     engine,
     serverStatus,
@@ -143,6 +157,7 @@ export async function getRuntimeOverview(): Promise<RuntimeOverviewResponse> {
       ...runtimeConfig,
       modelsDirs,
     },
-    models: await scanModelsCached(modelsDirs),
+    models: scan.models,
+    modelsDirsStatus: scan.directories,
   });
 }

@@ -11,10 +11,11 @@ import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 're
 
 import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
-import { CpuIcon, PlayIcon, PowerIcon, RefreshIcon, SearchIcon } from '../../shared/ui/icons';
+import { CpuIcon, PlayIcon, PowerIcon, SearchIcon, SlidersIcon } from '../../shared/ui/icons';
 import { saveProviderSettings } from './api/save-provider-settings';
 import { startRuntime } from './api/start-runtime';
 import { stopRuntime } from './api/stop-runtime';
+import { ModelDirsCard } from './model-dirs-card';
 import { providerSettingsQueryKey, providerSettingsQueryOptions } from './queries/provider-settings-query';
 import { runtimeOverviewQueryKey, runtimeOverviewQueryOptions } from './queries/runtime-overview-query';
 import { ServerLogsCard } from './server-logs-card';
@@ -25,6 +26,22 @@ function toProviderCommand(snapshot: ProviderSettingsSnapshot, mode: ProviderMod
     activeProvider: snapshot.activeProvider,
     providerConfigs: snapshot.providerConfigs,
   };
+}
+
+function formatDirCount(count: number): string {
+  const mod100 = count % 100;
+  const mod10 = count % 10;
+  if (mod100 >= 11 && mod100 <= 14) return `${count} каталогов`;
+  if (mod10 === 1) return `${count} каталог`;
+  if (mod10 >= 2 && mod10 <= 4) return `${count} каталога`;
+  return `${count} каталогов`;
+}
+
+function formatModelsDirsLabel(modelsDirs: string[]): string {
+  const [firstDir] = modelsDirs;
+  if (firstDir === undefined) return 'каталоги не заданы';
+  if (modelsDirs.length === 1) return firstDir;
+  return formatDirCount(modelsDirs.length);
 }
 
 function formatBytes(value: number): string {
@@ -70,6 +87,7 @@ const ACTIVE_MODEL_STATUS_LABELS: Record<RuntimeOverviewResponse['serverStatus']
 export function ServerControlScreen() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const [paramsOpen, setParamsOpen] = useState(false);
   const providerSettingsQuery = useQuery(providerSettingsQueryOptions());
   const runtimeOverviewQuery = useQuery({
     ...runtimeOverviewQueryOptions(),
@@ -236,8 +254,13 @@ export function ServerControlScreen() {
                   </div>
                 </div>
                 <div className="row gap-8">
-                  <button className="btn btn--ghost-bordered" type="button">
-                    <RefreshIcon size={13} /> Параметры
+                  <button
+                    className="btn btn--ghost-bordered"
+                    onClick={() => setParamsOpen((current) => !current)}
+                    style={paramsOpen ? { background: 'var(--surface-2)' } : undefined}
+                    type="button"
+                  >
+                    <SlidersIcon size={13} /> Параметры
                   </button>
                   {status === 'running' ? (
                     <button
@@ -252,12 +275,24 @@ export function ServerControlScreen() {
                 </div>
               </section>
 
+              {paramsOpen ? (
+                <ModelDirsCard dirsStatus={overview.modelsDirsStatus} serverConfig={overview.serverConfig} />
+              ) : null}
+
               <section className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div className="between" style={{ padding: '12px 14px', borderBottom: '1px solid var(--hairline)' }}>
                   <div className="row gap-8">
                     <h2 style={{ margin: 0, fontSize: 'var(--fz-md)', fontWeight: 600 }}>Модели</h2>
-                    <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
-                      {filteredModels.length} найдено · {overview.serverConfig.modelsDirs[0] ?? '—'}
+                    <span
+                      className="muted mono"
+                      style={{ fontSize: 'var(--fz-xs)' }}
+                      title={
+                        overview.serverConfig.modelsDirs.length > 1
+                          ? overview.serverConfig.modelsDirs.join('\n')
+                          : undefined
+                      }
+                    >
+                      {filteredModels.length} найдено · {formatModelsDirsLabel(overview.serverConfig.modelsDirs)}
                     </span>
                   </div>
                   <div className="row gap-8">

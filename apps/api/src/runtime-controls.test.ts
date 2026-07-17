@@ -97,6 +97,84 @@ describe('runtime control routes', () => {
     await app.close();
   });
 
+  it('scans models from updated modelsDirs and marks missing directories without failing the overview', async () => {
+    const modelsDir = path.join(dataRoot, 'gguf-models');
+    const missingDir = path.join(dataRoot, 'no-such-dir');
+    await fs.mkdir(modelsDir, { recursive: true });
+    await fs.writeFile(path.join(modelsDir, 'dummy.gguf'), 'stub');
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/runtime/config',
+      payload: {
+        // Дубликат в команде проверяет серверную дедупликацию.
+        modelsDirs: [modelsDir, missingDir, modelsDir],
+        port: 5001,
+        gpuLayers: 0,
+        contextSize: 8192,
+        flashAttention: false,
+        threads: 0,
+      },
+    });
+    const overview = RuntimeOverviewResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(overview.serverConfig.modelsDirs).toEqual([modelsDir, missingDir]);
+    expect(overview.models.map((model) => model.name)).toEqual(['dummy.gguf']);
+    expect(overview.modelsDirsStatus).toEqual([
+      { path: modelsDir, exists: true },
+      { path: missingDir, exists: false },
+    ]);
+
+    await app.close();
+  });
+
+  it('rejects blank models directory entries in the config command', async () => {
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/runtime/config',
+      payload: {
+        modelsDirs: ['   '],
+        port: 5001,
+        gpuLayers: 0,
+        contextSize: 8192,
+        flashAttention: false,
+        threads: 0,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: 'validation_error' });
+
+    await app.close();
+  });
+
+  it('accepts an empty models directory list without falling back to defaults', async () => {
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/runtime/config',
+      payload: {
+        modelsDirs: [],
+        port: 5001,
+        gpuLayers: 0,
+        contextSize: 8192,
+        flashAttention: false,
+        threads: 0,
+      },
+    });
+    const overview = RuntimeOverviewResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(overview.serverConfig.modelsDirs).toEqual([]);
+    expect(overview.models).toEqual([]);
+    expect(overview.modelsDirsStatus).toEqual([]);
+
+    await app.close();
+  });
+
   it('rejects model start when the requested model path does not exist', async () => {
     const app = buildApiApp();
     const response = await app.inject({
