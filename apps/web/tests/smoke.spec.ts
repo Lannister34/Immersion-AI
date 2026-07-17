@@ -48,6 +48,15 @@ test('shows the LLM-runtime page with the LLM-runtime heading and mode switcher'
   await expect(page.getByRole('heading', { exact: true, name: 'LLM-runtime' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Встроенный' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Внешний API' })).toBeVisible();
+
+  // Карточка логов живёт только во встроенном режиме; фикстура стартует во внешнем.
+  await page.getByRole('button', { name: 'Встроенный' }).click();
+
+  const logsToggle = page.getByRole('button', { name: /Логи сервера/ });
+  await expect(logsToggle).toBeVisible();
+  await logsToggle.click();
+  await expect(page.getByText('Логи пусты. Запустите модель, чтобы увидеть вывод llama-server.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Скопировать' })).toBeVisible();
 });
 
 test('renders editable profile and sampler sections on /settings', async ({ page }) => {
