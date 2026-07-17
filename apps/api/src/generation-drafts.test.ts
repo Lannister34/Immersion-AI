@@ -9,6 +9,7 @@ import {
   GenerateCharacterFieldResponseSchema,
   GenerateLorebookDraftResponseSchema,
   GenerateScenarioDraftResponseSchema,
+  GenerateScenarioFirstMessageResponseSchema,
 } from '@immersion/contracts/generation';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -581,6 +582,7 @@ describe('generation draft routes', () => {
           name: 'Ночная мастерская',
           // Модель "проговорилась" именем игрока (Тестер, в косвенном падеже) — оно должно вернуться в {{user}}.
           content: 'Поздний вечер. {{char}} ждёт Тестера у входа в мастерскую.',
+          firstMessage: '*{{char}} открывает дверь.* Заходи, Тестер, я уже заждалась.',
           tags: ['слайс-оф-лайф'],
         }),
       );
@@ -599,6 +601,7 @@ describe('generation draft routes', () => {
       expect(payload).toMatchObject({
         name: 'Ночная мастерская',
         content: 'Поздний вечер. {{char}} ждёт {{user}} у входа в мастерскую.',
+        firstMessage: '*{{char}} открывает дверь.* Заходи, {{user}}, я уже заждалась.',
         tags: ['слайс-оф-лайф'],
       });
 
@@ -676,6 +679,120 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({ code: 'generation_provider_unavailable' });
+      expect(providerRequests).toHaveLength(0);
+
+      await app.close();
+    });
+  });
+
+  describe('POST /api/generation/scenario-first-message', () => {
+    it('generates a scene greeting as plain text and restores leaked player names to {{user}}', async () => {
+      const providerRequests = mockProviderSuccess(
+        // Модель "проговорилась" именем игрока — оно должно вернуться в {{user}}.
+        '\n*{{char}} машет рукой от мольберта.* Тестер, ты всё-таки пришёл!\n',
+      );
+      const app = buildApiApp();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/generation/scenario-first-message',
+        payload: {
+          concept: 'Вечер в мастерской скульптора',
+          name: 'Ночная мастерская',
+          content: 'Поздний вечер. {{char}} ждёт {{user}} у входа в мастерскую.',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const payload = GenerateScenarioFirstMessageResponseSchema.parse(response.json());
+      expect(payload.value).toBe('*{{char}} машет рукой от мольберта.* {{user}}, ты всё-таки пришёл!');
+
+      expect(providerRequests).toHaveLength(1);
+      const requestBody = getProviderRequestBody(providerRequests[0]);
+      expect(requestBody).toMatchObject({
+        max_tokens: 512,
+        stream: false,
+        temperature: 0.44,
+      });
+      const submittedContent = requestBody.messages?.map((message) => message.content).join('\n') ?? '';
+      expect(submittedContent).toContain('Вечер в мастерской скульптора');
+      expect(submittedContent).toContain('Ночная мастерская');
+      expect(submittedContent).toContain('{{char}} ждёт {{user}} у входа в мастерскую.');
+      // Fixture profile userName drives the gender hint.
+      expect(submittedContent).toContain('Тестер');
+
+      await app.close();
+    });
+
+    it('returns 502 provider_generation_failed when the provider fails', async () => {
+      const providerRequests = mockProviderFailure();
+      const app = buildApiApp();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/generation/scenario-first-message',
+        payload: {
+          concept: 'Вечер в мастерской',
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+      expect(response.json()).toMatchObject({ code: 'provider_generation_failed' });
+      expect(providerRequests).toHaveLength(1);
+
+      await app.close();
+    });
+
+    it('returns 502 provider_generation_failed for an empty provider message', async () => {
+      mockProviderSuccess('   ');
+      const app = buildApiApp();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/generation/scenario-first-message',
+        payload: {
+          concept: 'Вечер в мастерской',
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+      expect(response.json()).toMatchObject({ code: 'provider_generation_failed' });
+
+      await app.close();
+    });
+
+    it('returns 409 generation_provider_unavailable when no provider endpoint can be resolved', async () => {
+      await writeBuiltinProviderSettings();
+      const providerRequests = mockProviderSuccess('Should not be called.');
+      const app = buildApiApp();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/generation/scenario-first-message',
+        payload: {
+          concept: 'Вечер в мастерской',
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({ code: 'generation_provider_unavailable' });
+      expect(providerRequests).toHaveLength(0);
+
+      await app.close();
+    });
+
+    it('returns 400 validation_error without a concept and does not call the provider', async () => {
+      const providerRequests = mockProviderSuccess('Should not be called.');
+      const app = buildApiApp();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/generation/scenario-first-message',
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ code: 'validation_error' });
       expect(providerRequests).toHaveLength(0);
 
       await app.close();

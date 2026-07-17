@@ -10,6 +10,7 @@ import { ScenarioNotFoundError } from './get-scenario.js';
 export interface SaveScenarioInput {
   concept: string;
   content: string;
+  firstMessage: string;
   name: string;
   tags: string[];
 }

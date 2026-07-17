@@ -37,6 +37,7 @@ function parseScenarioImportFile(raw: string): SaveScenarioCommand {
   return SaveScenarioCommandSchema.parse({
     concept: typeof record.concept === 'string' ? record.concept : '',
     content: typeof record.content === 'string' ? record.content : '',
+    firstMessage: typeof record.firstMessage === 'string' ? record.firstMessage : '',
     name: typeof record.name === 'string' ? record.name : '',
     tags: Array.isArray(record.tags) ? record.tags.filter((tag): tag is string => typeof tag === 'string') : [],
   });

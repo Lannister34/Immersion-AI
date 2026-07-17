@@ -6,6 +6,7 @@ export { generateChatTitle } from './api/generate-chat-title';
 export { generateFirstMessage } from './api/generate-first-message';
 export { generateLorebookDraft } from './api/generate-lorebook-draft';
 export { generateScenarioDraft } from './api/generate-scenario-draft';
+export { generateScenarioFirstMessage } from './api/generate-scenario-first-message';
 export { previewChatReplyPrompt } from './api/preview-chat-reply-prompt';
 export { regenerateChatReply } from './api/regenerate-chat-reply';
 export { startChatReplyGenerationJob } from './api/start-chat-reply-generation-job';

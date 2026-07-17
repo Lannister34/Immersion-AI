@@ -25,6 +25,7 @@ import { generateChatTitle } from '../../application/generate-chat-title.js';
 import { generateFirstMessage } from '../../application/generate-first-message.js';
 import { generateLorebookDraft } from '../../application/generate-lorebook-draft.js';
 import { generateScenarioDraft } from '../../application/generate-scenario-draft.js';
+import { generateScenarioFirstMessage } from '../../application/generate-scenario-first-message.js';
 import {
   ChatNotEmptyError,
   ChatReplyGenerationFailedError,
@@ -274,6 +275,26 @@ export const generationRoutes: FastifyPluginAsync = async (app) => {
       });
     } catch (error) {
       request.log.error({ err: error }, 'Failed to generate scenario draft');
+      const mapped = toProblem(error);
+
+      return reply.status(mapped.statusCode).send(mapped.body);
+    } finally {
+      request.raw.off('aborted', abortGeneration);
+    }
+  });
+
+  app.post('/scenario-first-message', async (request, reply) => {
+    const abortController = new AbortController();
+    const abortGeneration = () => abortController.abort();
+
+    request.raw.once('aborted', abortGeneration);
+
+    try {
+      return await generateScenarioFirstMessage(request.body, {
+        signal: abortController.signal,
+      });
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to generate scenario first message');
       const mapped = toProblem(error);
 
       return reply.status(mapped.statusCode).send(mapped.body);

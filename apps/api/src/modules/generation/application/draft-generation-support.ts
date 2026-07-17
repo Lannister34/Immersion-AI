@@ -80,6 +80,36 @@ export async function resolveDraftGenerationContext(): Promise<DraftGenerationCo
   };
 }
 
+/** Prompt line asking the model to infer {{user}}'s grammatical gender from the player name. */
+export function buildGenderHint(context: DraftGenerationContext): string {
+  if (context.language === 'ru') {
+    return context.userName.trim()
+      ? `Определи грамматический род {{user}} по имени игрока "${context.userName.trim()}". `
+      : 'По умолчанию используй мужской грамматический род для {{user}}. ';
+  }
+
+  return context.userName.trim()
+    ? `Determine {{user}}'s grammatical gender from the player name "${context.userName.trim()}". `
+    : 'Default to masculine grammatical gender for {{user}}. ';
+}
+
+/** Prompt block with player name/persona; the model must still write {{user}} in output. */
+export function buildPlayerContextBlock(context: DraftGenerationContext): string {
+  if (!context.userName.trim() && !context.userPersona.trim()) {
+    return '';
+  }
+
+  const personaLine = context.userPersona.trim()
+    ? `\n- ${context.language === 'ru' ? 'Персона' : 'Persona'}: ${context.userPersona.trim()}`
+    : '';
+
+  return context.language === 'ru'
+    ? `\n\nИнформация об игроке (для определения грамматического рода {{user}} — но пиши {{user}} в тексте, не имя):
+- Имя: ${context.userName.trim() || 'Н/Д'}${personaLine}`
+    : `\n\nPlayer info (for determining {{user}}'s grammatical gender — but still write {{user}} in output, not the name):
+- Name: ${context.userName.trim() || 'N/A'}${personaLine}`;
+}
+
 /**
  * Builds a regex that matches a name in any Russian case form.
  * Strategy: strip the last vowel-like ending to get a stem, then match
