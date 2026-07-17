@@ -11,11 +11,13 @@ import {
   type CharacterCardPatch,
   extractPngCharacterCard,
   InvalidCharacterCardError,
+  pngContainsCharacterCard,
   writePngCharacterCard,
 } from '../application/extract-png-character-card.js';
 
 const CHARACTERS_DIRECTORY = 'characters';
 const JSON_EXTENSION = '.json';
+const AVATAR_FILE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp'] as const;
 
 export interface CharacterFileSummary extends CharacterSummaryDto {
   filePath: string;
@@ -32,6 +34,24 @@ function characterFormatOf(entry: string): CharacterSourceFormat | null {
   return null;
 }
 
+function characterAvatarUrlOf(id: string, mtimeMs: number): string {
+  // The mtime-derived version makes every avatar replacement produce a new URL,
+  // so clients never keep showing a stale cached image.
+  return `/api/characters/${encodeURIComponent(id)}/avatar?v=${Math.trunc(mtimeMs)}`;
+}
+
+/** True when the file is a PNG that itself carries a character card (chara / ccv3 chunk). */
+async function isCharacterCardPngFile(filePath: string): Promise<boolean> {
+  if (!filePath.toLowerCase().endsWith('.png')) return false;
+  let buffer: Buffer;
+  try {
+    buffer = await fs.readFile(filePath);
+  } catch {
+    return false;
+  }
+  return pngContainsCharacterCard(buffer);
+}
+
 export async function listCharacterFiles(): Promise<CharacterFileSummary[]> {
   const directory = resolveCharactersDirectory();
   let entries: string[];
@@ -45,11 +65,18 @@ export async function listCharacterFiles(): Promise<CharacterFileSummary[]> {
     throw error;
   }
 
+  const jsonBaseNames = new Set(
+    entries
+      .filter((entry) => characterFormatOf(entry) === 'json')
+      .map((entry) => path.basename(entry, path.extname(entry))),
+  );
+
   const summaries: CharacterFileSummary[] = [];
   for (const entry of entries) {
     const source = characterFormatOf(entry);
     if (!source) continue;
 
+    const name = path.basename(entry, path.extname(entry));
     const filePath = path.join(directory, entry);
     let stats: Awaited<ReturnType<typeof fs.stat>>;
     try {
@@ -59,10 +86,16 @@ export async function listCharacterFiles(): Promise<CharacterFileSummary[]> {
     }
     if (!stats.isFile()) continue;
 
+    // A plain PNG with the same base name as a JSON card is that card's avatar, not a
+    // separate character. A PNG that itself carries a card stays an independent character.
+    if (source === 'png' && jsonBaseNames.has(name) && !(await isCharacterCardPngFile(filePath))) {
+      continue;
+    }
+
     const id = entry;
-    const name = path.basename(entry, path.extname(entry));
+    const avatarUrl = source === 'png' ? characterAvatarUrlOf(id, stats.mtimeMs) : await characterAvatarUrlFor(id);
     summaries.push({
-      avatarUrl: source === 'png' ? `/api/characters/${encodeURIComponent(id)}/avatar` : null,
+      avatarUrl,
       filePath,
       id,
       name,
@@ -119,12 +152,25 @@ function sanitizeBaseName(name: string): string {
   return trimmed.length > 80 ? trimmed.slice(0, 80) : trimmed;
 }
 
-async function generateUniqueId(directory: string, base: string): Promise<string> {
-  const baseId = `${base}${JSON_EXTENSION}`;
+async function fileExists(filePath: string): Promise<boolean> {
   try {
-    await fs.access(path.join(directory, baseId));
+    await fs.access(filePath);
+    return true;
   } catch {
-    return baseId;
+    return false;
+  }
+}
+
+async function generateUniqueId(directory: string, base: string): Promise<string> {
+  // Sibling image files with the same base name are treated as the card's avatar,
+  // so a fresh JSON id must not collide with any of them either.
+  const conflicts = await Promise.all(
+    [JSON_EXTENSION, ...AVATAR_FILE_EXTENSIONS].map((extension) =>
+      fileExists(path.join(directory, `${base}${extension}`)),
+    ),
+  );
+  if (!conflicts.some(Boolean)) {
+    return `${base}${JSON_EXTENSION}`;
   }
   const suffix = randomUUID().slice(0, 8);
   return `${base}-${suffix}${JSON_EXTENSION}`;
@@ -260,7 +306,7 @@ export async function writeCharacterFile(id: string, input: SaveCharacterFileInp
   await writeJsonFileAtomically(filePath, payload);
 
   return {
-    avatarUrl: null,
+    avatarUrl: await characterAvatarUrlFor(id),
     createdAt,
     description: input.description,
     exampleDialogue: input.exampleDialogue,
@@ -302,9 +348,8 @@ export async function writePngCharacterFile(id: string, input: SaveCharacterFile
   await writeFileAtomically(filePath, next);
 
   const stats = await fs.stat(filePath);
-  const avatarUrl = `/api/characters/${encodeURIComponent(id)}/avatar`;
   return {
-    avatarUrl,
+    avatarUrl: characterAvatarUrlOf(id, stats.mtimeMs),
     createdAt: null,
     description: input.description,
     exampleDialogue: input.exampleDialogue,
@@ -325,10 +370,90 @@ export async function deleteCharacterFile(id: string): Promise<boolean> {
   const filePath = resolveCharacterFilePath(id);
   try {
     await fs.unlink(filePath);
-    return true;
   } catch (error) {
     const candidate = error as NodeJS.ErrnoException;
     if (candidate.code === 'ENOENT') return false;
     throw error;
   }
+  if (id.toLowerCase().endsWith(JSON_EXTENSION)) {
+    // JSON cards own their sibling avatar image; do not leave orphans behind.
+    await deleteCharacterAvatarFiles(id);
+  }
+  return true;
+}
+
+function avatarCandidatePathsOf(id: string): string[] {
+  const directory = resolveCharactersDirectory();
+  const baseName = path.basename(id, path.extname(id));
+  return AVATAR_FILE_EXTENSIONS.map((extension) => resolveContainedFilePath(directory, `${baseName}${extension}`));
+}
+
+/** Finds the sibling avatar image of a JSON card, if any. */
+export async function findCharacterAvatarFilePath(id: string): Promise<string | null> {
+  for (const candidate of avatarCandidatePathsOf(id)) {
+    let isFile = false;
+    try {
+      const stats = await fs.stat(candidate);
+      isFile = stats.isFile();
+    } catch {
+      // Missing candidate — keep looking.
+    }
+    if (!isFile) continue;
+    // A sibling PNG that is itself a character card is an independent character, not an avatar.
+    if (await isCharacterCardPngFile(candidate)) continue;
+    return candidate;
+  }
+  return null;
+}
+
+/** Versioned avatar URL of a JSON card's sibling image, or null when it has none. */
+export async function characterAvatarUrlFor(id: string): Promise<string | null> {
+  const avatarFilePath = await findCharacterAvatarFilePath(id);
+  if (!avatarFilePath) return null;
+  let stats: Awaited<ReturnType<typeof fs.stat>>;
+  try {
+    stats = await fs.stat(avatarFilePath);
+  } catch {
+    return null;
+  }
+  return characterAvatarUrlOf(id, stats.mtimeMs);
+}
+
+/** True when the sibling `<base>.png` of this character exists and is itself a PNG character card. */
+export async function siblingPngIsCharacterCard(id: string): Promise<boolean> {
+  const directory = resolveCharactersDirectory();
+  const baseName = path.basename(id, path.extname(id));
+  return isCharacterCardPngFile(resolveContainedFilePath(directory, `${baseName}.png`));
+}
+
+/** Stores the avatar of a JSON card as a sibling file, replacing any previous avatar. */
+export async function writeCharacterAvatarFile(id: string, bytes: Buffer, extension: string): Promise<void> {
+  const directory = resolveCharactersDirectory();
+  await fs.mkdir(directory, { recursive: true });
+  const baseName = path.basename(id, path.extname(id));
+  const targetPath = resolveContainedFilePath(directory, `${baseName}${extension}`);
+  for (const candidate of avatarCandidatePathsOf(id)) {
+    if (candidate === targetPath) continue;
+    // Never remove a sibling PNG that is an independent character card.
+    if (await isCharacterCardPngFile(candidate)) continue;
+    await fs.rm(candidate, { force: true });
+  }
+  await writeFileAtomically(targetPath, bytes);
+}
+
+/** Removes every sibling avatar image of a JSON card. Returns false when none existed. */
+export async function deleteCharacterAvatarFiles(id: string): Promise<boolean> {
+  let removed = false;
+  for (const candidate of avatarCandidatePathsOf(id)) {
+    // Never remove a sibling PNG that is an independent character card.
+    if (await isCharacterCardPngFile(candidate)) continue;
+    try {
+      await fs.unlink(candidate);
+      removed = true;
+    } catch (error) {
+      const failure = error as NodeJS.ErrnoException;
+      if (failure.code !== 'ENOENT') throw error;
+    }
+  }
+  return removed;
 }

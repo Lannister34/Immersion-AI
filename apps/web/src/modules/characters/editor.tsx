@@ -5,7 +5,6 @@ import { useNavigate } from '@tanstack/react-router';
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
-import { createApiUrl } from '../../shared/api/client';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { formatRelative } from '../../shared/lib/format-relative';
 import { Field } from '../../shared/ui/field';
@@ -19,6 +18,7 @@ import {
   useGenerationAvailability,
 } from '../generation';
 import { createCharacter, updateCharacter } from './api/save-character';
+import { CharacterAvatarUploader } from './avatar-uploader';
 import { useDeleteCharacter } from './mutations/use-delete-character';
 import { characterDetailQueryKey, characterDetailQueryOptions } from './queries/character-detail-query';
 import { characterListQueryKey } from './queries/character-list-query';
@@ -621,21 +621,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                   <div className="muted" style={{ fontSize: 'var(--fz-xs)', marginBottom: 8 }}>
                     Аватар
                   </div>
-                  <div
-                    style={{
-                      aspectRatio: '1 / 1',
-                      borderRadius: 12,
-                      background: detail?.avatarUrl
-                        ? `center / cover no-repeat url("${createApiUrl(detail.avatarUrl)}")`
-                        : 'var(--surface-2)',
-                      border: '1px solid var(--hairline)',
-                    }}
-                  />
-                  <div className="muted" style={{ fontSize: 'var(--fz-2xs)', marginTop: 8 }}>
-                    {detail?.avatarUrl
-                      ? 'Аватар берётся из PNG-карточки той же библиотеки.'
-                      : 'Аватар появится, если рядом лежит PNG-карточка с тем же именем.'}
-                  </div>
+                  <CharacterAvatarUploader characterId={characterId} detail={detail} />
                   <div className="col gap-8" style={{ marginTop: 10 }}>
                     <button
                       className="btn btn--xs"
