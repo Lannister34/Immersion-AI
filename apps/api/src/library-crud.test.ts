@@ -263,7 +263,9 @@ describe('library CRUD routes', () => {
       expect(payload.character.firstMessage).toContain('светлячками');
       expect(payload.character.source).toBe('json');
       expect(payload.character.isEditable).toBe(true);
-      expect(payload.character.avatarUrl).toBe(`/api/characters/${encodeURIComponent(payload.character.id)}/avatar`);
+      expect(payload.character.avatarUrl).toMatch(
+        new RegExp(`^/api/characters/${encodeURIComponent(payload.character.id)}/avatar\\?v=\\d+$`),
+      );
 
       const avatarResponse = await app.inject({ method: 'GET', url: payload.character.avatarUrl ?? '' });
       expect(avatarResponse.statusCode).toBe(200);
@@ -330,7 +332,7 @@ describe('library CRUD routes', () => {
       expect(payload.character.exampleDialogue).toContain('Папоротник');
       expect(payload.character.systemPrompt).toContain('спокойного');
       expect(payload.character.tags).toEqual(['ru', 'slice-of-life']);
-      expect(payload.character.avatarUrl).toMatch(/\.png\/avatar$/);
+      expect(payload.character.avatarUrl).toMatch(/\.png\/avatar\?v=\d+$/);
 
       await app.close();
     });

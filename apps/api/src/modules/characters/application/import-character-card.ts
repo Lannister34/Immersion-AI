@@ -1,7 +1,15 @@
 import type { CharacterDetailDto } from '@immersion/contracts/characters';
 
-import { createCharacterFile, writeCharacterAvatarFile } from '../infrastructure/file-character-repository.js';
-import { extractPngCharacterCard, InvalidCharacterCardError } from './extract-png-character-card.js';
+import {
+  characterAvatarUrlFor,
+  createCharacterFile,
+  writeCharacterAvatarFile,
+} from '../infrastructure/file-character-repository.js';
+import {
+  extractPngCharacterCard,
+  InvalidCharacterCardError,
+  stripPngCharacterCardChunks,
+} from './extract-png-character-card.js';
 
 export interface ImportCharacterCardInput {
   contentBase64: string;
@@ -33,11 +41,12 @@ export async function importCharacterCard(input: ImportCharacterCardInput): Prom
     tags: card.tags,
   });
 
-  // The original card PNG becomes the sibling avatar of the imported JSON card.
-  await writeCharacterAvatarFile(detail.id, pngBuffer, '.png');
+  // The card PNG becomes the sibling avatar of the imported JSON card. The chara chunk is
+  // stripped so the stored avatar is a plain image, never a second character card.
+  await writeCharacterAvatarFile(detail.id, stripPngCharacterCardChunks(pngBuffer), '.png');
 
   return {
     ...detail,
-    avatarUrl: `/api/characters/${encodeURIComponent(detail.id)}/avatar`,
+    avatarUrl: await characterAvatarUrlFor(detail.id),
   };
 }

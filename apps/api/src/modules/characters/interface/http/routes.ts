@@ -22,6 +22,7 @@ import { importCharacterCard } from '../../application/import-character-card.js'
 import { listCharacters } from '../../application/list-characters.js';
 import { CharacterNotEditableError, createCharacter, updateCharacter } from '../../application/save-character.js';
 import {
+  CharacterAvatarCardCollisionError,
   CharacterAvatarOwnedByCardError,
   InvalidAvatarImageError,
   uploadCharacterAvatar,
@@ -38,6 +39,14 @@ const toProblem = createToProblem((error) => {
 
   if (error instanceof CharacterAvatarNotFoundError) {
     return problem(404, 'avatar_not_found', 'У персонажа нет загруженного аватара.');
+  }
+
+  if (error instanceof CharacterAvatarCardCollisionError) {
+    return problem(
+      409,
+      'avatar_conflicts_with_card',
+      'Рядом лежит самостоятельная PNG-карточка с тем же именем файла — аватар не может её перезаписать.',
+    );
   }
 
   if (error instanceof CharacterAvatarOwnedByCardError) {

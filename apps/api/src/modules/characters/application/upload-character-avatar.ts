@@ -3,6 +3,7 @@ import type { CharacterDetailDto, UploadCharacterAvatarCommand } from '@immersio
 import {
   findCharacterFile,
   readCharacterDetail,
+  siblingPngIsCharacterCard,
   writeCharacterAvatarFile,
 } from '../infrastructure/file-character-repository.js';
 import { detectAvatarImageFormat } from './avatar-image-format.js';
@@ -14,6 +15,13 @@ export class CharacterAvatarOwnedByCardError extends Error {
   constructor(characterId: string) {
     super(`Avatar of a PNG-card character is the card itself: ${characterId}`);
     this.name = 'CharacterAvatarOwnedByCardError';
+  }
+}
+
+export class CharacterAvatarCardCollisionError extends Error {
+  constructor(characterId: string) {
+    super(`Sibling PNG of ${characterId} is an independent character card and cannot be overwritten`);
+    this.name = 'CharacterAvatarCardCollisionError';
   }
 }
 
@@ -47,6 +55,12 @@ export async function uploadCharacterAvatar(
   const format = detectAvatarImageFormat(bytes);
   if (!format || format.mimeType !== command.mimeType) {
     throw new InvalidAvatarImageError('Содержимое файла не совпадает с заявленным форматом изображения.');
+  }
+
+  // A sibling PNG that is itself a character card is an independent character (id collision):
+  // overwriting it with an avatar would destroy that character.
+  if (format.extension === '.png' && (await siblingPngIsCharacterCard(characterId))) {
+    throw new CharacterAvatarCardCollisionError(characterId);
   }
 
   await writeCharacterAvatarFile(characterId, bytes, format.extension);

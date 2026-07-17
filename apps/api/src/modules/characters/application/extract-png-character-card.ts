@@ -157,6 +157,47 @@ function extractDataObject(parsed: CharacterCardV2 | CharacterCardData): Charact
     : (parsed as CharacterCardData);
 }
 
+function textChunkKeywordOf(buffer: Buffer, span: PngChunkSpan): string | null {
+  if (span.type !== 'tEXt' && span.type !== 'iTXt') return null;
+  const dataStart = span.start + 8;
+  const data = buffer.subarray(dataStart, dataStart + span.length);
+  const nullIndex = data.indexOf(0);
+  if (nullIndex <= 0) return null;
+  return data.subarray(0, nullIndex).toString('latin1');
+}
+
+function isCharacterCardKeyword(keyword: string | null): boolean {
+  return keyword === 'chara' || keyword === 'ccv3';
+}
+
+/** True when the buffer is a PNG carrying a SillyTavern character card chunk (chara / ccv3). */
+export function pngContainsCharacterCard(pngBuffer: Buffer): boolean {
+  let spans: PngChunkSpan[];
+  try {
+    spans = readChunkSpans(pngBuffer);
+  } catch (error) {
+    if (error instanceof InvalidCharacterCardError) return false;
+    throw error;
+  }
+  return spans.some((span) => isCharacterCardKeyword(textChunkKeywordOf(pngBuffer, span)));
+}
+
+/** Removes chara / ccv3 chunks so the PNG can be stored as a plain avatar image. */
+export function stripPngCharacterCardChunks(pngBuffer: Buffer): Buffer {
+  const spans = readChunkSpans(pngBuffer);
+  const dropped = spans.filter((span) => isCharacterCardKeyword(textChunkKeywordOf(pngBuffer, span)));
+  if (dropped.length === 0) return pngBuffer;
+
+  const parts: Buffer[] = [];
+  let cursor = 0;
+  for (const span of dropped) {
+    parts.push(pngBuffer.subarray(cursor, span.start));
+    cursor = span.end;
+  }
+  parts.push(pngBuffer.subarray(cursor));
+  return Buffer.concat(parts);
+}
+
 export function extractPngCharacterCard(pngBuffer: Buffer): ExtractedCharacterCard {
   const chunks = readTextChunks(pngBuffer);
   const candidate =
