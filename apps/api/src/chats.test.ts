@@ -8,6 +8,7 @@ import {
   ChatMessageMutationResponseSchema,
   CreateChatResponseSchema,
   GetChatSessionResponseSchema,
+  ImportChatResponseSchema,
   UpdateChatGenerationSettingsResponseSchema,
   UpdateChatTitleResponseSchema,
 } from '@immersion/contracts/chats';
@@ -1208,6 +1209,136 @@ describe('chat routes', () => {
     expect(response.json()).toMatchObject({
       code: 'chat_not_found',
     });
+
+    await app.close();
+  });
+
+  it('round-trips a chat through export and import', async () => {
+    await writeGenericChatFile('roundtrip-chat', [
+      JSON.stringify({
+        chat_metadata: {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          title: 'Экспорт туда и обратно',
+          updatedAt: '2026-01-01T00:00:03.000Z',
+        },
+        user_name: 'Экспортёр',
+        character_name: 'Дракон',
+      }),
+      JSON.stringify({ is_user: true, mes: 'Привет!', send_date: '2026-01-01T00:00:01.000Z' }),
+      JSON.stringify({ is_user: false, mes: 'Здравствуй, путник.', send_date: '2026-01-01T00:00:02.000Z' }),
+      JSON.stringify({
+        extra: { type: 'system' },
+        is_user: false,
+        mes: 'Сцена меняется.',
+        send_date: '2026-01-01T00:00:03.000Z',
+      }),
+    ]);
+
+    const app = buildApiApp();
+    const exportResponse = await app.inject({
+      method: 'GET',
+      url: '/api/chats/roundtrip-chat/export',
+    });
+    expect(exportResponse.statusCode).toBe(200);
+
+    const importResponse = await app.inject({
+      method: 'POST',
+      url: '/api/chats/import',
+      payload: {
+        contentBase64: Buffer.from(exportResponse.body, 'utf8').toString('base64'),
+      },
+    });
+    expect(importResponse.statusCode).toBe(201);
+    const importPayload = ImportChatResponseSchema.parse(importResponse.json());
+
+    expect(importPayload.importedMessages).toBe(3);
+    expect(importPayload.skippedLines).toBe(0);
+    expect(importPayload.chat.id).not.toBe('roundtrip-chat');
+    expect(importPayload.chat.title).toBe('Экспорт туда и обратно');
+    expect(importPayload.chat.characterName).toBe('Дракон');
+    // Идентификаторы не привязываются автоматически: имя остаётся только подписью.
+    expect(importPayload.chat.characterId).toBeNull();
+
+    const sourceSession = GetChatSessionResponseSchema.parse(
+      (await app.inject({ method: 'GET', url: '/api/chats/roundtrip-chat' })).json(),
+    );
+    const importedSession = GetChatSessionResponseSchema.parse(
+      (await app.inject({ method: 'GET', url: `/api/chats/${importPayload.chat.id}` })).json(),
+    );
+
+    expect(importedSession.userName).toBe('Экспортёр');
+    expect(importedSession.messages.map(({ role, content, createdAt }) => ({ role, content, createdAt }))).toEqual(
+      sourceSession.messages.map(({ role, content, createdAt }) => ({ role, content, createdAt })),
+    );
+
+    await app.close();
+  });
+
+  it('imports a messages-only file without a header', async () => {
+    const content = [
+      JSON.stringify({ is_user: true, mes: 'Только сообщения', send_date: '2026-02-01T00:00:00.000Z' }),
+      '',
+      JSON.stringify({ is_user: false, mes: 'Без заголовка', send_date: '2026-02-01T00:00:01.000Z' }),
+    ].join('\n');
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/chats/import',
+      payload: {
+        contentBase64: Buffer.from(content, 'utf8').toString('base64'),
+        title: 'Импорт без заголовка',
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    const payload = ImportChatResponseSchema.parse(response.json());
+    expect(payload.importedMessages).toBe(2);
+    expect(payload.skippedLines).toBe(0);
+    expect(payload.chat.title).toBe('Импорт без заголовка');
+    expect(payload.chat.messageCount).toBe(2);
+
+    const session = GetChatSessionResponseSchema.parse(
+      (await app.inject({ method: 'GET', url: `/api/chats/${payload.chat.id}` })).json(),
+    );
+    expect(session.messages.map((message) => message.content)).toEqual(['Только сообщения', 'Без заголовка']);
+    expect(session.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+
+    await app.close();
+  });
+
+  it('rejects an import file without a single valid message', async () => {
+    const content = ['это не JSON', '[1, 2, 3]', '"строка"', ''].join('\n');
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/chats/import',
+      payload: {
+        contentBase64: Buffer.from(content, 'utf8').toString('base64'),
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: 'invalid_chat_file' });
+
+    await app.close();
+  });
+
+  it('rejects an oversized import file', async () => {
+    const oversized = Buffer.alloc(10 * 1024 * 1024 + 1, 0x61);
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/chats/import',
+      payload: {
+        contentBase64: oversized.toString('base64'),
+      },
+    });
+
+    expect(response.statusCode).toBe(413);
+    expect(response.json()).toMatchObject({ code: 'chat_file_too_large' });
 
     await app.close();
   });

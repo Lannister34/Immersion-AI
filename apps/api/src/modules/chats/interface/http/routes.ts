@@ -2,6 +2,7 @@ import {
   BranchChatCommandSchema,
   ChatIdSchema,
   CreateChatCommandSchema,
+  ImportChatCommandSchema,
   UpdateChatBindingsCommandSchema,
   UpdateChatLorebooksCommandSchema,
   UpdateChatMessageCommandSchema,
@@ -18,6 +19,7 @@ import { createChat } from '../../application/create-chat.js';
 import { deleteChat } from '../../application/delete-chat.js';
 import { exportChat } from '../../application/export-chat.js';
 import { getChatSession } from '../../application/get-chat-session.js';
+import { ChatFileTooLargeError, InvalidChatFileError, importChat } from '../../application/import-chat.js';
 import { listChats } from '../../application/list-chats.js';
 import { truncateChatMessages } from '../../application/truncate-chat-messages.js';
 import { updateChatBindings } from '../../application/update-chat-bindings.js';
@@ -63,6 +65,14 @@ const toProblem = createToProblem((error) => {
     return problem(400, 'invalid_chat_generation_settings', error.message);
   }
 
+  if (error instanceof InvalidChatFileError) {
+    return problem(400, 'invalid_chat_file', error.message);
+  }
+
+  if (error instanceof ChatFileTooLargeError) {
+    return problem(413, 'chat_file_too_large', error.message);
+  }
+
   return null;
 });
 
@@ -87,6 +97,20 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(201).send(response);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to create generic chat');
+      const mapped = toProblem(error);
+
+      return reply.status(mapped.statusCode).send(mapped.body);
+    }
+  });
+
+  app.post('/import', async (request, reply) => {
+    try {
+      const command = ImportChatCommandSchema.parse(request.body);
+      const response = await importChat(command);
+
+      return reply.status(201).send(response);
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to import chat');
       const mapped = toProblem(error);
 
       return reply.status(mapped.statusCode).send(mapped.body);
