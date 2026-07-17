@@ -20,6 +20,7 @@ import {
   createDefaultChatSamplingOverrides,
 } from '../application/chat-records.js';
 import type { ChatRepository, ForkGenericChatInput, ListGenericChatsOptions } from '../application/chat-repository.js';
+import { deriveLastMessagePreview } from '../application/last-message-preview.js';
 
 // MVP scope: rewrite chats are generic-only until the character-backed slice lands.
 const GENERIC_CHAT_DIRECTORY = '_no_character_';
@@ -389,7 +390,7 @@ async function readChatFile(chatId: string): Promise<ChatSessionRecord | null> {
     createdAt,
     updatedAt,
     messageCount: messages.length,
-    lastMessagePreview: messages.at(-1)?.content.slice(0, 160) ?? null,
+    lastMessagePreview: deriveLastMessagePreview(messages.at(-1)?.content),
     characterId: getString(header?.character_id).trim() || null,
     characterName: getString(header?.character_name).trim() || null,
     scenarioId: getString(header?.scenario_id).trim() || null,
@@ -548,7 +549,7 @@ export class FileChatRepository implements ChatRepository {
       createdAt: input.createdAt,
       updatedAt: lastSeed?.createdAt ?? input.createdAt,
       messageCount: seedMessages.length,
-      lastMessagePreview: lastSeed ? lastSeed.content.slice(0, 160) : null,
+      lastMessagePreview: deriveLastMessagePreview(lastSeed?.content),
       characterId: input.characterId ?? null,
       characterName: input.characterName ?? null,
       scenarioId: input.scenarioId ?? null,
@@ -582,7 +583,7 @@ export class FileChatRepository implements ChatRepository {
     const matchesNeedle = (session: ChatSessionRecord): boolean => {
       if (!needle) return true;
       if (session.chat.title.toLowerCase().includes(needle)) return true;
-      if (session.characterName && session.characterName.toLowerCase().includes(needle)) return true;
+      if (session.characterName?.toLowerCase().includes(needle)) return true;
       return session.messages.some((message) => message.content.toLowerCase().includes(needle));
     };
 
