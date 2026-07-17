@@ -2,7 +2,7 @@ import type { CharacterDetailDto, SaveCharacterCommand } from '@immersion/contra
 import type { CharacterDraftFieldName, CharacterDraftFields } from '@immersion/contracts/generation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
 import { createApiUrl } from '../../shared/api/client';
@@ -287,6 +287,85 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
     ? getApiErrorMessage(avatarPromptMutation.error, 'Не удалось сгенерировать промпт для аватара.')
     : null;
 
+  let sourceNote: ReactNode = null;
+  if (detail?.source === 'png' && canEdit) {
+    sourceNote = (
+      <>
+        Карточка хранится в формате PNG SillyTavern. Сохранение перезаписывает <code>chara</code>-чанк внутри файла —
+        пиксели аватара не меняются.
+      </>
+    );
+  } else if (!canEdit && detail) {
+    sourceNote = 'Этот файл не похож на SillyTavern PNG — редактирование недоступно.';
+  }
+
+  let entityActions: ReactNode = null;
+  if (!isNew && confirmDelete) {
+    entityActions = (
+      <>
+        <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+          удалить персонажа?
+        </span>
+        <button
+          className="btn btn--danger"
+          disabled={deleteMutation.isPending}
+          onClick={() => deleteMutation.mutate()}
+          type="button"
+        >
+          Да, удалить
+        </button>
+        <button
+          className="btn btn--icon"
+          disabled={deleteMutation.isPending}
+          onClick={() => setConfirmDelete(false)}
+          title="Не удалять"
+          type="button"
+        >
+          ✕
+        </button>
+      </>
+    );
+  } else if (!isNew) {
+    entityActions = (
+      <>
+        <button
+          className="btn btn--primary"
+          disabled={startChatMutation.isPending || saveMutation.isPending || deleteMutation.isPending || isDirty}
+          onClick={() => startChatMutation.mutate()}
+          title={isDirty ? 'Сначала сохрани изменения' : 'Создать новый чат с этим персонажем'}
+          type="button"
+        >
+          <ChatIcon size={14} /> {startChatMutation.isPending ? '…' : 'Начать чат'}
+        </button>
+        <button
+          className="btn"
+          disabled={saveMutation.isPending || deleteMutation.isPending}
+          onClick={() => setConfirmDelete(true)}
+          title="Удалить файл персонажа"
+          type="button"
+        >
+          <TrashIcon size={14} /> Удалить
+        </button>
+      </>
+    );
+  }
+
+  let submitLabel = isNew ? 'Создать' : 'Сохранить';
+  if (saveMutation.isPending) {
+    submitLabel = 'Сохраняем…';
+  }
+
+  let subtitle = 'Создаём JSON-карточку в data/characters/';
+  if (!isNew) {
+    if (detailQuery.isLoading) {
+      subtitle = 'Загружаем карточку…';
+    } else if (detail) {
+      subtitle = `${detail.source.toUpperCase()} · сохранён ${formatRelative(detail.updatedAt)} · ${detail.id}`;
+    } else {
+      subtitle = 'Не удалось загрузить карточку';
+    }
+  }
+
   return (
     <main className="main">
       <Topbar
@@ -300,53 +379,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
             >
               Отменить
             </button>
-            {!isNew && confirmDelete ? (
-              <>
-                <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-                  удалить персонажа?
-                </span>
-                <button
-                  className="btn btn--danger"
-                  disabled={deleteMutation.isPending}
-                  onClick={() => deleteMutation.mutate()}
-                  type="button"
-                >
-                  Да, удалить
-                </button>
-                <button
-                  className="btn btn--icon"
-                  disabled={deleteMutation.isPending}
-                  onClick={() => setConfirmDelete(false)}
-                  title="Не удалять"
-                  type="button"
-                >
-                  ✕
-                </button>
-              </>
-            ) : !isNew ? (
-              <>
-                <button
-                  className="btn btn--primary"
-                  disabled={
-                    startChatMutation.isPending || saveMutation.isPending || deleteMutation.isPending || isDirty
-                  }
-                  onClick={() => startChatMutation.mutate()}
-                  title={isDirty ? 'Сначала сохрани изменения' : 'Создать новый чат с этим персонажем'}
-                  type="button"
-                >
-                  <ChatIcon size={14} /> {startChatMutation.isPending ? '…' : 'Начать чат'}
-                </button>
-                <button
-                  className="btn"
-                  disabled={saveMutation.isPending || deleteMutation.isPending}
-                  onClick={() => setConfirmDelete(true)}
-                  title="Удалить файл персонажа"
-                  type="button"
-                >
-                  <TrashIcon size={14} /> Удалить
-                </button>
-              </>
-            ) : null}
+            {entityActions}
             <button
               className="btn btn--primary"
               disabled={
@@ -359,7 +392,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
               form="character-editor-form"
               type="submit"
             >
-              {saveMutation.isPending ? 'Сохраняем…' : isNew ? 'Создать' : 'Сохранить'}
+              {submitLabel}
             </button>
           </>
         }
@@ -373,15 +406,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
           <div className="page__title-row">
             <div>
               <h1 className="page__title">{isNew ? 'Новый персонаж' : (detail?.name ?? 'Загрузка…')}</h1>
-              <div className="page__sub">
-                {isNew
-                  ? 'Создаём JSON-карточку в data/characters/'
-                  : detailQuery.isLoading
-                    ? 'Загружаем карточку…'
-                    : detail
-                      ? `${detail.source.toUpperCase()} · сохранён ${formatRelative(detail.updatedAt)} · ${detail.id}`
-                      : 'Не удалось загрузить карточку'}
-              </div>
+              <div className="page__sub">{subtitle}</div>
             </div>
           </div>
         </div>
@@ -624,17 +649,10 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     ) : null}
                   </div>
                 </div>
-                {detail?.source === 'png' && canEdit ? (
+                {sourceNote ? (
                   <div className="card" style={{ padding: 12 }}>
                     <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-                      Карточка хранится в формате PNG SillyTavern. Сохранение перезаписывает <code>chara</code>-чанк
-                      внутри файла — пиксели аватара не меняются.
-                    </div>
-                  </div>
-                ) : !canEdit && detail ? (
-                  <div className="card" style={{ padding: 12 }}>
-                    <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-                      Этот файл не похож на SillyTavern PNG — редактирование недоступно.
+                      {sourceNote}
                     </div>
                   </div>
                 ) : null}

@@ -1,7 +1,7 @@
 import type { LorebookDetailDto, LorebookEntryDto, SaveLorebookCommand } from '@immersion/contracts/lorebooks';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
@@ -13,6 +13,16 @@ import { createLorebook, updateLorebook } from './api/save-lorebook';
 import { useDeleteLorebook } from './mutations/use-delete-lorebook';
 import { lorebookDetailQueryKey, lorebookDetailQueryOptions } from './queries/lorebook-detail-query';
 import { lorebookListQueryKey } from './queries/lorebook-list-query';
+
+function entryCountLabel(count: number): string {
+  let suffix = 'ей';
+  if (count === 1) {
+    suffix = 'ь';
+  } else if (count >= 2 && count <= 4) {
+    suffix = 'и';
+  }
+  return `${count} запис${suffix}`;
+}
 
 interface LorebookEditorScreenProps {
   lorebookId: string | null;
@@ -207,6 +217,62 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
     ? getApiErrorMessage(generateEntriesMutation.error, 'Не удалось сгенерировать записи. Попробуйте ещё раз.')
     : null;
 
+  let entityActions: ReactNode = null;
+  if (!isNew && confirmDelete) {
+    entityActions = (
+      <>
+        <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+          удалить лорбук?
+        </span>
+        <button
+          className="btn btn--danger"
+          disabled={deleteMutation.isPending}
+          onClick={() => deleteMutation.mutate()}
+          type="button"
+        >
+          Да, удалить
+        </button>
+        <button
+          className="btn btn--icon"
+          disabled={deleteMutation.isPending}
+          onClick={() => setConfirmDelete(false)}
+          title="Не удалять"
+          type="button"
+        >
+          ✕
+        </button>
+      </>
+    );
+  } else if (!isNew) {
+    entityActions = (
+      <button
+        className="btn"
+        disabled={saveMutation.isPending || deleteMutation.isPending}
+        onClick={() => setConfirmDelete(true)}
+        title="Удалить файл лорбука"
+        type="button"
+      >
+        <TrashIcon size={14} /> Удалить
+      </button>
+    );
+  }
+
+  let submitLabel = isNew ? 'Создать' : 'Сохранить';
+  if (saveMutation.isPending) {
+    submitLabel = 'Сохраняем…';
+  }
+
+  let subtitle = 'Создаём файл в data/worlds/';
+  if (!isNew) {
+    if (detailQuery.isLoading) {
+      subtitle = 'Загружаем…';
+    } else if (detail) {
+      subtitle = `${entryCountLabel(detail.entries.length)} · сохранён ${formatRelative(detail.updatedAt)}`;
+    } else {
+      subtitle = 'Не удалось загрузить лорбук';
+    }
+  }
+
   return (
     <main className="main">
       <Topbar
@@ -220,47 +286,14 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
             >
               Отменить
             </button>
-            {!isNew && confirmDelete ? (
-              <>
-                <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-                  удалить лорбук?
-                </span>
-                <button
-                  className="btn btn--danger"
-                  disabled={deleteMutation.isPending}
-                  onClick={() => deleteMutation.mutate()}
-                  type="button"
-                >
-                  Да, удалить
-                </button>
-                <button
-                  className="btn btn--icon"
-                  disabled={deleteMutation.isPending}
-                  onClick={() => setConfirmDelete(false)}
-                  title="Не удалять"
-                  type="button"
-                >
-                  ✕
-                </button>
-              </>
-            ) : !isNew ? (
-              <button
-                className="btn"
-                disabled={saveMutation.isPending || deleteMutation.isPending}
-                onClick={() => setConfirmDelete(true)}
-                title="Удалить файл лорбука"
-                type="button"
-              >
-                <TrashIcon size={14} /> Удалить
-              </button>
-            ) : null}
+            {entityActions}
             <button
               className="btn btn--primary"
               disabled={saveMutation.isPending || deleteMutation.isPending || !isDirty || form.name.trim().length === 0}
               form="lorebook-editor-form"
               type="submit"
             >
-              {saveMutation.isPending ? 'Сохраняем…' : isNew ? 'Создать' : 'Сохранить'}
+              {submitLabel}
             </button>
           </>
         }
@@ -274,15 +307,7 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
           <div className="page__title-row">
             <div>
               <h1 className="page__title">{isNew ? 'Новый лорбук' : (detail?.name ?? 'Загрузка…')}</h1>
-              <div className="page__sub">
-                {isNew
-                  ? 'Создаём файл в data/worlds/'
-                  : detailQuery.isLoading
-                    ? 'Загружаем…'
-                    : detail
-                      ? `${detail.entries.length} запис${detail.entries.length === 1 ? 'ь' : detail.entries.length >= 2 && detail.entries.length <= 4 ? 'и' : 'ей'} · сохранён ${formatRelative(detail.updatedAt)}`
-                      : 'Не удалось загрузить лорбук'}
-              </div>
+              <div className="page__sub">{subtitle}</div>
             </div>
           </div>
         </div>

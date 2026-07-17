@@ -7,7 +7,7 @@ import type {
 } from '@immersion/contracts/providers';
 import type { RuntimeOverviewResponse, RuntimeStartCommand } from '@immersion/contracts/runtime';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
@@ -126,6 +126,34 @@ export function ServerControlScreen() {
   });
   const activeModelName = overview?.serverStatus.model ?? null;
 
+  let runtimeSubtitle = 'Загружаем настройки…';
+  if (snapshot) {
+    runtimeSubtitle =
+      activeMode === 'builtin' ? `Локальный KoboldCpp · ${RUNTIME_STATUS_LABELS[status]}` : 'Внешний API провайдер';
+  }
+
+  let runtimeFallback: ReactNode;
+  if (activeMode === 'builtin') {
+    runtimeFallback = (
+      <div className="empty" style={{ padding: 60 }}>
+        <h2>{runtimeOverviewQuery.isError ? 'Не удалось загрузить runtime' : 'Загрузка runtime'}</h2>
+        <p>
+          {runtimeOverviewQuery.isError
+            ? 'Проверьте rewrite API и состояние встроенного сервера.'
+            : 'Получаем список моделей и состояние сервера.'}
+        </p>
+      </div>
+    );
+  } else {
+    runtimeFallback = (
+      <ExternalProviderForm
+        isSaving={saveProviderMutation.isPending}
+        onSave={(command) => saveProviderMutation.mutateAsync(command)}
+        snapshot={snapshot}
+      />
+    );
+  }
+
   return (
     <main className="main">
       <Topbar crumbs={[{ label: 'API / Сервер', strong: true }]} />
@@ -134,13 +162,7 @@ export function ServerControlScreen() {
           <div className="page__title-row">
             <div>
               <h1 className="page__title">LLM-runtime</h1>
-              <div className="page__sub">
-                {snapshot
-                  ? activeMode === 'builtin'
-                    ? `Локальный KoboldCpp · ${RUNTIME_STATUS_LABELS[status]}`
-                    : 'Внешний API провайдер'
-                  : 'Загружаем настройки…'}
-              </div>
+              <div className="page__sub">{runtimeSubtitle}</div>
             </div>
             <div className="row gap-2 card" style={{ padding: 2 }}>
               <button
@@ -318,21 +340,8 @@ export function ServerControlScreen() {
                 </table>
               </section>
             </>
-          ) : activeMode === 'builtin' ? (
-            <div className="empty" style={{ padding: 60 }}>
-              <h2>{runtimeOverviewQuery.isError ? 'Не удалось загрузить runtime' : 'Загрузка runtime'}</h2>
-              <p>
-                {runtimeOverviewQuery.isError
-                  ? 'Проверьте rewrite API и состояние встроенного сервера.'
-                  : 'Получаем список моделей и состояние сервера.'}
-              </p>
-            </div>
           ) : (
-            <ExternalProviderForm
-              isSaving={saveProviderMutation.isPending}
-              onSave={(command) => saveProviderMutation.mutateAsync(command)}
-              snapshot={snapshot}
-            />
+            runtimeFallback
           )}
         </div>
       </div>

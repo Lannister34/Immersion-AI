@@ -1,7 +1,7 @@
 import type { SaveScenarioCommand, ScenarioDetailDto } from '@immersion/contracts/scenarios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
@@ -162,6 +162,73 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
     ? getApiErrorMessage(draftMutation.error, 'Не удалось сгенерировать сценарий. Попробуйте ещё раз.')
     : null;
 
+  let entityActions: ReactNode = null;
+  if (!isNew && confirmDelete) {
+    entityActions = (
+      <>
+        <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+          удалить сценарий?
+        </span>
+        <button
+          className="btn btn--danger"
+          disabled={deleteMutation.isPending}
+          onClick={() => deleteMutation.mutate()}
+          type="button"
+        >
+          Да, удалить
+        </button>
+        <button
+          className="btn btn--icon"
+          disabled={deleteMutation.isPending}
+          onClick={() => setConfirmDelete(false)}
+          title="Не удалять"
+          type="button"
+        >
+          ✕
+        </button>
+      </>
+    );
+  } else if (!isNew) {
+    entityActions = (
+      <>
+        <button
+          className="btn btn--primary"
+          disabled={startChatMutation.isPending || saveMutation.isPending || deleteMutation.isPending || isDirty}
+          onClick={() => startChatMutation.mutate()}
+          title={isDirty ? 'Сначала сохрани изменения' : 'Создать новый чат с этим сценарием'}
+          type="button"
+        >
+          <ChatIcon size={14} /> {startChatMutation.isPending ? '…' : 'Начать чат'}
+        </button>
+        <button
+          className="btn"
+          disabled={saveMutation.isPending || deleteMutation.isPending}
+          onClick={() => setConfirmDelete(true)}
+          title="Удалить сценарий"
+          type="button"
+        >
+          <TrashIcon size={14} /> Удалить
+        </button>
+      </>
+    );
+  }
+
+  let submitLabel = isNew ? 'Создать' : 'Сохранить';
+  if (saveMutation.isPending) {
+    submitLabel = 'Сохраняем…';
+  }
+
+  let subtitle = 'Создаём новый файл в data/scenarios/';
+  if (!isNew) {
+    if (detailQuery.isLoading) {
+      subtitle = 'Загружаем сценарий…';
+    } else if (detail) {
+      subtitle = `Сохранён ${formatRelative(detail.updatedAt)} · ${detail.id}`;
+    } else {
+      subtitle = 'Не удалось загрузить сценарий';
+    }
+  }
+
   return (
     <main className="main">
       <Topbar
@@ -175,60 +242,14 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
             >
               Отменить
             </button>
-            {!isNew && confirmDelete ? (
-              <>
-                <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-                  удалить сценарий?
-                </span>
-                <button
-                  className="btn btn--danger"
-                  disabled={deleteMutation.isPending}
-                  onClick={() => deleteMutation.mutate()}
-                  type="button"
-                >
-                  Да, удалить
-                </button>
-                <button
-                  className="btn btn--icon"
-                  disabled={deleteMutation.isPending}
-                  onClick={() => setConfirmDelete(false)}
-                  title="Не удалять"
-                  type="button"
-                >
-                  ✕
-                </button>
-              </>
-            ) : !isNew ? (
-              <>
-                <button
-                  className="btn btn--primary"
-                  disabled={
-                    startChatMutation.isPending || saveMutation.isPending || deleteMutation.isPending || isDirty
-                  }
-                  onClick={() => startChatMutation.mutate()}
-                  title={isDirty ? 'Сначала сохрани изменения' : 'Создать новый чат с этим сценарием'}
-                  type="button"
-                >
-                  <ChatIcon size={14} /> {startChatMutation.isPending ? '…' : 'Начать чат'}
-                </button>
-                <button
-                  className="btn"
-                  disabled={saveMutation.isPending || deleteMutation.isPending}
-                  onClick={() => setConfirmDelete(true)}
-                  title="Удалить сценарий"
-                  type="button"
-                >
-                  <TrashIcon size={14} /> Удалить
-                </button>
-              </>
-            ) : null}
+            {entityActions}
             <button
               className="btn btn--primary"
               disabled={saveMutation.isPending || deleteMutation.isPending || !isDirty || form.name.trim().length === 0}
               form="scenario-editor-form"
               type="submit"
             >
-              {saveMutation.isPending ? 'Сохраняем…' : isNew ? 'Создать' : 'Сохранить'}
+              {submitLabel}
             </button>
           </>
         }
@@ -242,15 +263,7 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
           <div className="page__title-row">
             <div>
               <h1 className="page__title">{isNew ? 'Новый сценарий' : (detail?.name ?? 'Загрузка…')}</h1>
-              <div className="page__sub">
-                {isNew
-                  ? 'Создаём новый файл в data/scenarios/'
-                  : detailQuery.isLoading
-                    ? 'Загружаем сценарий…'
-                    : detail
-                      ? `Сохранён ${formatRelative(detail.updatedAt)} · ${detail.id}`
-                      : 'Не удалось загрузить сценарий'}
-              </div>
+              <div className="page__sub">{subtitle}</div>
             </div>
           </div>
         </div>

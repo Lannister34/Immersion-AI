@@ -40,7 +40,6 @@ function describeRuntime(query: UseQueryResult<RuntimeOverviewResponse>): Runtim
       return { status: 'starting', label: 'Остановка runtime…' };
     case 'error':
       return { status: 'error', label: 'Ошибка запуска', detail: serverStatus.error ?? undefined };
-    case 'idle':
     default:
       return { status: 'stopped', label: 'Runtime остановлен' };
   }

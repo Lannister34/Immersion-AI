@@ -5,10 +5,9 @@ import {
 } from '@immersion/contracts/scenarios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { type ChangeEvent, useMemo, useRef, useState } from 'react';
+import { type ChangeEvent, type ReactNode, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
-import { ApiError } from '../../shared/api/client';
 import { formatRelative } from '../../shared/lib/format-relative';
 import { PlusIcon, SearchIcon, TrashIcon, UploadIcon, XIcon } from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
@@ -18,6 +17,16 @@ import { useDeleteScenario } from './mutations/use-delete-scenario';
 import { scenarioListQueryKey, scenarioListQueryOptions } from './queries/scenario-list-query';
 
 export { ScenarioEditorScreen } from './editor';
+
+function scenarioCountLabel(count: number): string {
+  let suffix = 'ев';
+  if (count === 1) {
+    suffix = 'й';
+  } else if (count >= 2 && count <= 4) {
+    suffix = 'я';
+  }
+  return `${count} сценари${suffix} в библиотеке`;
+}
 
 function parseScenarioImportFile(raw: string): SaveScenarioCommand {
   const parsed = JSON.parse(raw) as unknown;
@@ -62,13 +71,8 @@ export function ScenariosScreen() {
     setImportError(null);
     importMutation.mutate(file, {
       onError: (error) => {
-        const message =
-          error instanceof ApiError
-            ? error.message
-            : error instanceof Error
-              ? error.message
-              : 'Не удалось импортировать сценарий.';
-        setImportError(message);
+        // ApiError наследует Error — сообщение берём из любого Error, включая ошибки парсинга файла.
+        setImportError(error instanceof Error ? error.message : 'Не удалось импортировать сценарий.');
       },
     });
   };
@@ -106,6 +110,54 @@ export function ScenariosScreen() {
     setActiveTags((current) => (current.includes(tag) ? current.filter((value) => value !== tag) : [...current, tag]));
   };
 
+  let subtitle = scenarioCountLabel(items.length);
+  if (query.isLoading) {
+    subtitle = 'Загружаем сценарии…';
+  } else if (query.isError) {
+    subtitle = 'Не удалось загрузить сценарии';
+  }
+
+  let body: ReactNode;
+  if (query.isLoading) {
+    body = <ScenariosListSkeleton />;
+  } else if (query.isError) {
+    body = (
+      <div className="empty">
+        <h2>Не удалось загрузить сценарии</h2>
+        <p>Проверьте rewrite API и повторите попытку.</p>
+      </div>
+    );
+  } else if (items.length === 0) {
+    body = (
+      <div className="empty">
+        <h2>Папка сценариев пуста</h2>
+        <p>
+          Создайте новый сценарий или положите .json-файлы в <code>data/scenarios/</code>.
+        </p>
+        <div className="row gap-8" style={{ marginTop: 12, justifyContent: 'center' }}>
+          <Link className="btn btn--primary" to="/scenarios/new">
+            <PlusIcon size={13} /> Новый сценарий
+          </Link>
+        </div>
+      </div>
+    );
+  } else if (filtered.length === 0) {
+    body = (
+      <div className="empty">
+        <h2>Ничего не найдено</h2>
+        <p>Поиск не дал совпадений по имени, концепту или тегам.</p>
+      </div>
+    );
+  } else {
+    body = (
+      <div style={{ display: 'grid', gap: 10 }}>
+        {filtered.map((scenario) => (
+          <ScenarioRow key={scenario.id} scenario={scenario} />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <main className="main">
       <Topbar
@@ -139,13 +191,7 @@ export function ScenariosScreen() {
           <div className="page__title-row">
             <div>
               <h1 className="page__title">Сценарии</h1>
-              <div className="page__sub">
-                {query.isLoading
-                  ? 'Загружаем сценарии…'
-                  : query.isError
-                    ? 'Не удалось загрузить сценарии'
-                    : `${items.length} сценари${items.length === 1 ? 'й' : items.length >= 2 && items.length <= 4 ? 'я' : 'ев'} в библиотеке`}
-              </div>
+              <div className="page__sub">{subtitle}</div>
               {importError ? (
                 <div style={{ color: 'var(--danger)', fontSize: 'var(--fz-xs)', marginTop: 4 }}>{importError}</div>
               ) : null}
@@ -194,39 +240,7 @@ export function ScenariosScreen() {
             </div>
           ) : null}
         </div>
-        <div className="page__body">
-          {query.isLoading ? (
-            <ScenariosListSkeleton />
-          ) : query.isError ? (
-            <div className="empty">
-              <h2>Не удалось загрузить сценарии</h2>
-              <p>Проверьте rewrite API и повторите попытку.</p>
-            </div>
-          ) : items.length === 0 ? (
-            <div className="empty">
-              <h2>Папка сценариев пуста</h2>
-              <p>
-                Создайте новый сценарий или положите .json-файлы в <code>data/scenarios/</code>.
-              </p>
-              <div className="row gap-8" style={{ marginTop: 12, justifyContent: 'center' }}>
-                <Link className="btn btn--primary" to="/scenarios/new">
-                  <PlusIcon size={13} /> Новый сценарий
-                </Link>
-              </div>
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="empty">
-              <h2>Ничего не найдено</h2>
-              <p>Поиск не дал совпадений по имени, концепту или тегам.</p>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gap: 10 }}>
-              {filtered.map((scenario) => (
-                <ScenarioRow key={scenario.id} scenario={scenario} />
-              ))}
-            </div>
-          )}
-        </div>
+        <div className="page__body">{body}</div>
       </div>
     </main>
   );

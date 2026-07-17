@@ -1,7 +1,7 @@
 import type { CharacterSummaryDto } from '@immersion/contracts/characters';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { type ChangeEvent, type DragEvent, useMemo, useRef, useState } from 'react';
+import { type ChangeEvent, type DragEvent, type ReactNode, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
 import { createApiUrl } from '../../shared/api/client';
@@ -16,6 +16,16 @@ import { useDeleteCharacter } from './mutations/use-delete-character';
 import { characterListQueryKey, characterListQueryOptions } from './queries/character-list-query';
 
 export { CharacterEditorScreen } from './editor';
+
+function characterCardsLabel(count: number): string {
+  let suffix = '';
+  if (count === 1) {
+    suffix = 'а';
+  } else if (count >= 2 && count <= 4) {
+    suffix = 'ы';
+  }
+  return `${count} карт${suffix} в библиотеке`;
+}
 
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -107,6 +117,55 @@ export function CharactersScreen() {
     ? getApiErrorMessage(importMutation.error, 'Не удалось импортировать карточку.')
     : null;
 
+  let subtitle = characterCardsLabel(items.length);
+  if (query.isLoading) {
+    subtitle = 'Загружаем карточки…';
+  } else if (query.isError) {
+    subtitle = 'Не удалось загрузить персонажей';
+  }
+
+  let body: ReactNode;
+  if (query.isLoading) {
+    body = <CharactersGridSkeleton />;
+  } else if (query.isError) {
+    body = (
+      <div className="empty">
+        <h2>Не удалось загрузить карточки</h2>
+        <p>Проверьте rewrite API и повторите попытку.</p>
+      </div>
+    );
+  } else if (items.length === 0) {
+    body = (
+      <div className="empty">
+        <h2>Папка персонажей пуста</h2>
+        <p>Перетащите PNG-карточку SillyTavern в окно, нажмите «Импорт» или создайте нового персонажа.</p>
+        <div className="row gap-8" style={{ marginTop: 12, justifyContent: 'center' }}>
+          <button className="btn" disabled={importMutation.isPending} onClick={handleImportClick} type="button">
+            <UploadIcon size={13} /> Импорт PNG
+          </button>
+          <Link className="btn btn--primary" to="/characters/new">
+            <PlusIcon size={13} /> Новый персонаж
+          </Link>
+        </div>
+      </div>
+    );
+  } else if (filtered.length === 0) {
+    body = (
+      <div className="empty">
+        <h2>Ничего не найдено</h2>
+        <p>Поиск не дал совпадений по имени файла.</p>
+      </div>
+    );
+  } else {
+    body = (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 14 }}>
+        {filtered.map((character) => (
+          <CharacterCard character={character} key={character.id} />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <main
       className="main"
@@ -140,13 +199,7 @@ export function CharactersScreen() {
           <div className="page__title-row">
             <div>
               <h1 className="page__title">Персонажи</h1>
-              <div className="page__sub">
-                {query.isLoading
-                  ? 'Загружаем карточки…'
-                  : query.isError
-                    ? 'Не удалось загрузить персонажей'
-                    : `${items.length} карт${items.length === 1 ? 'а' : items.length >= 2 && items.length <= 4 ? 'ы' : ''} в библиотеке`}
-              </div>
+              <div className="page__sub">{subtitle}</div>
               {importErrorMessage ? (
                 <div style={{ color: 'var(--danger)', fontSize: 'var(--fz-xs)', marginTop: 4 }}>
                   {importErrorMessage}
@@ -175,40 +228,7 @@ export function CharactersScreen() {
             </div>
           </div>
         </div>
-        <div className="page__body">
-          {query.isLoading ? (
-            <CharactersGridSkeleton />
-          ) : query.isError ? (
-            <div className="empty">
-              <h2>Не удалось загрузить карточки</h2>
-              <p>Проверьте rewrite API и повторите попытку.</p>
-            </div>
-          ) : items.length === 0 ? (
-            <div className="empty">
-              <h2>Папка персонажей пуста</h2>
-              <p>Перетащите PNG-карточку SillyTavern в окно, нажмите «Импорт» или создайте нового персонажа.</p>
-              <div className="row gap-8" style={{ marginTop: 12, justifyContent: 'center' }}>
-                <button className="btn" disabled={importMutation.isPending} onClick={handleImportClick} type="button">
-                  <UploadIcon size={13} /> Импорт PNG
-                </button>
-                <Link className="btn btn--primary" to="/characters/new">
-                  <PlusIcon size={13} /> Новый персонаж
-                </Link>
-              </div>
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="empty">
-              <h2>Ничего не найдено</h2>
-              <p>Поиск не дал совпадений по имени файла.</p>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 14 }}>
-              {filtered.map((character) => (
-                <CharacterCard character={character} key={character.id} />
-              ))}
-            </div>
-          )}
-        </div>
+        <div className="page__body">{body}</div>
       </div>
     </main>
   );
