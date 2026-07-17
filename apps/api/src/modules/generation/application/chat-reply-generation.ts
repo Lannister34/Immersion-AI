@@ -17,6 +17,7 @@ import {
 } from '../../providers/application/generation-provider.js';
 import { getSettingsOverview } from '../../settings/application/get-settings-overview.js';
 import { OpenAiCompatibleChatCompletionsClient } from '../infrastructure/openai-compatible-chat-completions-client.js';
+import { getProviderTokenCounter } from '../infrastructure/provider-token-counter.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import {
   ChatReplyGenerationFailedError,
@@ -85,27 +86,22 @@ async function runChatCompletionForSession(
     const endpoint = await resolveGenerationProviderEndpoint();
     const settings = getSettingsOverview();
     const characterContext = await loadChatPromptContext(session);
-    const generationPlan = resolveChatReplyGenerationPlan({
+    // The trailing instruction goes through the plan so it is counted inside
+    // the context budget instead of overflowing an already-full prompt.
+    const generationPlan = await resolveChatReplyGenerationPlan({
       character: characterContext.character,
       characterScenarioContent: characterContext.characterScenarioContent,
       lorebookSections: characterContext.lorebookSections,
       providerModelName: endpoint.model,
       session,
       settings,
+      tokenCounter: getProviderTokenCounter(),
+      trailingUserInstruction: buildTrailingInstruction ? buildTrailingInstruction(settings) : null,
     });
-    const messages = buildTrailingInstruction
-      ? [
-          ...generationPlan.providerRequest.messages,
-          {
-            role: 'user' as const,
-            content: buildTrailingInstruction(settings),
-          },
-        ]
-      : generationPlan.providerRequest.messages;
     const completion = await chatCompletionClient.completeChat({
       endpoint,
       maxTokens: generationPlan.providerRequest.maxTokens,
-      messages,
+      messages: generationPlan.providerRequest.messages,
       sampling: generationPlan.providerRequest.sampling,
       signal: dependencies.signal,
     });

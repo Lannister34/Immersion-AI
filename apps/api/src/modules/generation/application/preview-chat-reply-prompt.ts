@@ -13,6 +13,7 @@ import { resolveChatReplyGenerationPlan } from '../../prompting/application/reso
 import { getProviderSettings } from '../../providers/application/get-provider-settings.js';
 import { DEFAULT_OPENAI_COMPATIBLE_MODEL } from '../../providers/domain/provider-settings.js';
 import { getRuntimeOverview } from '../../runtime/application/get-runtime-overview.js';
+import { getProviderTokenCounter } from '../infrastructure/provider-token-counter.js';
 import { getGenerationReadiness } from './get-generation-readiness.js';
 
 function withMessageOverrides(
@@ -104,12 +105,13 @@ export async function previewChatReplyPrompt(
   const sessionWithOverrides = withMessageOverrides(session, command.messageOverrides);
   const sessionForPlan = withDraftUserMessage(sessionWithOverrides, command.draftUserMessage);
   const characterContext = await loadChatPromptContext(sessionForPlan);
-  const generationPlan = resolveChatReplyGenerationPlan({
+  const generationPlan = await resolveChatReplyGenerationPlan({
     character: characterContext.character,
     characterScenarioContent: characterContext.characterScenarioContent,
     lorebookSections: characterContext.lorebookSections,
     providerModelName,
     session: sessionForPlan,
+    tokenCounter: getProviderTokenCounter(),
   });
   const systemMessageCount = generationPlan.providerRequest.messages.filter(
     (message) => message.role === 'system',
@@ -125,6 +127,7 @@ export async function previewChatReplyPrompt(
       renderer: generationPlan.prompt.diagnostics.renderer,
       systemMessageCount,
       systemPromptIncluded: systemMessageCount > 0,
+      tokenCountMethod: generationPlan.prompt.diagnostics.tokenCountMethod,
       tokenEstimate: generationPlan.prompt.diagnostics.tokenEstimate,
       transcriptMessageCount: generationPlan.providerRequest.messages.length - systemMessageCount,
       trimmedMessageCount: generationPlan.prompt.diagnostics.trimmedMessageCount,

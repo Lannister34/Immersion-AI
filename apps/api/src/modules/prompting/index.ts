@@ -9,3 +9,4 @@ export * from './application/prompt-template-engine.js';
 export * from './application/prompt-variable-values.js';
 export * from './application/resolve-chat-generation-settings.js';
 export * from './application/resolve-chat-reply-generation-plan.js';
+export * from './application/token-counter.js';

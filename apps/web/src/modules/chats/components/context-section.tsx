@@ -18,6 +18,7 @@ export function ContextSectionContent({ stats }: ContextSectionContentProps) {
     ['сообщений', String(stats.messageCount)],
     ['system', stats.systemTokens.toLocaleString('ru-RU')],
     ['transcript', stats.transcriptTokens.toLocaleString('ru-RU')],
+    ['подсчёт', stats.tokenCountMethod === 'approximate' ? 'приблизительный' : 'точный'],
   ];
   if (stats.presetName) lines.push(['preset', stats.presetName]);
   if (stats.modelName) lines.push(['model', stats.modelName]);

@@ -212,9 +212,14 @@ export function BubbleMessage({
                 <span
                   className="muted mono"
                   style={{ fontSize: 'var(--fz-2xs)' }}
-                  title="Оценка контекста после применения правки"
+                  title={
+                    editPreviewStats.tokenCountMethod === 'approximate'
+                      ? 'Приблизительная оценка контекста после применения правки'
+                      : 'Точный подсчёт контекста после применения правки'
+                  }
                 >
-                  ≈ {editPreviewStats.totalTokens.toLocaleString('ru-RU')} /{' '}
+                  {editPreviewStats.tokenCountMethod === 'approximate' ? '≈ ' : ''}
+                  {editPreviewStats.totalTokens.toLocaleString('ru-RU')} /{' '}
                   {editPreviewStats.contextWindow.toLocaleString('ru-RU')} ток.
                 </span>
               ) : null}
