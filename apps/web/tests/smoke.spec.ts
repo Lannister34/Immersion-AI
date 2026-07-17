@@ -59,6 +59,28 @@ test('shows the LLM-runtime page with the LLM-runtime heading and mode switcher'
   await expect(page.getByRole('button', { name: 'Скопировать' })).toBeVisible();
 });
 
+test('adds a models directory through the params card on /server', async ({ page }) => {
+  await page.goto('/server');
+  await page.getByRole('button', { name: 'Встроенный' }).click();
+
+  await page.getByRole('button', { name: 'Параметры' }).click();
+  await expect(page.getByRole('heading', { name: 'Каталоги моделей' })).toBeVisible();
+
+  await page.getByLabel('Новый каталог моделей').fill('C:\\smoke-models-extra');
+  await page.getByRole('button', { name: 'Добавить' }).click();
+
+  const putConfig = page.waitForResponse(
+    (response) => response.url().includes('/api/runtime/config') && response.request().method() === 'PUT',
+  );
+  await page.getByRole('button', { name: 'Сохранить' }).click();
+  expect((await putConfig).status()).toBe(200);
+
+  // Шапка таблицы моделей переключается на счётчик каталогов после сохранения.
+  await expect(page.getByText('2 каталога')).toBeVisible();
+  // Каталог из фикстуры существует, добавленный — нет: ровно один бейдж «не найден».
+  await expect(page.getByText('не найден', { exact: true })).toHaveCount(1);
+});
+
 test('renders editable profile and sampler sections on /settings', async ({ page }) => {
   await page.goto('/settings');
 

@@ -7,10 +7,14 @@ export function normalizeRuntimeConfig(raw: unknown): RuntimeConfigCommand {
   const manager = getLlmProcessManager();
   const engine = manager.getEngineInfo();
   const state = manager.getState();
-  const modelsDirs =
-    Array.isArray(configSource.modelsDirs) && configSource.modelsDirs.length > 0
-      ? configSource.modelsDirs.filter((value): value is string => typeof value === 'string')
-      : [engine.defaultModelsDir];
+  // Явный пустой список — валидное состояние «каталоги не заданы»;
+  // дефолт подставляем только когда в настройках вообще нет массива.
+  const modelsDirs = Array.isArray(configSource.modelsDirs)
+    ? configSource.modelsDirs
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0)
+    : [engine.defaultModelsDir];
 
   return RuntimeConfigCommandSchema.parse({
     modelsDirs,
