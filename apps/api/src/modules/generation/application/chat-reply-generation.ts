@@ -1,7 +1,7 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 import type { ChatReplyGenerationResponse, StartChatReplyGenerationCommand } from '@immersion/contracts/generation';
 import { appendChatMessages } from '../../chats/application/append-chat-messages.js';
-import { loadCharacterContextForSession } from '../../chats/application/load-character-context.js';
+import { loadChatPromptContext } from '../../prompting/application/load-chat-prompt-context.js';
 import { InvalidChatGenerationSettingsResolutionError } from '../../prompting/application/resolve-chat-generation-settings.js';
 import { resolveChatReplyGenerationPlan } from '../../prompting/application/resolve-chat-reply-generation-plan.js';
 import {
@@ -50,7 +50,7 @@ export async function completeChatReplyForSession(
     throwIfAborted(dependencies.signal);
 
     const endpoint = await resolveGenerationProviderEndpoint();
-    const characterContext = await loadCharacterContextForSession(sessionAfterUserMessage);
+    const characterContext = await loadChatPromptContext(sessionAfterUserMessage);
     const generationPlan = resolveChatReplyGenerationPlan({
       character: characterContext.character,
       characterScenarioContent: characterContext.characterScenarioContent,

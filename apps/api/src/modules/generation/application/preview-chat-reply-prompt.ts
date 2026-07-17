@@ -7,7 +7,8 @@ import {
 } from '@immersion/contracts/generation';
 import { ChatMessageNotFoundError, ChatNotFoundError } from '../../chats/application/append-chat-messages.js';
 import { getChatSession } from '../../chats/application/get-chat-session.js';
-import { loadCharacterContextForSession } from '../../chats/application/load-character-context.js';
+import { deriveLastMessagePreview } from '../../chats/application/last-message-preview.js';
+import { loadChatPromptContext } from '../../prompting/application/load-chat-prompt-context.js';
 import { resolveChatReplyGenerationPlan } from '../../prompting/application/resolve-chat-reply-generation-plan.js';
 import { getProviderSettings } from '../../providers/application/get-provider-settings.js';
 import { DEFAULT_OPENAI_COMPATIBLE_MODEL } from '../../providers/domain/provider-settings.js';
@@ -43,7 +44,7 @@ function withMessageOverrides(
     messages: nextMessages,
     chat: {
       ...session.chat,
-      lastMessagePreview: nextMessages.at(-1)?.content.slice(0, 160) ?? null,
+      lastMessagePreview: deriveLastMessagePreview(nextMessages.at(-1)?.content),
     },
   };
 }
@@ -102,7 +103,7 @@ export async function previewChatReplyPrompt(
   const [readiness, providerModelName] = await Promise.all([getGenerationReadiness(), resolvePreviewModelName()]);
   const sessionWithOverrides = withMessageOverrides(session, command.messageOverrides);
   const sessionForPlan = withDraftUserMessage(sessionWithOverrides, command.draftUserMessage);
-  const characterContext = await loadCharacterContextForSession(sessionForPlan);
+  const characterContext = await loadChatPromptContext(sessionForPlan);
   const generationPlan = resolveChatReplyGenerationPlan({
     character: characterContext.character,
     characterScenarioContent: characterContext.characterScenarioContent,
