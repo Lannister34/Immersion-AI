@@ -8,8 +8,8 @@ import {
 } from '@immersion/contracts/runtime';
 
 import { resolveDataRoot } from '../../../lib/data-root.js';
-import { getEngineInfo, getState } from '../../../lib/llm-process.js';
-import { readLegacyUserSettingsSource } from '../../../shared/infrastructure/legacy-settings-source.js';
+import { getLlmServerRuntimeConfig } from '../../settings/application/get-llm-server-runtime-config.js';
+import { getLlmProcessManager } from '../infrastructure/llm-process-manager.js';
 import { normalizeRuntimeConfig } from './runtime-config.js';
 
 const MODEL_SCAN_TTL_MS = 3_000;
@@ -124,10 +124,10 @@ async function scanModelsCached(modelsDirs: string[]): Promise<RuntimeModelSumma
 }
 
 export async function getRuntimeOverview(): Promise<RuntimeOverviewResponse> {
-  const source = readLegacyUserSettingsSource();
-  const engine = getEngineInfo();
-  const serverStatus = getState();
-  const runtimeConfig = normalizeRuntimeConfig(source.llmServerConfig);
+  const manager = getLlmProcessManager();
+  const engine = manager.getEngineInfo();
+  const serverStatus = manager.getState();
+  const runtimeConfig = normalizeRuntimeConfig(getLlmServerRuntimeConfig());
   const modelsDirs = runtimeConfig.modelsDirs.map((directory) => {
     if (path.isAbsolute(directory)) {
       return directory;

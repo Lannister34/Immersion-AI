@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { getState } from '../../../lib/llm-process.js';
+import { getLlmProcessManager } from '../infrastructure/llm-process-manager.js';
 import { getRuntimeOverview } from './get-runtime-overview.js';
 
 export interface RunningRuntimeEndpoint {
@@ -21,7 +21,7 @@ async function resolveCanonicalModelName(modelPath: string | null, fallbackModel
 }
 
 export async function getRunningRuntimeEndpoint(): Promise<RunningRuntimeEndpoint | null> {
-  const state = getState();
+  const state = getLlmProcessManager().getState();
 
   if (state.status !== 'running') {
     return null;
