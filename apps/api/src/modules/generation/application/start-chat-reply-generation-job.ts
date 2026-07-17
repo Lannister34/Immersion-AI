@@ -1,5 +1,6 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 import {
+  type ContinueChatReplyCommand,
   StartChatReplyGenerationCommandSchema,
   type StartChatReplyGenerationJobResponse,
   StartChatReplyGenerationJobResponseSchema,
@@ -8,13 +9,53 @@ import {
 import { ChatNotFoundError } from '../../chats/application/append-chat-messages.js';
 import { getChatSession } from '../../chats/application/get-chat-session.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
-import { appendUserMessageForChatReply, completeChatReplyForSession } from './chat-reply-generation.js';
+import {
+  appendUserMessageForChatReply,
+  completeChatReplyContinuationForSession,
+  completeChatReplyForSession,
+  getContinuableAssistantMessage,
+} from './chat-reply-generation.js';
 import type { GenerationJobRegistry } from './generation-job-registry.js';
 
 export interface StartChatReplyGenerationJobDependencies {
   chatCompletionClient?: ChatCompletionClient;
   generationJobRegistry: GenerationJobRegistry;
   now?: () => Date;
+}
+
+interface ResolvedJobDependencies {
+  chatCompletionClient?: ChatCompletionClient;
+  now: () => Date;
+}
+
+function startContinueChatReplyJob(
+  command: ContinueChatReplyCommand,
+  session: ChatSessionDto,
+  registry: GenerationJobRegistry,
+  dependencies: ResolvedJobDependencies,
+): StartChatReplyGenerationJobResponse {
+  // Валидация до создания job: нечего продолжать — job не нужен.
+  getContinuableAssistantMessage(command.chatId, session);
+
+  const job = registry.createChatReplyJob({
+    chatId: command.chatId,
+    command,
+  });
+
+  registry.runChatReplyJob(job.id, async ({ signal }) => {
+    const response = await completeChatReplyContinuationForSession(command, session, {
+      ...(dependencies.chatCompletionClient ? { chatCompletionClient: dependencies.chatCompletionClient } : {}),
+      now: dependencies.now,
+      signal,
+    });
+
+    return response.session;
+  });
+
+  return StartChatReplyGenerationJobResponseSchema.parse({
+    job,
+    session,
+  });
 }
 
 export async function startChatReplyGenerationJob(
@@ -27,6 +68,13 @@ export async function startChatReplyGenerationJob(
 
   if (!session) {
     throw new ChatNotFoundError(command.chatId);
+  }
+
+  if (command.mode === 'continue') {
+    return startContinueChatReplyJob(command, session, dependencies.generationJobRegistry, {
+      ...(dependencies.chatCompletionClient ? { chatCompletionClient: dependencies.chatCompletionClient } : {}),
+      now,
+    });
   }
 
   const job = dependencies.generationJobRegistry.createChatReplyJob({

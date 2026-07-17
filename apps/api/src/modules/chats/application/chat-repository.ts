@@ -18,7 +18,18 @@ export interface ListGenericChatsOptions {
   searchText?: string;
 }
 
+export interface AppendContinuationToLastAssistantMessageInput {
+  continuation: string;
+  expectedContentPrefix: string;
+  expectedMessageIndex: number;
+  updatedAt: string;
+}
+
 export interface ChatRepository {
+  appendContinuationToLastAssistantMessage(
+    chatId: string,
+    input: AppendContinuationToLastAssistantMessageInput,
+  ): Promise<ChatSessionRecord | null>;
   appendGenericChatMessages(chatId: string, messages: AppendChatMessageInput[]): Promise<ChatSessionRecord | null>;
   createGenericChat(input: CreateGenericChatInput): Promise<ChatSummaryRecord>;
   deleteGenericChat(chatId: string): Promise<boolean>;

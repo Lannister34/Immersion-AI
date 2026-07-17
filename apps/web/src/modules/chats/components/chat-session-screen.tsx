@@ -177,6 +177,14 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
     !chatReplyGeneration.isPending &&
     !generateFirstMessageMutation.isPending &&
     !blockReason;
+  const lastTranscriptMessage = session.messages.at(-1);
+  const canContinue =
+    !isStreaming &&
+    !chatReplyGeneration.isPending &&
+    !generateFirstMessageMutation.isPending &&
+    !blockReason &&
+    lastTranscriptMessage?.role === 'assistant' &&
+    lastTranscriptMessage.content.trim().length > 0;
 
   const onSubmit = async (event?: FormEvent) => {
     event?.preventDefault();
@@ -187,6 +195,15 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
       await chatReplyGeneration.start(message);
     } catch {
       setDraftMessage(message);
+    }
+  };
+
+  const onContinue = async () => {
+    if (!canContinue) return;
+    try {
+      await chatReplyGeneration.continueLast();
+    } catch {
+      // Ошибка показывается через generationErrorMessage.
     }
   };
 
@@ -510,10 +527,12 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
               ) : null}
               <Composer
                 blockReason={blockReason}
+                canContinue={canContinue}
                 canSend={canSend}
                 isStreaming={isStreaming}
                 onCancel={chatReplyGeneration.cancel}
                 onChange={(event) => setDraftMessage(event.currentTarget.value)}
+                onContinue={() => void onContinue()}
                 onKeyDown={onComposerKeyDown}
                 onOpenLorebooks={() => openPanelSection('lorebooks')}
                 onOpenSettings={() => openPanelSection('settings')}

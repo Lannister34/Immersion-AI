@@ -1,13 +1,15 @@
 import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react';
 
-import { BookIcon, SendIcon, SlidersIcon, StopIcon } from '../../../shared/ui/icons';
+import { BookIcon, PlayIcon, SendIcon, SlidersIcon, StopIcon } from '../../../shared/ui/icons';
 
 export interface ComposerProps {
   blockReason?: string | undefined;
+  canContinue: boolean;
   canSend: boolean;
   isStreaming: boolean;
   onCancel: () => void;
   onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
+  onContinue: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   onOpenLorebooks: () => void;
   onOpenSettings: () => void;
@@ -17,10 +19,12 @@ export interface ComposerProps {
 
 export function Composer({
   blockReason,
+  canContinue,
   canSend,
   isStreaming,
   onCancel,
   onChange,
+  onContinue,
   onKeyDown,
   onOpenLorebooks,
   onOpenSettings,
@@ -62,9 +66,16 @@ export function Composer({
               <StopIcon size={14} /> Остановить
             </button>
           ) : (
-            <button className="btn btn--primary" disabled={!canSend} type="submit">
-              <SendIcon size={14} /> Отправить
-            </button>
+            <>
+              {canContinue ? (
+                <button className="btn" onClick={onContinue} title="Продолжить последний ответ персонажа" type="button">
+                  <PlayIcon size={14} /> Продолжить
+                </button>
+              ) : null}
+              <button className="btn btn--primary" disabled={!canSend} type="submit">
+                <SendIcon size={14} /> Отправить
+              </button>
+            </>
           )}
         </div>
       </div>

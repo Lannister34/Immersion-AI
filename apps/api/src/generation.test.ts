@@ -1142,6 +1142,189 @@ describe('generation routes', () => {
     await app.close();
   });
 
+  it('continues the last assistant reply by appending to the same message', async () => {
+    const provider = mockProviderSuccess('Это и делает её прочной.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    await appendChatMessages(chat.id, [
+      {
+        role: 'user',
+        content: 'Расскажи про обжиг керамики.',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        role: 'assistant',
+        content: 'Обжиг превращает глину в керамику при высокой температуре, и',
+        createdAt: '2026-01-01T00:00:01.000Z',
+      },
+    ]);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: {
+        chatId: chat.id,
+        mode: 'continue',
+      },
+    });
+    const payload = StartChatReplyGenerationJobResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(202);
+    expect(payload.job).toMatchObject({
+      chatId: chat.id,
+      kind: 'chat_reply',
+    });
+    // Старт continue-job не добавляет новых сообщений.
+    expect(payload.session.messages).toHaveLength(2);
+
+    await waitForGenerationJobStatus(app, payload.job.id, 'completed');
+
+    const sessionResponse = await app.inject({
+      method: 'GET',
+      url: `/api/chats/${chat.id}`,
+    });
+    const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
+
+    expect(getMessagesByRole(sessionPayload.messages)).toEqual([
+      { role: 'user', content: 'Расскажи про обжиг керамики.' },
+      {
+        role: 'assistant',
+        content: 'Обжиг превращает глину в керамику при высокой температуре, и Это и делает её прочной.',
+      },
+    ]);
+
+    expect(provider).toHaveLength(1);
+    const requestBody = getProviderRequestBody(provider[0]);
+    const promptMessages = requestBody.messages ?? [];
+    // Транскрипт уходит в промпт как есть, включая продолжаемый ответ.
+    expect(
+      promptMessages.some(
+        (message) =>
+          message.role === 'assistant' &&
+          message.content === 'Обжиг превращает глину в керамику при высокой температуре, и',
+      ),
+    ).toBe(true);
+    const trailingInstruction = promptMessages.at(-1);
+    expect(trailingInstruction?.role).toBe('user');
+    expect(trailingInstruction?.content).toContain('Continue your previous reply');
+    expect(trailingInstruction?.content).toContain('Do not repeat');
+    // Fixture profile responseLanguage is 'ru'.
+    expect(trailingInstruction?.content).toContain('Write the continuation in Russian.');
+
+    await app.close();
+  });
+
+  it('refuses to continue when the last message is not a non-empty assistant reply', async () => {
+    const provider = mockProviderSuccess('Should not be called.');
+    const app = buildApiApp();
+
+    const emptyChat = await createChat(app);
+    const emptyChatResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: {
+        chatId: emptyChat.id,
+        mode: 'continue',
+      },
+    });
+
+    expect(emptyChatResponse.statusCode).toBe(409);
+    expect(emptyChatResponse.json()).toMatchObject({ code: 'nothing_to_continue' });
+
+    const chat = await createChat(app);
+    await appendChatMessages(chat.id, [
+      {
+        role: 'user',
+        content: 'Последним пишет пользователь.',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: {
+        chatId: chat.id,
+        mode: 'continue',
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ code: 'nothing_to_continue' });
+    expect(provider).toHaveLength(0);
+
+    const sessionResponse = await app.inject({
+      method: 'GET',
+      url: `/api/chats/${chat.id}`,
+    });
+    const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
+    expect(sessionPayload.messages).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it('fails the continue job without touching the transcript when the chat changes mid-generation', async () => {
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    await appendChatMessages(chat.id, [
+      {
+        role: 'user',
+        content: 'Расскажи про обжиг керамики.',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        role: 'assistant',
+        content: 'Обжиг превращает глину в керамику при высокой температуре, и',
+        createdAt: '2026-01-01T00:00:01.000Z',
+      },
+    ]);
+
+    // Пока провайдер отвечает, пользователь успевает дописать своё сообщение.
+    globalThis.fetch = vi.fn(async () => {
+      await appendChatMessages(chat.id, [
+        {
+          role: 'user',
+          content: 'Я успел написать раньше продолжения.',
+          createdAt: '2026-01-01T00:00:02.000Z',
+        },
+      ]);
+
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'потерянное продолжение.' } }] }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      });
+    }) as typeof fetch;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: {
+        chatId: chat.id,
+        mode: 'continue',
+      },
+    });
+    const payload = StartChatReplyGenerationJobResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(202);
+
+    const failedJob = await waitForGenerationJobStatus(app, payload.job.id, 'failed');
+    expect(failedJob.error).toMatchObject({ code: 'chat_changed_during_generation' });
+
+    const sessionResponse = await app.inject({
+      method: 'GET',
+      url: `/api/chats/${chat.id}`,
+    });
+    const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
+
+    expect(getMessagesByRole(sessionPayload.messages)).toEqual([
+      { role: 'user', content: 'Расскажи про обжиг керамики.' },
+      { role: 'assistant', content: 'Обжиг превращает глину в керамику при высокой температуре, и' },
+      { role: 'user', content: 'Я успел написать раньше продолжения.' },
+    ]);
+
+    await app.close();
+  });
+
   it('returns 404 when regenerating a missing chat', async () => {
     const app = buildApiApp();
     const response = await app.inject({

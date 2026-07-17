@@ -9,7 +9,10 @@ function wait(ms: number) {
 describe('InMemoryGenerationJobRegistry eviction', () => {
   it('evicts failed jobs after the configured TTL', async () => {
     const registry = new InMemoryGenerationJobRegistry({ finishedJobTtlMs: 20 });
-    const job = registry.createChatReplyJob({ chatId: 'chat-1', command: { chatId: 'chat-1', message: 'hi' } });
+    const job = registry.createChatReplyJob({
+      chatId: 'chat-1',
+      command: { chatId: 'chat-1', message: 'hi', mode: 'reply' },
+    });
 
     registry.fail(job.id, new Error('boom'));
     expect(registry.get(job.id)?.status).toBe('failed');
@@ -22,7 +25,10 @@ describe('InMemoryGenerationJobRegistry eviction', () => {
 
   it('evicts canceled jobs after the configured TTL', async () => {
     const registry = new InMemoryGenerationJobRegistry({ finishedJobTtlMs: 20 });
-    const job = registry.createChatReplyJob({ chatId: 'chat-2', command: { chatId: 'chat-2', message: 'hi' } });
+    const job = registry.createChatReplyJob({
+      chatId: 'chat-2',
+      command: { chatId: 'chat-2', message: 'hi', mode: 'reply' },
+    });
 
     registry.cancel(job.id);
     expect(registry.get(job.id)?.status).toBe('canceled');
@@ -34,7 +40,10 @@ describe('InMemoryGenerationJobRegistry eviction', () => {
 
   it('keeps active jobs alive', async () => {
     const registry = new InMemoryGenerationJobRegistry({ finishedJobTtlMs: 20 });
-    const job = registry.createChatReplyJob({ chatId: 'chat-3', command: { chatId: 'chat-3', message: 'hi' } });
+    const job = registry.createChatReplyJob({
+      chatId: 'chat-3',
+      command: { chatId: 'chat-3', message: 'hi', mode: 'reply' },
+    });
 
     await wait(60);
 

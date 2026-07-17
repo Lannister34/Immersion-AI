@@ -5,7 +5,11 @@ import { ChatGenerationSettingsDtoSchema } from '@immersion/contracts/chats';
 
 import { writeFileAtomically } from '../../../lib/atomic-file.js';
 import { resolveDataRoot } from '../../../lib/data-root.js';
-import { ChatTitleConflictError, ChatTranscriptNotEmptyError } from '../application/chat-conflicts.js';
+import {
+  ChatLastMessageChangedError,
+  ChatTitleConflictError,
+  ChatTranscriptNotEmptyError,
+} from '../application/chat-conflicts.js';
 import type {
   AppendChatMessageInput,
   ChatGenerationSettingsRecord,
@@ -19,7 +23,13 @@ import {
   createDefaultChatGenerationSettings,
   createDefaultChatSamplingOverrides,
 } from '../application/chat-records.js';
-import type { ChatRepository, ForkGenericChatInput, ListGenericChatsOptions } from '../application/chat-repository.js';
+import type {
+  AppendContinuationToLastAssistantMessageInput,
+  ChatRepository,
+  ForkGenericChatInput,
+  ListGenericChatsOptions,
+} from '../application/chat-repository.js';
+import { joinContinuationContent } from '../application/continuation-content.js';
 import { deriveLastMessagePreview } from '../application/last-message-preview.js';
 
 // MVP scope: rewrite chats are generic-only until the character-backed slice lands.
@@ -533,6 +543,58 @@ export class FileChatRepository implements ChatRepository {
         JSON.stringify(updateHeaderRecord(existingHeader, currentSession, updatedAt)),
         ...existingMessageLines,
         ...messages.map((message) => JSON.stringify(createStoredChatLine(message))),
+      ];
+
+      await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
+
+      return readChatFile(chatId);
+    });
+  }
+
+  async appendContinuationToLastAssistantMessage(chatId: string, input: AppendContinuationToLastAssistantMessageInput) {
+    return withChatWriteQueue(chatId, async () => {
+      const currentSession = await readChatFile(chatId);
+
+      if (!currentSession) {
+        return null;
+      }
+
+      // Инвариант проверяется внутри очереди записи: за время генерации транскрипт
+      // мог измениться, и продолжение больше некуда безопасно дописывать.
+      const lastMessage = currentSession.messages.at(-1);
+      const lastMessageStillMatches =
+        lastMessage !== undefined &&
+        lastMessage.role === 'assistant' &&
+        currentSession.messages.length === input.expectedMessageIndex &&
+        lastMessage.content.startsWith(input.expectedContentPrefix);
+
+      if (!lastMessageStillMatches) {
+        throw new ChatLastMessageChangedError(chatId);
+      }
+
+      const filePath = resolveChatFilePath(chatId);
+      const rawContent = await fs.readFile(filePath, 'utf8');
+      const lines = rawContent
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      const existingHeader = lines[0] ? parseStoredHeaderRecord(lines[0], filePath) : null;
+      const existingMessageLines = existingHeader ? lines.slice(1) : lines;
+      const targetIndex = input.expectedMessageIndex - 1;
+      const targetLine = parseStoredChatLine(existingMessageLines[targetIndex] ?? '', filePath, targetIndex + 2);
+
+      if (!targetLine) {
+        throw new ChatLastMessageChangedError(chatId);
+      }
+
+      const updatedLine = {
+        ...targetLine,
+        mes: joinContinuationContent(lastMessage.content, input.continuation),
+      };
+      existingMessageLines[targetIndex] = JSON.stringify(updatedLine);
+      const nextLines = [
+        JSON.stringify(updateHeaderRecord(existingHeader, currentSession, input.updatedAt)),
+        ...existingMessageLines,
       ];
 
       await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
