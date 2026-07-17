@@ -33,7 +33,7 @@ export function useUpdateChatMessage(chatId: string, options: UseUpdateChatMessa
       if (previousSession) {
         queryClient.setQueryData<ChatSessionDto>(
           sessionKey,
-          replaceOptimisticMessageContent(previousSession, messageIndex, command.content, new Date().toISOString()),
+          replaceOptimisticMessageContent(previousSession, messageIndex, command.content),
         );
       }
 

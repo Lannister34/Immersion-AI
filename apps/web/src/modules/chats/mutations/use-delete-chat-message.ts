@@ -32,7 +32,7 @@ export function useDeleteChatMessage(chatId: string, options: UseDeleteChatMessa
       if (previousSession) {
         queryClient.setQueryData<ChatSessionDto>(
           sessionKey,
-          truncateOptimisticMessagesFromIndex(previousSession, messageIndex, new Date().toISOString()),
+          truncateOptimisticMessagesFromIndex(previousSession, messageIndex),
         );
       }
 
