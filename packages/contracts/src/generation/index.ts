@@ -42,10 +42,26 @@ export const GenerationReadinessResponseSchema = z.object({
 });
 export type GenerationReadinessResponse = z.infer<typeof GenerationReadinessResponseSchema>;
 
-export const StartChatReplyGenerationCommandSchema = z.object({
+export const ChatReplyGenerationModeSchema = z.enum(['reply', 'continue']);
+export type ChatReplyGenerationMode = z.infer<typeof ChatReplyGenerationModeSchema>;
+
+export const StartChatReplyCommandSchema = z.object({
   chatId: ChatIdSchema,
   message: z.string().trim().min(1).max(20_000),
+  mode: z.literal('reply').default('reply'),
 });
+export type StartChatReplyCommand = z.infer<typeof StartChatReplyCommandSchema>;
+
+export const ContinueChatReplyCommandSchema = z.object({
+  chatId: ChatIdSchema,
+  mode: z.literal('continue'),
+});
+export type ContinueChatReplyCommand = z.infer<typeof ContinueChatReplyCommandSchema>;
+
+export const StartChatReplyGenerationCommandSchema = z.union([
+  StartChatReplyCommandSchema,
+  ContinueChatReplyCommandSchema,
+]);
 export type StartChatReplyGenerationCommand = z.infer<typeof StartChatReplyGenerationCommandSchema>;
 
 export const RegenerateChatReplyCommandSchema = z.object({

@@ -1,7 +1,7 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 import {
   RegenerateChatReplyCommandSchema,
-  type StartChatReplyGenerationCommand,
+  type StartChatReplyCommand,
   type StartChatReplyGenerationJobResponse,
   StartChatReplyGenerationJobResponseSchema,
 } from '@immersion/contracts/generation';
@@ -64,9 +64,10 @@ export async function regenerateChatReplyJob(
     throw new NoAssistantMessageToRegenerateError(command.chatId);
   }
 
-  const startCommand: StartChatReplyGenerationCommand = {
+  const startCommand: StartChatReplyCommand = {
     chatId: command.chatId,
     message: lastUserMessage.content,
+    mode: 'reply',
   };
 
   const job = dependencies.generationJobRegistry.createChatReplyJob({

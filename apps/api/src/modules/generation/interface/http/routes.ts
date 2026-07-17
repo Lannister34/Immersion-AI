@@ -30,6 +30,7 @@ import {
   ChatNotEmptyError,
   ChatReplyGenerationFailedError,
   ChatTranscriptEmptyError,
+  NothingToContinueError,
   ProviderGenerationError,
 } from '../../application/generation-errors.js';
 import { ActiveGenerationJobExistsError } from '../../application/generation-job-registry.js';
@@ -64,6 +65,14 @@ const toProblem = createToProblem((error) => {
       409,
       'no_assistant_message_to_regenerate',
       'There is no assistant message to regenerate in this chat.',
+    );
+  }
+
+  if (error instanceof NothingToContinueError) {
+    return problem(
+      409,
+      'nothing_to_continue',
+      'Продолжать нечего: последнее сообщение в чате должно быть непустым ответом персонажа.',
     );
   }
 

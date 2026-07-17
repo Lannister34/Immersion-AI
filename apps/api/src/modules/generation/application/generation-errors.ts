@@ -22,6 +22,13 @@ export class ChatNotEmptyError extends Error {
   }
 }
 
+export class NothingToContinueError extends Error {
+  constructor(readonly chatId: string) {
+    super('The last chat message must be a non-empty assistant reply to continue it.');
+    this.name = 'NothingToContinueError';
+  }
+}
+
 export class ChatReplyGenerationFailedError extends Error {
   declare readonly session: ChatSessionDto;
 
