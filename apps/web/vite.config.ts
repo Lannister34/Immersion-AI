@@ -10,7 +10,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@immersion/contracts': fileURLToPath(new URL('../../packages/contracts/src', import.meta.url)),
-      '@immersion/domain': fileURLToPath(new URL('../../packages/domain/src', import.meta.url)),
       '@immersion/test-utils': fileURLToPath(new URL('../../packages/test-utils/src', import.meta.url)),
     },
   },
