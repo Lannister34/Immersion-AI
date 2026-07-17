@@ -5,7 +5,7 @@ import {
 } from '@immersion/contracts/lorebooks';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { type ChangeEvent, type MouseEvent, useMemo, useRef, useState } from 'react';
+import { type ChangeEvent, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
 import { ApiError } from '../../shared/api/client';
@@ -289,28 +289,24 @@ function LorebookRow({ lorebook }: LorebookRowProps) {
     },
   });
 
-  const handleAskDelete = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleAskDelete = () => {
     setConfirmDelete(true);
   };
 
-  const handleConfirmDelete = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleConfirmDelete = () => {
     deleteMutation.mutate();
   };
 
-  const handleCancelDelete = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleCancelDelete = () => {
     setConfirmDelete(false);
   };
 
+  // Ссылка — оверлей поверх строки, кнопки-действия подняты выше по z-index:
+  // <button> внутри <a> — невалидный HTML.
   return (
-    <Link
-      params={{ lorebookId: lorebook.id }}
+    <div
       style={{
+        position: 'relative',
         display: 'grid',
         gridTemplateColumns: 'minmax(0, 1fr) 80px minmax(0, 1fr) 120px 100px',
         gap: 14,
@@ -318,11 +314,14 @@ function LorebookRow({ lorebook }: LorebookRowProps) {
         padding: '10px 14px',
         borderBottom: '1px solid var(--hairline)',
         background: 'var(--bg)',
-        color: 'inherit',
-        textDecoration: 'none',
       }}
-      to="/lorebooks/$lorebookId"
     >
+      <Link
+        aria-label={`Открыть лорбук: ${lorebook.name}`}
+        params={{ lorebookId: lorebook.id }}
+        style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'pointer' }}
+        to="/lorebooks/$lorebookId"
+      />
       <div className="row gap-8" style={{ minWidth: 0 }}>
         <BookIcon size={13} stroke="var(--muted)" />
         <strong className="truncate" style={{ fontSize: 'var(--fz-md)' }}>
@@ -342,7 +341,7 @@ function LorebookRow({ lorebook }: LorebookRowProps) {
       <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
         {formatRelative(lorebook.updatedAt)}
       </span>
-      <div className="row gap-4" style={{ justifyContent: 'flex-end' }}>
+      <div className="row gap-4" style={{ justifyContent: 'flex-end', position: 'relative', zIndex: 2 }}>
         {confirmDelete ? (
           <>
             <button
@@ -370,6 +369,6 @@ function LorebookRow({ lorebook }: LorebookRowProps) {
           </button>
         )}
       </div>
-    </Link>
+    </div>
   );
 }

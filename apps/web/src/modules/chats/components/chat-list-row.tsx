@@ -1,6 +1,6 @@
 import type { ChatSummaryDto } from '@immersion/contracts/chats';
 import { Link } from '@tanstack/react-router';
-import { type MouseEvent, useState } from 'react';
+import { useState } from 'react';
 
 import { createApiUrl } from '../../../shared/api/client';
 import { avatarColor, avatarInitial } from '../../../shared/lib/avatar';
@@ -19,40 +19,38 @@ export function ChatListRow({ chat }: ChatListRowProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const deleteMutation = useDeleteChat(chat.id);
 
-  const handleDeleteClick = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleDeleteClick = () => {
     setConfirmDelete(true);
   };
-  const handleConfirm = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleConfirm = () => {
     deleteMutation.mutate(undefined, {
       onSettled: () => setConfirmDelete(false),
     });
   };
-  const handleCancel = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleCancel = () => {
     setConfirmDelete(false);
   };
 
+  // Кнопки-действия лежат рядом со ссылкой (не внутри <a>): ссылка — оверлей,
+  // действия подняты выше по z-index. Клик по строке ведёт в чат, по кнопке — действие.
   return (
-    <Link
-      params={{ chatId: chat.id }}
+    <div
       style={{
+        position: 'relative',
         display: 'grid',
         gridTemplateColumns: '40px minmax(0, 1.2fr) minmax(0, 2fr) 100px minmax(80px, max-content)',
         gap: 14,
         alignItems: 'center',
         padding: '12px 14px',
         background: 'var(--bg)',
-        cursor: 'pointer',
-        color: 'inherit',
-        textDecoration: 'none',
       }}
-      to="/chat/$chatId"
     >
+      <Link
+        aria-label={`Открыть чат: ${displayName}`}
+        params={{ chatId: chat.id }}
+        style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'pointer' }}
+        to="/chat/$chatId"
+      />
       <div
         className="avatar avatar--36"
         style={
@@ -80,7 +78,16 @@ export function ChatListRow({ chat }: ChatListRowProps) {
       <div className="muted mono tnum" style={{ fontSize: 'var(--fz-xs)' }}>
         {formatRelative(chat.updatedAt)}
       </div>
-      <div className="row gap-4" style={{ flexWrap: 'nowrap', justifyContent: 'flex-end', whiteSpace: 'nowrap' }}>
+      <div
+        className="row gap-4"
+        style={{
+          flexWrap: 'nowrap',
+          justifyContent: 'flex-end',
+          whiteSpace: 'nowrap',
+          position: 'relative',
+          zIndex: 2,
+        }}
+      >
         {confirmDelete ? (
           <>
             <button
@@ -110,6 +117,6 @@ export function ChatListRow({ chat }: ChatListRowProps) {
           </>
         )}
       </div>
-    </Link>
+    </div>
   );
 }

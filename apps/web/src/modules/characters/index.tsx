@@ -1,7 +1,7 @@
 import type { CharacterSummaryDto } from '@immersion/contracts/characters';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { type ChangeEvent, type DragEvent, type MouseEvent, useMemo, useRef, useState } from 'react';
+import { type ChangeEvent, type DragEvent, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
 import { createApiUrl } from '../../shared/api/client';
@@ -237,44 +237,41 @@ function CharacterCard({ character }: CharacterCardProps) {
     },
   });
 
-  const handleStartChat = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleStartChat = () => {
     startChatMutation.mutate();
   };
 
-  const handleAskDelete = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleAskDelete = () => {
     setConfirmDelete(true);
   };
 
-  const handleConfirmDelete = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleConfirmDelete = () => {
     deleteMutation.mutate();
   };
 
-  const handleCancelDelete = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleCancelDelete = () => {
     setConfirmDelete(false);
   };
 
+  // Ссылка — оверлей поверх карточки, кнопки-действия подняты выше по z-index:
+  // <button> внутри <a> — невалидный HTML.
   return (
-    <Link
+    <div
       className="card card-hover"
-      params={{ characterId: character.id }}
       style={{
         padding: 0,
         overflow: 'hidden',
         display: 'grid',
         gridTemplateRows: 'auto 1fr auto',
-        textDecoration: 'none',
-        color: 'inherit',
+        position: 'relative',
       }}
-      to="/characters/$characterId"
     >
+      <Link
+        aria-label={`Открыть карточку: ${character.name}`}
+        params={{ characterId: character.id }}
+        style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'pointer' }}
+        to="/characters/$characterId"
+      />
       <div
         style={{
           aspectRatio: '16 / 9',
@@ -287,7 +284,7 @@ function CharacterCard({ character }: CharacterCardProps) {
           padding: 14,
         }}
       >
-        <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 4 }}>
+        <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 4, zIndex: 2 }}>
           {confirmDelete ? (
             <>
               <button
@@ -358,13 +355,14 @@ function CharacterCard({ character }: CharacterCardProps) {
           className="btn btn--xs btn--primary"
           disabled={startChatMutation.isPending}
           onClick={handleStartChat}
+          style={{ position: 'relative', zIndex: 2 }}
           title="Начать новый чат с этим персонажем"
           type="button"
         >
           <ChatIcon size={11} /> {startChatMutation.isPending ? '…' : 'Чат'}
         </button>
       </div>
-    </Link>
+    </div>
   );
 }
 

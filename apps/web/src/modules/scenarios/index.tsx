@@ -5,7 +5,7 @@ import {
 } from '@immersion/contracts/scenarios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { type ChangeEvent, type MouseEvent, useMemo, useRef, useState } from 'react';
+import { type ChangeEvent, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
 import { ApiError } from '../../shared/api/client';
@@ -253,44 +253,41 @@ function ScenarioRow({ scenario }: ScenarioRowProps) {
     },
   });
 
-  const handleStartChat = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleStartChat = () => {
     startChatMutation.mutate();
   };
 
-  const handleAskDelete = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleAskDelete = () => {
     setConfirmDelete(true);
   };
 
-  const handleConfirmDelete = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleConfirmDelete = () => {
     deleteMutation.mutate();
   };
 
-  const handleCancelDelete = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleCancelDelete = () => {
     setConfirmDelete(false);
   };
 
+  // Ссылка — оверлей поверх строки, кнопки-действия подняты выше по z-index:
+  // <button> внутри <a> — невалидный HTML.
   return (
-    <Link
+    <div
       className="card card-hover"
-      params={{ scenarioId: scenario.id }}
       style={{
         padding: 14,
         display: 'grid',
         gridTemplateColumns: 'minmax(0, 1fr) 140px',
         gap: 18,
-        textDecoration: 'none',
-        color: 'inherit',
+        position: 'relative',
       }}
-      to="/scenarios/$scenarioId"
     >
+      <Link
+        aria-label={`Открыть сценарий: ${scenario.name}`}
+        params={{ scenarioId: scenario.id }}
+        style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'pointer' }}
+        to="/scenarios/$scenarioId"
+      />
       <div style={{ minWidth: 0, display: 'grid', gap: 6 }}>
         <strong style={{ fontSize: 'var(--fz-md)' }}>{scenario.name}</strong>
         {scenario.preview ? (
@@ -326,7 +323,7 @@ function ScenarioRow({ scenario }: ScenarioRowProps) {
         <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
           {formatRelative(scenario.updatedAt)}
         </span>
-        <div className="row gap-4">
+        <div className="row gap-4" style={{ position: 'relative', zIndex: 2 }}>
           {confirmDelete ? (
             <>
               <button
@@ -371,7 +368,7 @@ function ScenarioRow({ scenario }: ScenarioRowProps) {
           )}
         </div>
       </div>
-    </Link>
+    </div>
   );
 }
 
