@@ -1,17 +1,33 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { type ReactNode, useDeferredValue, useMemo, useState } from 'react';
+import { type ChangeEvent, type ReactNode, useDeferredValue, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../../app/layout/topbar';
+import { ApiError } from '../../../shared/api/client';
 import { formatRelative } from '../../../shared/lib/format-relative';
-import { PlusIcon, SearchIcon, SortIcon } from '../../../shared/ui/icons';
+import { readFileAsBase64 } from '../../../shared/lib/read-file-as-base64';
+import { PlusIcon, SearchIcon, SortIcon, UploadIcon } from '../../../shared/ui/icons';
 import { createChat } from '../api/create-chat';
+import { importChat } from '../api/import-chat';
 import { chatListQueryKey, chatListQueryOptions } from '../queries/chat-list-query';
 import { ChatListRow } from './chat-list-row';
+
+function getImportErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.code === 'invalid_chat_file') {
+      return 'Файл не похож на экспорт чата: в нём не нашлось ни одного сообщения.';
+    }
+    if (error.code === 'chat_file_too_large') {
+      return 'Файл слишком большой: лимит импорта — 10 МБ.';
+    }
+  }
+  return 'Не удалось импортировать чат. Проверьте файл и повторите попытку.';
+}
 
 export function ChatListScreen() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const [search, setSearch] = useState('');
   const [characterFilter, setCharacterFilter] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<'updated' | 'name'>('updated');
@@ -24,6 +40,27 @@ export function ChatListScreen() {
       await navigate({ to: '/chat/$chatId', params: { chatId: response.chat.id } });
     },
   });
+  const importMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const contentBase64 = await readFileAsBase64(file);
+      return importChat({ contentBase64 });
+    },
+    onSuccess: async (response) => {
+      await queryClient.invalidateQueries({ queryKey: chatListQueryKey });
+      await navigate({ to: '/chat/$chatId', params: { chatId: response.chat.id } });
+    },
+  });
+
+  const handleImportClick = () => {
+    importInputRef.current?.click();
+  };
+
+  const handleImportFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) return;
+    importMutation.mutate(file);
+  };
 
   const allItems = chatListQuery.data?.items ?? [];
 
@@ -112,16 +149,34 @@ export function ChatListScreen() {
       <Topbar
         crumbs={[{ label: 'Чаты', strong: true }]}
         actions={
-          <button
-            className="btn btn--primary"
-            disabled={createMutation.isPending}
-            onClick={() => {
-              createMutation.mutate({});
-            }}
-            type="button"
-          >
-            <PlusIcon size={13} /> Новый чат
-          </button>
+          <>
+            <input
+              accept=".jsonl,.json,application/x-ndjson,application/json"
+              hidden
+              onChange={handleImportFileChange}
+              ref={importInputRef}
+              type="file"
+            />
+            <button
+              className="btn"
+              disabled={importMutation.isPending}
+              onClick={handleImportClick}
+              title="Импорт чата из файла .jsonl"
+              type="button"
+            >
+              <UploadIcon size={13} /> {importMutation.isPending ? 'Импорт…' : 'Импорт'}
+            </button>
+            <button
+              className="btn btn--primary"
+              disabled={createMutation.isPending}
+              onClick={() => {
+                createMutation.mutate({});
+              }}
+              type="button"
+            >
+              <PlusIcon size={13} /> Новый чат
+            </button>
+          </>
         }
       />
       <div className="page">
@@ -135,6 +190,11 @@ export function ChatListScreen() {
                   : `${allItems.length} чат${allItems.length === 1 ? '' : 'а'}` +
                     (lastUpdated ? ` · последняя активность ${formatRelative(lastUpdated)}` : '')}
               </div>
+              {importMutation.isError ? (
+                <div style={{ color: 'var(--danger)', fontSize: 'var(--fz-xs)', marginTop: 4 }}>
+                  {getImportErrorMessage(importMutation.error)}
+                </div>
+              ) : null}
             </div>
             <div className="row gap-8">
               <div className="search" style={{ minWidth: 280 }}>

@@ -8,6 +8,7 @@ import { createApiUrl } from '../../shared/api/client';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { avatarColor, avatarInitial } from '../../shared/lib/avatar';
 import { formatRelative } from '../../shared/lib/format-relative';
+import { readFileAsBase64 } from '../../shared/lib/read-file-as-base64';
 import { ChatIcon, PlusIcon, SearchIcon, SortIcon, TrashIcon, UploadIcon, XIcon } from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
 import { chatListQueryKey } from '../chats/queries/chat-list-query';
@@ -25,23 +26,6 @@ function characterCardsLabel(count: number): string {
     suffix = 'ы';
   }
   return `${count} карт${suffix} в библиотеке`;
-}
-
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result !== 'string') {
-        reject(new Error('File reader returned a non-string result.'));
-        return;
-      }
-      const commaIndex = result.indexOf(',');
-      resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
-    };
-    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file.'));
-    reader.readAsDataURL(file);
-  });
 }
 
 export function CharactersScreen() {
