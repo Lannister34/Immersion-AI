@@ -38,12 +38,9 @@ export function CharacterAvatarUploader({ characterId, detail }: CharacterAvatar
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragActive, setDragActive] = useState(false);
-  // Аватар меняется без изменения updatedAt карточки, поэтому кэш картинки ломаем локальным счётчиком.
-  const [avatarVersion, setAvatarVersion] = useState(0);
   const [pickError, setPickError] = useState<string | null>(null);
 
   const invalidateCharacter = async () => {
-    setAvatarVersion((current) => current + 1);
     if (characterId) {
       await queryClient.invalidateQueries({ queryKey: characterDetailQueryKey(characterId) });
     }
@@ -112,9 +109,8 @@ export function CharacterAvatarUploader({ characterId, detail }: CharacterAvatar
     if (file) submitFile(file);
   };
 
-  const avatarSrc = detail?.avatarUrl
-    ? `${createApiUrl(detail.avatarUrl)}?v=${encodeURIComponent(`${detail.updatedAt}-${avatarVersion}`)}`
-    : null;
+  // avatarUrl уже содержит серверную версию (?v=mtime), отдельный кэш-бастинг не нужен.
+  const avatarSrc = detail?.avatarUrl ? createApiUrl(detail.avatarUrl) : null;
 
   if (!characterId) {
     return (
