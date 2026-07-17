@@ -11,16 +11,7 @@ import { type FormEvent, useEffect, useMemo, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
-import {
-  CpuIcon,
-  FolderIcon,
-  HistoryIcon,
-  MoreIcon,
-  PlayIcon,
-  PowerIcon,
-  RefreshIcon,
-  SearchIcon,
-} from '../../shared/ui/icons';
+import { CpuIcon, PlayIcon, PowerIcon, RefreshIcon, SearchIcon } from '../../shared/ui/icons';
 import { saveProviderSettings } from './api/save-provider-settings';
 import { startRuntime } from './api/start-runtime';
 import { stopRuntime } from './api/stop-runtime';
@@ -137,15 +128,7 @@ export function ServerControlScreen() {
 
   return (
     <main className="main">
-      <Topbar
-        actions={
-          <button className="btn" type="button">
-            <HistoryIcon size={13} /> История запусков
-          </button>
-        }
-        crumbs={[{ label: 'API / Сервер', strong: true }]}
-        search={false}
-      />
+      <Topbar crumbs={[{ label: 'API / Сервер', strong: true }]} />
       <div className="page">
         <div className="page__head">
           <div className="page__title-row">
@@ -254,9 +237,6 @@ export function ServerControlScreen() {
                         value={search}
                       />
                     </div>
-                    <button className="btn" type="button">
-                      <FolderIcon size={13} /> Каталоги
-                    </button>
                   </div>
                 </div>
                 <table className="tbl">
@@ -310,11 +290,7 @@ export function ServerControlScreen() {
                               )}
                             </td>
                             <td style={{ textAlign: 'right' }}>
-                              {isActive ? (
-                                <button className="btn btn--icon btn--xs" type="button">
-                                  <MoreIcon size={12} />
-                                </button>
-                              ) : (
+                              {isActive ? null : (
                                 <button
                                   className="btn btn--xs btn--ghost-bordered"
                                   disabled={startRuntimeMutation.isPending}

@@ -133,7 +133,6 @@ export function ScenariosScreen() {
           </>
         }
         crumbs={[{ label: 'Сценарии', strong: true }]}
-        search={false}
       />
       <div className="page">
         <div className="page__head">

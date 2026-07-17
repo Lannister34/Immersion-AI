@@ -123,7 +123,6 @@ export function ChatListScreen() {
             <PlusIcon size={13} /> Новый чат
           </button>
         }
-        search={false}
       />
       <div className="page">
         <div className="page__head">

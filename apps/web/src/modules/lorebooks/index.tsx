@@ -157,7 +157,6 @@ export function LorebooksScreen() {
           </>
         }
         crumbs={[{ label: 'Лорбуки', strong: true }]}
-        search={false}
       />
       <div className="page">
         <div className="page__head">

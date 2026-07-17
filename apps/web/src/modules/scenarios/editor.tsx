@@ -236,7 +236,6 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
           { label: 'Сценарии' },
           { label: isNew ? 'Новый сценарий' : (detail?.name ?? scenarioId ?? 'Сценарий'), strong: true },
         ]}
-        search={false}
       />
       <div className="page">
         <div className="page__head">

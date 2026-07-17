@@ -18,6 +18,7 @@ export interface RightPanelProps {
   contextStats?: ContextStats | undefined;
   generationSettings: ChatGenerationSettingsDto;
   lorebookIds: string[];
+  onClose: () => void;
   onSectionToggle: (section: ChatRightPanelSection) => void;
   openSection: ChatRightPanelSection;
   scenarioId: string | null;
@@ -33,6 +34,7 @@ export function RightPanel({
   contextStats,
   generationSettings,
   lorebookIds,
+  onClose,
   onSectionToggle,
   openSection,
   scenarioId,
@@ -78,7 +80,7 @@ export function RightPanel({
     <aside className="rp">
       <div className="rp__head">
         <strong style={{ fontSize: 'var(--fz-md)' }}>Контекст чата</strong>
-        <button className="btn btn--icon" type="button">
+        <button className="btn btn--icon" onClick={onClose} title="Скрыть панель" type="button">
           <XIcon size={14} />
         </button>
       </div>

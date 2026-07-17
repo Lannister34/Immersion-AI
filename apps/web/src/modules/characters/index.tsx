@@ -8,16 +8,7 @@ import { createApiUrl } from '../../shared/api/client';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { avatarColor, avatarInitial } from '../../shared/lib/avatar';
 import { formatRelative } from '../../shared/lib/format-relative';
-import {
-  ChatIcon,
-  LayersIcon,
-  PlusIcon,
-  SearchIcon,
-  SortIcon,
-  TrashIcon,
-  UploadIcon,
-  XIcon,
-} from '../../shared/ui/icons';
+import { ChatIcon, PlusIcon, SearchIcon, SortIcon, TrashIcon, UploadIcon, XIcon } from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
 import { chatListQueryKey } from '../chats/queries/chat-list-query';
 import { importCharacterCard } from './api/import-character-card';
@@ -143,7 +134,6 @@ export function CharactersScreen() {
           </>
         }
         crumbs={[{ label: 'Персонажи', strong: true }]}
-        search={false}
       />
       <div className="page">
         <div className="page__head">
@@ -173,9 +163,6 @@ export function CharactersScreen() {
                 />
               </div>
               <div className="row gap-2 card" style={{ padding: 2 }}>
-                <button className="btn btn--xs" style={{ background: 'var(--surface-2)' }} title="Сетка" type="button">
-                  <LayersIcon size={12} />
-                </button>
                 <button
                   className="btn btn--xs"
                   onClick={() => setSortMode((mode) => (mode === 'updated' ? 'name' : 'updated'))}

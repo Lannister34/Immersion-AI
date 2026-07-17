@@ -9,7 +9,7 @@ import { getApiErrorMessage } from '../../../shared/api/get-api-error-message';
 import { avatarColor, avatarInitial } from '../../../shared/lib/avatar';
 import { formatRelative } from '../../../shared/lib/format-relative';
 import { useDebouncedValue } from '../../../shared/lib/use-debounced-value';
-import { DownloadIcon, MoreIcon, SparkleIcon, TrashIcon } from '../../../shared/ui/icons';
+import { DownloadIcon, SparkleIcon, TrashIcon } from '../../../shared/ui/icons';
 import {
   chatReplyPromptPreviewQueryOptions,
   generationReadinessQueryOptions,
@@ -58,6 +58,9 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const debouncedDraftMessage = useDebouncedValue(draftMessage, 400);
   const openSection = useUiShellStore((state) => state.chatRightPanelSection);
   const setOpenSection = useUiShellStore((state) => state.setChatRightPanelSection);
+  const isPanelOpen = useUiShellStore((state) => state.chatRightPanelOpen);
+  const closePanel = useUiShellStore((state) => state.closeChatRightPanel);
+  const openPanelSection = useUiShellStore((state) => state.openChatRightPanelSection);
   const navigate = useNavigate();
 
   const chatSessionQuery = useQuery(chatSessionQueryOptions(chatId));
@@ -99,7 +102,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   if (chatSessionQuery.isLoading) {
     return (
       <main className="main">
-        <Topbar crumbs={[{ label: 'Чаты' }, { label: 'Загрузка…', strong: true }]} search={false} />
+        <Topbar crumbs={[{ label: 'Чаты' }, { label: 'Загрузка…', strong: true }]} />
         <div className="empty" style={{ padding: 80 }}>
           <h2>Загрузка чата</h2>
           <p>Получаем сохранённую сессию из backend.</p>
@@ -111,7 +114,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   if (chatSessionQuery.isError || !chatSessionQuery.data) {
     return (
       <main className="main">
-        <Topbar crumbs={[{ label: 'Чаты' }, { label: 'Чат не найден', strong: true }]} search={false} />
+        <Topbar crumbs={[{ label: 'Чаты' }, { label: 'Чат не найден', strong: true }]} />
         <div className="empty" style={{ padding: 80 }}>
           <h2>Не удалось открыть чат</h2>
           <p>Чат не найден или backend не смог прочитать его файл.</p>
@@ -246,7 +249,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) 320px',
+        gridTemplateColumns: isPanelOpen ? 'minmax(0, 1fr) 320px' : 'minmax(0, 1fr)',
         minHeight: 0,
         overflow: 'hidden',
       }}
@@ -294,12 +297,8 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                   <TrashIcon size={14} /> Удалить
                 </button>
               )}
-              <button className="btn btn--icon" type="button">
-                <MoreIcon size={14} />
-              </button>
             </>
           }
-          search={false}
         />
         <div
           style={{
@@ -503,6 +502,8 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                 onCancel={chatReplyGeneration.cancel}
                 onChange={(event) => setDraftMessage(event.currentTarget.value)}
                 onKeyDown={onComposerKeyDown}
+                onOpenLorebooks={() => openPanelSection('lorebooks')}
+                onOpenSettings={() => openPanelSection('settings')}
                 onSubmit={onSubmit}
                 value={draftMessage}
               />
@@ -510,20 +511,23 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
           </div>
         </div>
       </main>
-      <RightPanel
-        characterAvatarUrl={session.characterAvatarUrl}
-        characterId={session.characterId}
-        characterName={session.characterName}
-        chatId={chatId}
-        contextStats={tokenStats}
-        generationSettings={session.generationSettings}
-        lorebookIds={session.lorebookIds}
-        onSectionToggle={(id) => setOpenSection(openSection === id ? null : id)}
-        openSection={openSection}
-        scenarioId={session.scenarioId}
-        scenarioName={session.scenarioName}
-        settingsOverview={settingsOverviewQuery.data}
-      />
+      {isPanelOpen ? (
+        <RightPanel
+          characterAvatarUrl={session.characterAvatarUrl}
+          characterId={session.characterId}
+          characterName={session.characterName}
+          chatId={chatId}
+          contextStats={tokenStats}
+          generationSettings={session.generationSettings}
+          lorebookIds={session.lorebookIds}
+          onClose={closePanel}
+          onSectionToggle={(id) => setOpenSection(openSection === id ? null : id)}
+          openSection={openSection}
+          scenarioId={session.scenarioId}
+          scenarioName={session.scenarioName}
+          settingsOverview={settingsOverviewQuery.data}
+        />
+      ) : null}
     </div>
   );
 }

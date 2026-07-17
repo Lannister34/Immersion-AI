@@ -1,6 +1,6 @@
 import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react';
 
-import { BookIcon, CpuIcon, PaperclipIcon, SendIcon, SlidersIcon, StopIcon } from '../../../shared/ui/icons';
+import { BookIcon, SendIcon, SlidersIcon, StopIcon } from '../../../shared/ui/icons';
 
 export interface ComposerProps {
   blockReason?: string | undefined;
@@ -9,6 +9,8 @@ export interface ComposerProps {
   onCancel: () => void;
   onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onOpenLorebooks: () => void;
+  onOpenSettings: () => void;
   onSubmit: (event?: FormEvent) => void;
   value: string;
 }
@@ -20,6 +22,8 @@ export function Composer({
   onCancel,
   onChange,
   onKeyDown,
+  onOpenLorebooks,
+  onOpenSettings,
   onSubmit,
   value,
 }: ComposerProps) {
@@ -39,16 +43,10 @@ export function Composer({
       />
       <div className="between">
         <div className="row gap-4">
-          <button className="btn btn--icon" title="Прикрепить" type="button">
-            <PaperclipIcon size={14} />
-          </button>
-          <button className="btn btn--icon" title="Лорбук" type="button">
+          <button className="btn btn--icon" onClick={onOpenLorebooks} title="Лорбуки чата" type="button">
             <BookIcon size={14} />
           </button>
-          <button className="btn btn--icon" title="Модель" type="button">
-            <CpuIcon size={14} />
-          </button>
-          <button className="btn btn--icon" title="Настройки" type="button">
+          <button className="btn btn--icon" onClick={onOpenSettings} title="Настройки генерации" type="button">
             <SlidersIcon size={14} />
           </button>
           <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }} title="Длина сообщения в символах">

@@ -367,7 +367,6 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
           { label: 'Персонажи' },
           { label: isNew ? 'Новый персонаж' : (detail?.name ?? characterId ?? 'Персонаж'), strong: true },
         ]}
-        search={false}
       />
       <div className="page">
         <div className="page__head">

@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { JSX, ReactNode } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
-import { CheckIcon, CodeIcon, CpuIcon, type IconProps, SlidersIcon, UserIcon } from '../../shared/ui/icons';
+import { CodeIcon, CpuIcon, type IconProps, SlidersIcon, UserIcon } from '../../shared/ui/icons';
 import { ModelBindingsCard } from './components/model-bindings-card';
 import { ProfileCard } from './components/profile-card';
 import { SamplerCard } from './components/sampler-card';
@@ -53,17 +53,7 @@ export function SettingsScreen() {
 
   return (
     <main className="main">
-      <Topbar
-        actions={
-          settingsQuery.isFetching ? null : (
-            <span className="pill pill--ok">
-              <CheckIcon size={11} /> сохранено
-            </span>
-          )
-        }
-        crumbs={[{ label: 'Настройки', strong: true }]}
-        search={false}
-      />
+      <Topbar crumbs={[{ label: 'Настройки', strong: true }]} />
       <div className="page">
         <div className="page__head">
           <div className="page__title-row">

@@ -1,27 +1,18 @@
 import type { ReactNode } from 'react';
 
-import { ChevronRightIcon, SearchIcon } from '../../shared/ui/icons';
+import { ChevronRightIcon } from '../../shared/ui/icons';
 
 export interface Crumb {
   label: string;
   strong?: boolean;
 }
 
-interface TopbarSearch {
-  placeholder?: string;
-  value?: string;
-  onChange?: (value: string) => void;
-}
-
 interface TopbarProps {
   crumbs: Crumb[];
   actions?: ReactNode;
-  search?: TopbarSearch | false;
 }
 
-const defaultSearch: TopbarSearch = { placeholder: 'Поиск или команда…' };
-
-export function Topbar({ crumbs, actions, search = defaultSearch }: TopbarProps) {
+export function Topbar({ crumbs, actions }: TopbarProps) {
   return (
     <div className="topbar">
       <div className="topbar__crumbs">
@@ -36,20 +27,7 @@ export function Topbar({ crumbs, actions, search = defaultSearch }: TopbarProps)
           </span>
         ))}
       </div>
-      <div className="topbar__actions">
-        {search === false ? null : (
-          <div className="search">
-            <SearchIcon size={14} />
-            <input
-              defaultValue={search.value ?? ''}
-              onChange={(event) => search.onChange?.(event.currentTarget.value)}
-              placeholder={search.placeholder ?? 'Поиск или команда…'}
-            />
-            <span className="kbd">⌘K</span>
-          </div>
-        )}
-        {actions}
-      </div>
+      <div className="topbar__actions">{actions}</div>
     </div>
   );
 }

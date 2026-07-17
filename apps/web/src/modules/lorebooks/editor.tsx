@@ -268,7 +268,6 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
           { label: 'Лорбуки' },
           { label: isNew ? 'Новый лорбук' : (detail?.name ?? lorebookId ?? 'Лорбук'), strong: true },
         ]}
-        search={false}
       />
       <div className="page">
         <div className="page__head">

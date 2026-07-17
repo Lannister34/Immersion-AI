@@ -6,7 +6,6 @@ import {
   ChatIcon,
   ChevronRightIcon,
   type IconProps,
-  MoreIcon,
   ServerIcon,
   SettingsIcon,
   TheaterIcon,
@@ -103,9 +102,6 @@ export function Sidebar({ runtime, persona, workspaceCounts }: SidebarProps) {
                 <div style={{ color: 'var(--muted-dim)', fontSize: 'var(--fz-2xs)' }}>{persona.hint}</div>
               ) : null}
             </div>
-            <button className="btn btn--icon" type="button">
-              <MoreIcon size={14} />
-            </button>
           </div>
         ) : null}
       </div>
