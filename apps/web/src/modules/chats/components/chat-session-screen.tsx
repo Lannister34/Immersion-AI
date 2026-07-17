@@ -516,11 +516,10 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
         characterName={session.characterName}
         chatId={chatId}
         contextStats={tokenStats}
+        generationSettings={session.generationSettings}
         lorebookIds={session.lorebookIds}
         onSectionToggle={(id) => setOpenSection(openSection === id ? null : id)}
         openSection={openSection}
-        samplerPresetId={session.generationSettings.samplerPresetId}
-        sampling={session.generationSettings.sampling}
         scenarioId={session.scenarioId}
         scenarioName={session.scenarioName}
         settingsOverview={settingsOverviewQuery.data}

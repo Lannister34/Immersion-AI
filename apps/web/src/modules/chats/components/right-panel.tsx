@@ -1,3 +1,4 @@
+import type { ChatGenerationSettingsDto } from '@immersion/contracts/chats';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
 import type { ReactNode } from 'react';
 
@@ -15,11 +16,10 @@ export interface RightPanelProps {
   characterName: string | null;
   chatId: string;
   contextStats?: ContextStats | undefined;
+  generationSettings: ChatGenerationSettingsDto;
   lorebookIds: string[];
   onSectionToggle: (section: ChatRightPanelSection) => void;
   openSection: ChatRightPanelSection;
-  samplerPresetId: string | null;
-  sampling: Record<string, number | string | null>;
   scenarioId: string | null;
   scenarioName: string | null;
   settingsOverview?: SettingsOverviewResponse | undefined;
@@ -31,11 +31,10 @@ export function RightPanel({
   characterName,
   chatId,
   contextStats,
+  generationSettings,
   lorebookIds,
   onSectionToggle,
   openSection,
-  samplerPresetId,
-  sampling,
   scenarioId,
   scenarioName,
   settingsOverview,
@@ -52,8 +51,8 @@ export function RightPanel({
       case 'settings':
         return (
           <GenerationSettingsSection
-            samplerPresetId={samplerPresetId}
-            sampling={sampling}
+            chatId={chatId}
+            generationSettings={generationSettings}
             settings={settingsOverview}
           />
         );
