@@ -112,12 +112,19 @@ describe('library CRUD routes', () => {
       const createResponse = await app.inject({
         method: 'POST',
         url: '/api/scenarios',
-        payload: { name: 'Test scenario', concept: 'Concept', content: 'Body', tags: ['demo', 'ru'] },
+        payload: {
+          name: 'Test scenario',
+          concept: 'Concept',
+          content: 'Body',
+          firstMessage: '*{{char}} машет рукой.* Привет, {{user}}!',
+          tags: ['demo', 'ru'],
+        },
       });
       const createPayload = ScenarioDetailResponseSchema.parse(createResponse.json());
       expect(createResponse.statusCode).toBe(201);
       expect(createPayload.scenario.name).toBe('Test scenario');
       expect(createPayload.scenario.tags).toEqual(['demo', 'ru']);
+      expect(createPayload.scenario.firstMessage).toBe('*{{char}} машет рукой.* Привет, {{user}}!');
       expect(createPayload.scenario.id).toMatch(/^Test_scenario.*\.json$/);
 
       const listResponse = await app.inject({ method: 'GET', url: '/api/scenarios' });
@@ -130,16 +137,24 @@ describe('library CRUD routes', () => {
       });
       const detailPayload = ScenarioDetailResponseSchema.parse(detailResponse.json());
       expect(detailPayload.scenario.content).toBe('Body');
+      expect(detailPayload.scenario.firstMessage).toBe('*{{char}} машет рукой.* Привет, {{user}}!');
 
       const updateResponse = await app.inject({
         method: 'PUT',
         url: `/api/scenarios/${encodeURIComponent(createPayload.scenario.id)}`,
-        payload: { name: 'Test scenario', concept: 'New concept', content: 'New body', tags: ['demo'] },
+        payload: {
+          name: 'Test scenario',
+          concept: 'New concept',
+          content: 'New body',
+          firstMessage: 'Новое приветствие сцены.',
+          tags: ['demo'],
+        },
       });
       const updatePayload = ScenarioDetailResponseSchema.parse(updateResponse.json());
       expect(updateResponse.statusCode).toBe(200);
       expect(updatePayload.scenario.concept).toBe('New concept');
       expect(updatePayload.scenario.content).toBe('New body');
+      expect(updatePayload.scenario.firstMessage).toBe('Новое приветствие сцены.');
       expect(updatePayload.scenario.tags).toEqual(['demo']);
 
       const deleteResponse = await app.inject({
@@ -154,6 +169,24 @@ describe('library CRUD routes', () => {
       });
       expect(missingResponse.statusCode).toBe(404);
       expect(missingResponse.json()).toMatchObject({ code: 'scenario_not_found' });
+
+      await app.close();
+    });
+
+    it('reads a legacy scenario file without firstMessage as an empty greeting', async () => {
+      const scenariosDir = path.join(temporaryDataRoot, 'scenarios');
+      await fs.mkdir(scenariosDir, { recursive: true });
+      await fs.writeFile(
+        path.join(scenariosDir, 'Legacy.json'),
+        JSON.stringify({ name: 'Legacy', concept: 'Old concept', content: 'Old body' }),
+        'utf8',
+      );
+
+      const app = buildApiApp();
+      const detailResponse = await app.inject({ method: 'GET', url: '/api/scenarios/Legacy.json' });
+      const detailPayload = ScenarioDetailResponseSchema.parse(detailResponse.json());
+      expect(detailResponse.statusCode).toBe(200);
+      expect(detailPayload.scenario.firstMessage).toBe('');
 
       await app.close();
     });

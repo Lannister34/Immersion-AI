@@ -7,6 +7,8 @@ import {
 import { OpenAiCompatibleChatCompletionsClient } from '../infrastructure/openai-compatible-chat-completions-client.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import {
+  buildGenderHint,
+  buildPlayerContextBlock,
   type DraftGenerationContext,
   normalizeDraftTags,
   normalizeDraftText,
@@ -37,34 +39,6 @@ Return ONLY valid JSON, no other text.`,
 Возвращай ТОЛЬКО валидный JSON, без другого текста.`,
 } as const;
 
-function buildGenderHint(context: DraftGenerationContext): string {
-  if (context.language === 'ru') {
-    return context.userName.trim()
-      ? `Определи грамматический род {{user}} по имени игрока "${context.userName.trim()}". `
-      : 'По умолчанию используй мужской грамматический род для {{user}}. ';
-  }
-
-  return context.userName.trim()
-    ? `Determine {{user}}'s grammatical gender from the player name "${context.userName.trim()}". `
-    : 'Default to masculine grammatical gender for {{user}}. ';
-}
-
-function buildPlayerContextBlock(context: DraftGenerationContext): string {
-  if (!context.userName.trim() && !context.userPersona.trim()) {
-    return '';
-  }
-
-  const personaLine = context.userPersona.trim()
-    ? `\n- ${context.language === 'ru' ? 'Персона' : 'Persona'}: ${context.userPersona.trim()}`
-    : '';
-
-  return context.language === 'ru'
-    ? `\n\nИнформация об игроке (для определения грамматического рода {{user}} — но пиши {{user}} в тексте, не имя):
-- Имя: ${context.userName.trim() || 'Н/Д'}${personaLine}`
-    : `\n\nPlayer info (for determining {{user}}'s grammatical gender — but still write {{user}} in output, not the name):
-- Name: ${context.userName.trim() || 'N/A'}${personaLine}`;
-}
-
 function buildPresetNameLine(name: string | undefined, context: DraftGenerationContext): string {
   if (!name) {
     return '';
@@ -87,6 +61,7 @@ function buildScenarioDraftPrompt(concept: string, name: string | undefined, con
 {
   "name": "Короткое, ёмкое название сценария",
   "content": "Подробный текст сценария, описывающий СИТУАЦИЮ (3-5 абзацев): место действия, обстоятельства, что происходит, почему {{user}} и {{char}} здесь, какой конфликт или напряжение существует. НЕ описывай кто такой {{char}} — только что {{char}} ДЕЛАЕТ в сцене. Пример: '{{user}} заходит в старую таверну на окраине города. За стойкой {{char}} протирает бокалы, бросая настороженные взгляды на дверь...' — используй {{user}} и {{char}} буквально.",
+  "firstMessage": "Вступительное сообщение сцены от лица {{char}}: действия в *звёздочках*, при желании речь. Задай сцену и пригласи {{user}} к взаимодействию. Используй {{user}} и {{char}} как буквальные плейсхолдеры.",
   "tags": ["тег1", "тег2", "тег3"]
 }
 
@@ -104,6 +79,7 @@ Return a JSON object with these fields:
 {
   "name": "Short, evocative scenario title",
   "content": "Detailed scenario text describing the SITUATION (3-5 paragraphs): location, circumstances, what is happening, why {{user}} and {{char}} are here, what tension or conflict exists. Do NOT describe who {{char}} is — only what {{char}} is doing. Use {{user}} and {{char}} literally.",
+  "firstMessage": "Opening message for this scene from {{char}}'s perspective: actions in *asterisks*, optionally speech. Set the scene and invite interaction. Use {{user}} and {{char}} as literal placeholders.",
   "tags": ["tag1", "tag2", "tag3"]
 }
 
@@ -141,6 +117,11 @@ export async function generateScenarioDraft(
   const record = asJsonRecord(extractJsonFromModelOutput(completion.content), 'a scenario draft');
   // Пост-обработка как в легаси: возвращаем просочившееся имя игрока обратно в {{user}}.
   const content = replaceNamesWithPlaceholders(normalizeDraftText(record.content, 20_000), null, context.userName);
+  const firstMessage = replaceNamesWithPlaceholders(
+    normalizeDraftText(record.firstMessage ?? record.first_mes, 20_000),
+    null,
+    context.userName,
+  );
   const name = command.name ?? normalizeDraftText(record.name, 200);
 
   if (name.length === 0) {
@@ -153,6 +134,7 @@ export async function generateScenarioDraft(
 
   return GenerateScenarioDraftResponseSchema.parse({
     content,
+    firstMessage,
     name,
     tags: normalizeDraftTags(record.tags),
   });

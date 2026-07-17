@@ -15,6 +15,7 @@ interface StoredScenario {
   concept?: unknown;
   content?: unknown;
   createdAt?: unknown;
+  firstMessage?: unknown;
   name?: unknown;
   tags?: unknown;
   updatedAt?: unknown;
@@ -121,6 +122,8 @@ function detailFromStored(id: string, stored: StoredScenario, fallbackUpdatedAt:
     concept: asString(stored.concept) ?? '',
     content: asString(stored.content) ?? '',
     createdAt: asString(stored.createdAt),
+    // Легаси-файлы без поля читаются как пустое приветствие.
+    firstMessage: asString(stored.firstMessage) ?? '',
     id,
     name: asString(stored.name) ?? path.basename(id, path.extname(id)),
     tags: asStringArray(stored.tags),
@@ -153,6 +156,7 @@ export async function readScenarioDetail(id: string): Promise<ScenarioDetailDto 
 export interface SaveScenarioFileInput {
   concept: string;
   content: string;
+  firstMessage: string;
   name: string;
   tags: string[];
 }
@@ -175,6 +179,7 @@ export async function writeScenarioFile(id: string, input: SaveScenarioFileInput
     name: input.name,
     content: input.content,
     concept: input.concept,
+    firstMessage: input.firstMessage,
     tags: input.tags,
     createdAt,
     updatedAt: now,
@@ -185,6 +190,7 @@ export async function writeScenarioFile(id: string, input: SaveScenarioFileInput
     concept: input.concept,
     content: input.content,
     createdAt,
+    firstMessage: input.firstMessage,
     id,
     name: input.name,
     tags: input.tags,

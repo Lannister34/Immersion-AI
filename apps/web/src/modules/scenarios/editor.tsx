@@ -10,7 +10,7 @@ import { Field } from '../../shared/ui/field';
 import { ChatIcon, SparkleIcon, TrashIcon } from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
 import { chatListQueryKey } from '../chats/queries/chat-list-query';
-import { generateScenarioDraft, useGenerationAvailability } from '../generation';
+import { generateScenarioDraft, generateScenarioFirstMessage, useGenerationAvailability } from '../generation';
 import { createScenario, updateScenario } from './api/save-scenario';
 import { useDeleteScenario } from './mutations/use-delete-scenario';
 import { scenarioDetailQueryKey, scenarioDetailQueryOptions } from './queries/scenario-detail-query';
@@ -23,17 +23,19 @@ interface ScenarioEditorScreenProps {
 interface ScenarioFormState {
   concept: string;
   content: string;
+  firstMessage: string;
   name: string;
   tagsText: string;
 }
 
 function toFormState(detail: ScenarioDetailDto | null): ScenarioFormState {
   if (!detail) {
-    return { concept: '', content: '', name: '', tagsText: '' };
+    return { concept: '', content: '', firstMessage: '', name: '', tagsText: '' };
   }
   return {
     concept: detail.concept,
     content: detail.content,
+    firstMessage: detail.firstMessage,
     name: detail.name,
     tagsText: detail.tags.join(', '),
   };
@@ -43,6 +45,7 @@ function toCommand(state: ScenarioFormState): SaveScenarioCommand {
   return {
     concept: state.concept.trim(),
     content: state.content,
+    firstMessage: state.firstMessage.trim(),
     name: state.name.trim(),
     tags: state.tagsText
       .split(',')
@@ -55,6 +58,7 @@ function formsEqual(left: ScenarioFormState, right: ScenarioFormState): boolean 
   return (
     left.concept === right.concept &&
     left.content === right.content &&
+    left.firstMessage === right.firstMessage &&
     left.name === right.name &&
     left.tagsText === right.tagsText
   );
@@ -139,9 +143,26 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
       setForm((current) => ({
         ...current,
         content: draft.content,
+        firstMessage: draft.firstMessage,
         name: current.name.trim().length > 0 ? current.name : draft.name,
         tagsText: draft.tags.join(', '),
       }));
+    },
+  });
+
+  const firstMessageMutation = useMutation({
+    mutationFn: () => {
+      const concept = form.concept.trim();
+      const name = form.name.trim();
+      const content = form.content.trim();
+      return generateScenarioFirstMessage({
+        concept,
+        ...(content.length > 0 ? { content } : {}),
+        ...(name.length > 0 ? { name } : {}),
+      });
+    },
+    onSuccess: (response) => {
+      setForm((current) => ({ ...current, firstMessage: response.value }));
     },
   });
 
@@ -160,6 +181,9 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
     : null;
   const draftGenerationError = draftMutation.error
     ? getApiErrorMessage(draftMutation.error, 'Не удалось сгенерировать сценарий. Попробуйте ещё раз.')
+    : null;
+  const firstMessageGenerationError = firstMessageMutation.error
+    ? getApiErrorMessage(firstMessageMutation.error, 'Не удалось сгенерировать первую фразу. Попробуйте ещё раз.')
     : null;
 
   let entityActions: ReactNode = null;
@@ -343,6 +367,45 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
                   value={form.content}
                 />
               </Field>
+              <Field
+                action={
+                  <button
+                    className="btn btn--xs"
+                    disabled={
+                      saveMutation.isPending ||
+                      firstMessageMutation.isPending ||
+                      generationAvailability.isBlocked ||
+                      form.concept.trim().length === 0
+                    }
+                    onClick={() => {
+                      if (!firstMessageMutation.isPending) {
+                        firstMessageMutation.mutate();
+                      }
+                    }}
+                    title={generationAvailability.blockReason ?? 'Сгенерировать первую фразу по концепту и сцене'}
+                    type="button"
+                  >
+                    <SparkleIcon size={12} />{' '}
+                    {firstMessageMutation.isPending ? 'Генерируем…' : 'Сгенерировать первую фразу'}
+                  </button>
+                }
+                hint="Приветствие сцены — вставляется при создании чата с этим сценарием."
+                id="scenario-first-message"
+                label="Первая фраза"
+              >
+                <textarea
+                  className="textarea"
+                  disabled={saveMutation.isPending || firstMessageMutation.isPending}
+                  id="scenario-first-message"
+                  maxLength={20_000}
+                  onChange={(event) => setField('firstMessage', event.currentTarget.value)}
+                  rows={5}
+                  value={form.firstMessage}
+                />
+              </Field>
+              {firstMessageGenerationError ? (
+                <div style={{ color: 'var(--danger)', fontSize: 'var(--fz-xs)' }}>{firstMessageGenerationError}</div>
+              ) : null}
               <Field hint="Через запятую: до 50 тегов, каждый до 60 символов." id="scenario-tags" label="Теги">
                 <input
                   className="input"

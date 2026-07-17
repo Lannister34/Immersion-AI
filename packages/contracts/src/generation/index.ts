@@ -264,10 +264,23 @@ export type GenerateScenarioDraftCommand = z.infer<typeof GenerateScenarioDraftC
 
 export const GenerateScenarioDraftResponseSchema = z.object({
   content: z.string().min(1).max(20_000),
+  firstMessage: z.string().max(20_000),
   name: z.string().min(1).max(200),
   tags: z.array(z.string().min(1).max(60)).max(50),
 });
 export type GenerateScenarioDraftResponse = z.infer<typeof GenerateScenarioDraftResponseSchema>;
+
+export const GenerateScenarioFirstMessageCommandSchema = z.object({
+  concept: z.string().trim().min(1).max(2_000),
+  content: z.string().trim().max(20_000).optional(),
+  name: z.string().trim().min(1).max(200).optional(),
+});
+export type GenerateScenarioFirstMessageCommand = z.infer<typeof GenerateScenarioFirstMessageCommandSchema>;
+
+export const GenerateScenarioFirstMessageResponseSchema = z.object({
+  value: z.string().min(1).max(20_000),
+});
+export type GenerateScenarioFirstMessageResponse = z.infer<typeof GenerateScenarioFirstMessageResponseSchema>;
 
 export const GeneratedLorebookEntryDraftSchema = z.object({
   comment: z.string().min(1).max(200).optional(),

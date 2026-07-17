@@ -28,6 +28,16 @@ export async function createChat(command: CreateChatCommand): Promise<CreateChat
     if (!command.title?.trim()) {
       title = scenario.name;
     }
+    // Привязанный сценарий полностью заменяет базовый сценарий карточки,
+    // поэтому его приветствие имеет приоритет. Плейсхолдеры {{user}}/{{char}}
+    // остаются как есть — так же ведёт себя приветствие карточки ниже.
+    if (scenario.firstMessage.trim().length > 0) {
+      seedMessages.push({
+        content: scenario.firstMessage,
+        createdAt,
+        role: 'assistant',
+      });
+    }
   }
 
   if (command.characterId) {

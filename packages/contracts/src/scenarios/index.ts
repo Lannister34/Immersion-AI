@@ -25,6 +25,7 @@ export const ScenarioDetailDtoSchema = z.object({
   concept: z.string(),
   content: z.string(),
   createdAt: z.string().nullable(),
+  firstMessage: z.string(),
   id: ScenarioIdSchema,
   name: z.string().min(1),
   tags: z.array(z.string()),
@@ -40,6 +41,7 @@ export type ScenarioDetailResponse = z.infer<typeof ScenarioDetailResponseSchema
 export const SaveScenarioCommandSchema = z.object({
   concept: z.string().max(2_000).default(''),
   content: z.string().max(20_000).default(''),
+  firstMessage: z.string().trim().max(20_000).default(''),
   name: z.string().trim().min(1).max(200),
   tags: z.array(z.string().trim().min(1).max(60)).max(50).default([]),
 });

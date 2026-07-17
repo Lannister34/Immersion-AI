@@ -582,6 +582,90 @@ describe('chat routes', () => {
     await app.close();
   });
 
+  it('seeds the scenario greeting over the card greeting when the bound scenario has one', async () => {
+    const charactersDir = path.join(temporaryDataRoot, 'characters');
+    const scenariosDir = path.join(temporaryDataRoot, 'scenarios');
+    await fs.mkdir(charactersDir, { recursive: true });
+    await fs.mkdir(scenariosDir, { recursive: true });
+    await fs.writeFile(
+      path.join(charactersDir, 'Aria.json'),
+      JSON.stringify({
+        name: 'Ария',
+        description: 'Скульптор',
+        first_message: 'Привет, ты в студии впервые?',
+      }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(scenariosDir, 'Пикник.json'),
+      JSON.stringify({
+        name: 'Пикник',
+        concept: 'Встреча в парке',
+        content: '{{user}} и {{char}} встречаются в парке.',
+        firstMessage: '*{{char}} расстилает плед.* Ты всё-таки {{user}}, да?',
+      }),
+      'utf8',
+    );
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/chats',
+      payload: { characterId: 'Aria.json', scenarioId: 'Пикник.json' },
+    });
+    const payload = CreateChatResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(201);
+    expect(payload.chat.messageCount).toBe(1);
+
+    const sessionResponse = await app.inject({ method: 'GET', url: `/api/chats/${payload.chat.id}` });
+    const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
+    // Приветствие сценария вставляется как есть: плейсхолдеры остаются, как и у карточки.
+    expect(sessionPayload.messages).toHaveLength(1);
+    expect(sessionPayload.messages[0]).toMatchObject({
+      role: 'assistant',
+      content: '*{{char}} расстилает плед.* Ты всё-таки {{user}}, да?',
+    });
+
+    await app.close();
+  });
+
+  it('seeds the scenario greeting for a scenario-only chat', async () => {
+    const scenariosDir = path.join(temporaryDataRoot, 'scenarios');
+    await fs.mkdir(scenariosDir, { recursive: true });
+    await fs.writeFile(
+      path.join(scenariosDir, 'Пикник.json'),
+      JSON.stringify({
+        name: 'Пикник',
+        concept: 'Встреча в парке',
+        content: '{{user}} и {{char}} встречаются в парке.',
+        firstMessage: 'Ну наконец-то ты здесь!',
+      }),
+      'utf8',
+    );
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/chats',
+      payload: { scenarioId: 'Пикник.json' },
+    });
+    const payload = CreateChatResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(201);
+    expect(payload.chat.title).toBe('Пикник');
+    expect(payload.chat.messageCount).toBe(1);
+
+    const sessionResponse = await app.inject({ method: 'GET', url: `/api/chats/${payload.chat.id}` });
+    const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
+    expect(sessionPayload.messages[0]).toMatchObject({
+      role: 'assistant',
+      content: 'Ну наконец-то ты здесь!',
+    });
+
+    await app.close();
+  });
+
   it('exposes a PNG character avatar URL on the chat summary', async () => {
     const charactersDir = path.join(temporaryDataRoot, 'characters');
     await fs.mkdir(charactersDir, { recursive: true });
