@@ -262,7 +262,12 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
               <p>Проверьте rewrite API и повторите попытку.</p>
             </div>
           ) : (
-            <form className="col gap-12" id="scenario-editor-form" onSubmit={handleSubmit} style={{ maxWidth: 900 }}>
+            <form
+              className="col gap-12"
+              id="scenario-editor-form"
+              onSubmit={handleSubmit}
+              style={{ maxWidth: 960, margin: '0 auto' }}
+            >
               <Field id="scenario-name" label="Название" required>
                 <input
                   className="input"

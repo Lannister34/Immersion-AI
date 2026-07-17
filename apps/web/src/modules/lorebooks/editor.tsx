@@ -294,7 +294,12 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
               <p>Проверьте rewrite API и повторите попытку.</p>
             </div>
           ) : (
-            <form className="col gap-12" id="lorebook-editor-form" onSubmit={handleSubmit} style={{ maxWidth: 1100 }}>
+            <form
+              className="col gap-12"
+              id="lorebook-editor-form"
+              onSubmit={handleSubmit}
+              style={{ maxWidth: 1100, margin: '0 auto' }}
+            >
               <div className="row gap-12" style={{ alignItems: 'flex-start' }}>
                 <div style={{ flex: 1 }}>
                   <Field id="lorebook-name" label="Название" required>

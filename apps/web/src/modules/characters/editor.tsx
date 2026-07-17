@@ -393,7 +393,15 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
               <p>Проверьте rewrite API и повторите попытку.</p>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 280px', gap: 18, maxWidth: 1100 }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) 300px',
+                gap: 18,
+                maxWidth: 1280,
+                margin: '0 auto',
+              }}
+            >
               <form className="col gap-12" id="character-editor-form" onSubmit={handleSubmit}>
                 <div className="card col gap-8" style={{ padding: 12 }}>
                   <Field
