@@ -2,7 +2,11 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { type RuntimeConfigCommand, RuntimeOverviewResponseSchema } from '@immersion/contracts/runtime';
+import {
+  type RuntimeConfigCommand,
+  RuntimeLogsResponseSchema,
+  RuntimeOverviewResponseSchema,
+} from '@immersion/contracts/runtime';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildApiApp } from './app.js';
@@ -19,6 +23,23 @@ describe('runtime control routes', () => {
   afterEach(async () => {
     delete process.env.IMMERSION_DATA_ROOT;
     await fs.rm(dataRoot, { force: true, recursive: true });
+  });
+
+  // Менеджер процесса — синглтон без публичного API для засева буфера логов,
+  // поэтому честно проверяем только пустой путь и форму контракта.
+  it('returns empty runtime logs while no server output was captured', async () => {
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/runtime/logs',
+    });
+    const logs = RuntimeLogsResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(logs.lines).toEqual([]);
+    expect(logs.status).toBe('idle');
+
+    await app.close();
   });
 
   it('updates runtime config without overwriting unrelated user settings', async () => {

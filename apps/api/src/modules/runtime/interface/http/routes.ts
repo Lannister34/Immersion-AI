@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 
 import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
+import { getRuntimeLogs } from '../../application/get-runtime-logs.js';
 import { getRuntimeOverview } from '../../application/get-runtime-overview.js';
 import { installRuntime } from '../../application/install-runtime.js';
 import { startRuntime } from '../../application/start-runtime.js';
@@ -28,6 +29,8 @@ const toProblem = createToProblem(
 
 export const runtimeRoutes: FastifyPluginAsync = async (app) => {
   app.get('/overview', async () => getRuntimeOverview());
+
+  app.get('/logs', async () => getRuntimeLogs());
 
   app.put('/config', async (request, reply) => {
     try {

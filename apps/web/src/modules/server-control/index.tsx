@@ -17,6 +17,7 @@ import { startRuntime } from './api/start-runtime';
 import { stopRuntime } from './api/stop-runtime';
 import { providerSettingsQueryKey, providerSettingsQueryOptions } from './queries/provider-settings-query';
 import { runtimeOverviewQueryKey, runtimeOverviewQueryOptions } from './queries/runtime-overview-query';
+import { ServerLogsCard } from './server-logs-card';
 
 function toProviderCommand(snapshot: ProviderSettingsSnapshot, mode: ProviderMode): UpdateProviderSettingsCommand {
   return {
@@ -348,6 +349,8 @@ export function ServerControlScreen() {
                   </tbody>
                 </table>
               </section>
+
+              <ServerLogsCard status={status} />
             </>
           ) : (
             runtimeFallback

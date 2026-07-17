@@ -32,9 +32,3 @@ export async function getRunningRuntimeEndpoint(): Promise<RunningRuntimeEndpoin
     model: await resolveCanonicalModelName(state.modelPath, state.model),
   };
 }
-
-export async function getRunningRuntimeBaseUrl() {
-  const endpoint = await getRunningRuntimeEndpoint();
-
-  return endpoint?.baseUrl ?? null;
-}
