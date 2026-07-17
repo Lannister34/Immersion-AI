@@ -66,6 +66,15 @@ const RUNTIME_STATUS_PILL: Record<RuntimeOverviewResponse['serverStatus']['statu
   error: 'pill pill--danger',
 };
 
+// Статус в строке модели повторяет статус процесса, чтобы не расходиться с шапкой.
+const ACTIVE_MODEL_STATUS_LABELS: Record<RuntimeOverviewResponse['serverStatus']['status'], string> = {
+  idle: 'остановлена',
+  starting: 'запускается',
+  running: 'активна',
+  stopping: 'останавливается',
+  error: 'ошибка',
+};
+
 export function ServerControlScreen() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
@@ -300,8 +309,8 @@ export function ServerControlScreen() {
                             </td>
                             <td>
                               {isActive ? (
-                                <span className="pill pill--ok">
-                                  <span className="dot dot--ok" /> активна
+                                <span className={RUNTIME_STATUS_PILL[status]}>
+                                  <span className={RUNTIME_STATUS_DOT[status]} /> {ACTIVE_MODEL_STATUS_LABELS[status]}
                                 </span>
                               ) : (
                                 <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
