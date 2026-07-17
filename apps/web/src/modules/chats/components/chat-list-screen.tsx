@@ -12,7 +12,25 @@ import { importChat } from '../api/import-chat';
 import { chatListQueryKey, chatListQueryOptions } from '../queries/chat-list-query';
 import { ChatListRow } from './chat-list-row';
 
+const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
+
+class ImportFileTooLargeError extends Error {
+  constructor() {
+    super('Import file exceeds the 10 MB limit.');
+    this.name = 'ImportFileTooLargeError';
+  }
+}
+
+interface ImportNotice {
+  chatId: string;
+  importedMessages: number;
+  skippedLines: number;
+}
+
 function getImportErrorMessage(error: unknown): string {
+  if (error instanceof ImportFileTooLargeError) {
+    return 'Файл больше 10 МБ — импорт невозможен.';
+  }
   if (error instanceof ApiError) {
     if (error.code === 'invalid_chat_file') {
       return 'Файл не похож на экспорт чата: в нём не нашлось ни одного сообщения.';
@@ -31,6 +49,7 @@ export function ChatListScreen() {
   const [search, setSearch] = useState('');
   const [characterFilter, setCharacterFilter] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<'updated' | 'name'>('updated');
+  const [importNotice, setImportNotice] = useState<ImportNotice | null>(null);
   const deferredSearch = useDeferredValue(search);
   const chatListQuery = useQuery(chatListQueryOptions(deferredSearch));
   const createMutation = useMutation({
@@ -42,12 +61,26 @@ export function ChatListScreen() {
   });
   const importMutation = useMutation({
     mutationFn: async (file: File) => {
+      // Проверка до кодирования: base64 большого файла зря нагружает вкладку,
+      // а сервер всё равно ответит 413.
+      if (file.size > MAX_IMPORT_FILE_BYTES) {
+        throw new ImportFileTooLargeError();
+      }
       const contentBase64 = await readFileAsBase64(file);
       return importChat({ contentBase64 });
     },
     onSuccess: async (response) => {
       await queryClient.invalidateQueries({ queryKey: chatListQueryKey });
-      await navigate({ to: '/chat/$chatId', params: { chatId: response.chat.id } });
+      if (response.skippedLines === 0) {
+        await navigate({ to: '/chat/$chatId', params: { chatId: response.chat.id } });
+        return;
+      }
+      // Частичный импорт: не уводим со списка молча, а показываем, что пропущено.
+      setImportNotice({
+        chatId: response.chat.id,
+        importedMessages: response.importedMessages,
+        skippedLines: response.skippedLines,
+      });
     },
   });
 
@@ -59,6 +92,7 @@ export function ChatListScreen() {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = '';
     if (!file) return;
+    setImportNotice(null);
     importMutation.mutate(file);
   };
 
@@ -193,6 +227,23 @@ export function ChatListScreen() {
               {importMutation.isError ? (
                 <div style={{ color: 'var(--danger)', fontSize: 'var(--fz-xs)', marginTop: 4 }}>
                   {getImportErrorMessage(importMutation.error)}
+                </div>
+              ) : null}
+              {importNotice ? (
+                <div className="row gap-8" style={{ alignItems: 'center', fontSize: 'var(--fz-xs)', marginTop: 4 }}>
+                  <span>
+                    Импортировано {importNotice.importedMessages} сообщений, {importNotice.skippedLines} строк пропущено
+                    (не распознаны).
+                  </span>
+                  <button
+                    className="btn"
+                    onClick={() => {
+                      void navigate({ to: '/chat/$chatId', params: { chatId: importNotice.chatId } });
+                    }}
+                    type="button"
+                  >
+                    Открыть чат
+                  </button>
                 </div>
               ) : null}
             </div>
