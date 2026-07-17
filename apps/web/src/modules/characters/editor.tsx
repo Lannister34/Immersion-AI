@@ -364,7 +364,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
           </>
         }
         crumbs={[
-          { label: 'Персонажи' },
+          { label: 'Персонажи', to: '/characters' },
           { label: isNew ? 'Новый персонаж' : (detail?.name ?? characterId ?? 'Персонаж'), strong: true },
         ]}
         search={false}

@@ -1,10 +1,14 @@
+import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 
 import { ChevronRightIcon, SearchIcon } from '../../shared/ui/icons';
 
+export type CrumbPath = '/chat' | '/characters' | '/scenarios' | '/lorebooks' | '/settings' | '/server';
+
 export interface Crumb {
   label: string;
   strong?: boolean;
+  to?: CrumbPath;
 }
 
 interface TopbarSearch {
@@ -21,6 +25,12 @@ interface TopbarProps {
 
 const defaultSearch: TopbarSearch = { placeholder: 'Поиск или команда…' };
 
+function renderCrumb(crumb: Crumb) {
+  const label = crumb.strong ? <strong>{crumb.label}</strong> : <span>{crumb.label}</span>;
+
+  return crumb.to ? <Link to={crumb.to}>{label}</Link> : label;
+}
+
 export function Topbar({ crumbs, actions, search = defaultSearch }: TopbarProps) {
   return (
     <div className="topbar">
@@ -32,7 +42,7 @@ export function Topbar({ crumbs, actions, search = defaultSearch }: TopbarProps)
                 <ChevronRightIcon size={12} />
               </span>
             ) : null}
-            {c.strong ? <strong>{c.label}</strong> : <span>{c.label}</span>}
+            {renderCrumb(c)}
           </span>
         ))}
       </div>

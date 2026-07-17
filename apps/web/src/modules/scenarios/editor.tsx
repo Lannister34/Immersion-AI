@@ -233,7 +233,7 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
           </>
         }
         crumbs={[
-          { label: 'Сценарии' },
+          { label: 'Сценарии', to: '/scenarios' },
           { label: isNew ? 'Новый сценарий' : (detail?.name ?? scenarioId ?? 'Сценарий'), strong: true },
         ]}
         search={false}

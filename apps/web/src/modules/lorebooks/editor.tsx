@@ -265,7 +265,7 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
           </>
         }
         crumbs={[
-          { label: 'Лорбуки' },
+          { label: 'Лорбуки', to: '/lorebooks' },
           { label: isNew ? 'Новый лорбук' : (detail?.name ?? lorebookId ?? 'Лорбук'), strong: true },
         ]}
         search={false}

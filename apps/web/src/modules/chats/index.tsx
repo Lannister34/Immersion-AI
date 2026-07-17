@@ -460,7 +460,13 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   if (chatSessionQuery.isLoading) {
     return (
       <main className="main">
-        <Topbar crumbs={[{ label: 'Чаты' }, { label: 'Загрузка…', strong: true }]} search={false} />
+        <Topbar
+          crumbs={[
+            { label: 'Чаты', to: '/chat' },
+            { label: 'Загрузка…', strong: true },
+          ]}
+          search={false}
+        />
         <div className="empty" style={{ padding: 80 }}>
           <h2>Загрузка чата</h2>
           <p>Получаем сохранённую сессию из backend.</p>
@@ -472,7 +478,13 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   if (chatSessionQuery.isError || !chatSessionQuery.data) {
     return (
       <main className="main">
-        <Topbar crumbs={[{ label: 'Чаты' }, { label: 'Чат не найден', strong: true }]} search={false} />
+        <Topbar
+          crumbs={[
+            { label: 'Чаты', to: '/chat' },
+            { label: 'Чат не найден', strong: true },
+          ]}
+          search={false}
+        />
         <div className="empty" style={{ padding: 80 }}>
           <h2>Не удалось открыть чат</h2>
           <p>Чат не найден или backend не смог прочитать его файл.</p>
@@ -561,7 +573,10 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
     >
       <main className="main">
         <Topbar
-          crumbs={[{ label: 'Чаты' }, { label: `${characterDisplay} · ${session.chat.title}`, strong: true }]}
+          crumbs={[
+            { label: 'Чаты', to: '/chat' },
+            { label: `${characterDisplay} · ${session.chat.title}`, strong: true },
+          ]}
           actions={
             <>
               {deleteChatErrorMessage ? (
