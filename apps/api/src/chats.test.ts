@@ -542,6 +542,45 @@ describe('chat routes', () => {
     await app.close();
   });
 
+  it('does not seed the card greeting when a separate scenario is bound', async () => {
+    const charactersDir = path.join(temporaryDataRoot, 'characters');
+    const scenariosDir = path.join(temporaryDataRoot, 'scenarios');
+    await fs.mkdir(charactersDir, { recursive: true });
+    await fs.mkdir(scenariosDir, { recursive: true });
+    await fs.writeFile(
+      path.join(charactersDir, 'Aria.json'),
+      JSON.stringify({
+        name: 'Ария',
+        description: 'Скульптор',
+        first_message: 'Привет, ты в студии впервые?',
+      }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(scenariosDir, 'Пикник.json'),
+      JSON.stringify({
+        name: 'Пикник',
+        concept: 'Встреча в парке',
+        content: '{{user}} и {{char}} встречаются в парке.',
+      }),
+      'utf8',
+    );
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/chats',
+      payload: { characterId: 'Aria.json', scenarioId: 'Пикник.json' },
+    });
+    const payload = CreateChatResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(201);
+    // Приветствие карточки написано под её базовый сценарий — при другом сценарии не вставляется.
+    expect(payload.chat.messageCount).toBe(0);
+
+    await app.close();
+  });
+
   it('exposes a PNG character avatar URL on the chat summary', async () => {
     const charactersDir = path.join(temporaryDataRoot, 'characters');
     await fs.mkdir(charactersDir, { recursive: true });

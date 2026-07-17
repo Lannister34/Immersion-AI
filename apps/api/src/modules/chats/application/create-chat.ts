@@ -44,7 +44,9 @@ export async function createChat(command: CreateChatCommand): Promise<CreateChat
     if (!command.title?.trim() && !command.scenarioId) {
       title = `Чат с ${character.name}`;
     }
-    if (character.firstMessage.trim().length > 0) {
+    // Первая фраза карточки принадлежит её базовому сценарию: если к чату
+    // привязан отдельный сценарий, приветствие не вставляем — сцена другая.
+    if (!command.scenarioId && character.firstMessage.trim().length > 0) {
       seedMessages.push({
         content: character.firstMessage,
         createdAt,

@@ -490,6 +490,41 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                 </Field>
                 {fieldErrorFor('personality')}
                 <Field
+                  action={fieldSparkleAction('exampleDialogue', 'Сгенерировать примеры диалогов по текущей карточке')}
+                  hint="Примеры реплик в формате SillyTavern — помогают модели держать стиль."
+                  id="character-mes-example"
+                  label="Примеры диалогов"
+                >
+                  <textarea
+                    className="textarea"
+                    disabled={!canEdit || saveMutation.isPending}
+                    id="character-mes-example"
+                    maxLength={20_000}
+                    onChange={(event) => setField('exampleDialogue', event.currentTarget.value)}
+                    rows={5}
+                    value={form.exampleDialogue}
+                  />
+                </Field>
+                {fieldErrorFor('exampleDialogue')}
+                <Field hint="Через запятую." id="character-tags" label="Теги">
+                  <input
+                    className="input"
+                    disabled={!canEdit || saveMutation.isPending}
+                    id="character-tags"
+                    onChange={(event) => setField('tagsText', event.currentTarget.value)}
+                    placeholder="ru, slice-of-life, ремесло"
+                    value={form.tagsText}
+                  />
+                </Field>
+                <div className="divider" />
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 'var(--fz-md)', fontWeight: 600 }}>Базовый сценарий</h3>
+                  <div className="muted" style={{ fontSize: 'var(--fz-xs)', marginTop: 2 }}>
+                    Сцена и приветствие по умолчанию. Если при создании чата выбран отдельный сценарий, он имеет
+                    приоритет, а приветствие карточки не вставляется.
+                  </div>
+                </div>
+                <Field
                   action={fieldSparkleAction('scenario', 'Сгенерировать сцену по текущей карточке')}
                   hint="Стартовая сцена, в которой персонаж находится по умолчанию."
                   id="character-scenario"
@@ -508,7 +543,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                 {fieldErrorFor('scenario')}
                 <Field
                   action={fieldSparkleAction('firstMessage', 'Сгенерировать первую фразу по текущей карточке')}
-                  hint="Первое сообщение, которое отправляет персонаж в начале чата."
+                  hint="Вставляется как приветствие при создании чата без выбранного сценария."
                   id="character-first-mes"
                   label="Первая фраза"
                 >
@@ -523,25 +558,16 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                   />
                 </Field>
                 {fieldErrorFor('firstMessage')}
+                <div className="divider" />
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 'var(--fz-md)', fontWeight: 600 }}>Продвинутое</h3>
+                  <div className="muted" style={{ fontSize: 'var(--fz-xs)', marginTop: 2 }}>
+                    Стилевые мета-инструкции карточки — действуют во всех чатах с персонажем. Для разового
+                    переопределения используйте настройки конкретного чата.
+                  </div>
+                </div>
                 <Field
-                  action={fieldSparkleAction('exampleDialogue', 'Сгенерировать примеры диалогов по текущей карточке')}
-                  hint="Примеры реплик в формате SillyTavern — помогают модели держать стиль."
-                  id="character-mes-example"
-                  label="Примеры диалогов"
-                >
-                  <textarea
-                    className="textarea"
-                    disabled={!canEdit || saveMutation.isPending}
-                    id="character-mes-example"
-                    maxLength={20_000}
-                    onChange={(event) => setField('exampleDialogue', event.currentTarget.value)}
-                    rows={5}
-                    value={form.exampleDialogue}
-                  />
-                </Field>
-                {fieldErrorFor('exampleDialogue')}
-                <Field
-                  hint="System prompt именно для этого персонажа. Перекроет глобальный."
+                  hint="Перекрывает глобальный шаблон system prompt. Приезжает с импортированными карточками SillyTavern."
                   id="character-system-prompt"
                   label="System Prompt (опционально)"
                 >
@@ -553,16 +579,6 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     onChange={(event) => setField('systemPrompt', event.currentTarget.value)}
                     rows={4}
                     value={form.systemPrompt}
-                  />
-                </Field>
-                <Field hint="Через запятую." id="character-tags" label="Теги">
-                  <input
-                    className="input"
-                    disabled={!canEdit || saveMutation.isPending}
-                    id="character-tags"
-                    onChange={(event) => setField('tagsText', event.currentTarget.value)}
-                    placeholder="ru, slice-of-life, ремесло"
-                    value={form.tagsText}
                   />
                 </Field>
                 {errorMessage ? (
