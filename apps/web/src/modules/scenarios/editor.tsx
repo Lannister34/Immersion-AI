@@ -140,10 +140,11 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
     },
     onSuccess: (draft) => {
       // Черновик заполняет форму; название не трогаем, если пользователь его уже ввёл.
+      // Пустую первую фразу от модели не применяем — не затираем написанное вручную.
       setForm((current) => ({
         ...current,
         content: draft.content,
-        firstMessage: draft.firstMessage,
+        firstMessage: draft.firstMessage.trim().length > 0 ? draft.firstMessage : current.firstMessage,
         name: current.name.trim().length > 0 ? current.name : draft.name,
         tagsText: draft.tags.join(', '),
       }));
