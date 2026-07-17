@@ -1,6 +1,7 @@
 import { type SettingsOverviewResponse, SettingsOverviewResponseSchema } from '@immersion/contracts/settings';
 
 import { readLegacyUserSettingsSource } from '../../../shared/infrastructure/legacy-settings-source.js';
+import { DEFAULT_USER_NAME } from './get-profile-user-name.js';
 
 const DEFAULT_SAMPLER_PRESET = {
   contextTrimStrategy: 'trim_middle',
@@ -132,7 +133,7 @@ export function getSettingsOverview(): SettingsOverviewResponse {
 
   return SettingsOverviewResponseSchema.parse({
     profile: {
-      userName: getString(source.userName, 'User'),
+      userName: getString(source.userName, DEFAULT_USER_NAME),
       userPersona: getString(source.userPersona),
       systemPromptTemplate: getString(source.systemPromptTemplate),
       uiLanguage: getUiLanguage(source.uiLanguage),
