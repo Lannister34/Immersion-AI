@@ -129,6 +129,21 @@ export const ChatMessageMutationResponseSchema = z.object({
 });
 export type ChatMessageMutationResponse = z.infer<typeof ChatMessageMutationResponseSchema>;
 
+// ~10 MB decoded payload => ~14M base64 characters; the exact decoded-size
+// limit is enforced by the import use case with a dedicated 413 problem code.
+export const ImportChatCommandSchema = z.object({
+  contentBase64: z.string().min(1).max(15_000_000),
+  title: z.string().trim().min(1).max(120).optional(),
+});
+export type ImportChatCommand = z.infer<typeof ImportChatCommandSchema>;
+
+export const ImportChatResponseSchema = z.object({
+  chat: ChatSummaryDtoSchema,
+  importedMessages: z.number().int().nonnegative(),
+  skippedLines: z.number().int().nonnegative(),
+});
+export type ImportChatResponse = z.infer<typeof ImportChatResponseSchema>;
+
 export const BranchChatCommandSchema = z.object({
   throughMessageIndex: z.number().int().positive(),
   title: z.string().trim().min(1).max(120).optional(),

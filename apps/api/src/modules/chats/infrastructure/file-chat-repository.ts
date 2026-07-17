@@ -337,6 +337,90 @@ function getLatestIsoDate(...values: Array<string | null | undefined>) {
   return candidates.sort((left, right) => right.localeCompare(left))[0] ?? null;
 }
 
+export interface ParsedChatTranscriptHeader {
+  characterName: string | null;
+  createdAt: string | null;
+  generationSettings: ChatGenerationSettingsRecord;
+  lorebookIds: string[];
+  scenarioName: string | null;
+  title: string | null;
+  userName: string | null;
+}
+
+export interface ParsedChatTranscript {
+  header: ParsedChatTranscriptHeader | null;
+  messages: AppendChatMessageInput[];
+  skippedLines: number;
+}
+
+function trimmedOrNull(value: string) {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * Lenient variant of the transcript parsing used by readChatFile: built on the
+ * same helpers (parseStoredHeader/parseStoredChatLine), but lines that would
+ * make the strict reader throw are counted as skipped instead. Used for import.
+ */
+export function parseChatTranscriptLeniently(
+  rawContent: string,
+  source: string,
+  fallbackCreatedAt: string,
+): ParsedChatTranscript {
+  const lines = rawContent
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  let header: ParsedChatTranscriptHeader | null = null;
+  let messageLines = lines;
+  let skippedLines = 0;
+
+  if (lines.length > 0) {
+    try {
+      const storedHeader = parseStoredHeader(lines[0] ?? '', source);
+      if (storedHeader) {
+        header = {
+          characterName: trimmedOrNull(storedHeader.character_name ?? ''),
+          createdAt: trimmedOrNull(storedHeader.chat_metadata?.createdAt ?? ''),
+          generationSettings: parseStoredGenerationSettings(storedHeader.generation_settings, source),
+          lorebookIds: [...(storedHeader.lorebook_ids ?? [])],
+          scenarioName: trimmedOrNull(storedHeader.scenario_name ?? ''),
+          title: trimmedOrNull(storedHeader.chat_metadata?.title ?? ''),
+          userName: trimmedOrNull(storedHeader.user_name ?? ''),
+        };
+        messageLines = lines.slice(1);
+      }
+    } catch {
+      // Malformed first line: not a header; the message loop will count it as skipped.
+    }
+  }
+
+  const messages: AppendChatMessageInput[] = [];
+  for (const [index, line] of messageLines.entries()) {
+    let storedLine: StoredChatLine | null = null;
+    try {
+      storedLine = parseStoredChatLine(line, source, (header ? 2 : 1) + index);
+    } catch {
+      storedLine = null;
+    }
+
+    if (!storedLine) {
+      skippedLines += 1;
+      continue;
+    }
+
+    messages.push({
+      content: storedLine.mes ?? '',
+      createdAt: storedLine.send_date || fallbackCreatedAt,
+      role: getMessageRole(storedLine),
+    });
+  }
+
+  return { header, messages, skippedLines };
+}
+
 async function readChatFile(chatId: string): Promise<ChatSessionRecord | null> {
   const filePath = resolveChatFilePath(chatId);
   let rawContent: string;
@@ -524,7 +608,9 @@ export class FileChatRepository implements ChatRepository {
         title: input.title,
         updatedAt: input.createdAt,
       },
-      generation_settings: serializeGenerationSettings(createDefaultChatGenerationSettings()),
+      generation_settings: serializeGenerationSettings(
+        input.generationSettings ?? createDefaultChatGenerationSettings(),
+      ),
       user_name: input.userName,
       character_id: input.characterId ?? '',
       character_name: input.characterName ?? '',
