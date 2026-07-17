@@ -1,6 +1,7 @@
 import type { SettingsOverviewResponse, UpdateSettingsProfileResponse } from '@immersion/contracts/settings';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { chatReplyPromptPreviewQueryRootKey } from '../../generation';
 import { updateSettingsProfile } from '../api/update-settings-profile';
 import { settingsOverviewQueryKey } from '../queries/settings-overview-query';
 
@@ -21,7 +22,11 @@ export function useUpdateSettingsProfile(options: UseUpdateSettingsProfileOption
           profile: response.profile,
         });
       }
-      await queryClient.invalidateQueries({ queryKey: settingsOverviewQueryKey });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: settingsOverviewQueryKey }),
+        // Имя, persona и шаблон system prompt входят в prompt — превью нужно пересчитать.
+        queryClient.invalidateQueries({ queryKey: chatReplyPromptPreviewQueryRootKey }),
+      ]);
       await options.onSuccess?.(response);
     },
   });

@@ -13,7 +13,7 @@ interface PlaceholderScreenProps {
 export function PlaceholderScreen({ eyebrow, title, description, bullets, children }: PlaceholderScreenProps) {
   return (
     <main className="main">
-      <Topbar crumbs={[{ label: title, strong: true }]} search={false} />
+      <Topbar crumbs={[{ label: title, strong: true }]} />
       <div className="page">
         <div className="page__head">
           <div className="page__title-row">

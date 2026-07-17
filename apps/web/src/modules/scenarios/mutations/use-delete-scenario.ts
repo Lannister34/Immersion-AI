@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { chatListQueryKey } from '../../chats/queries/chat-list-query';
 import { deleteScenario } from '../api/delete-scenario';
 import { scenarioDetailQueryKey } from '../queries/scenario-detail-query';
 import { scenarioListQueryKey } from '../queries/scenario-list-query';
@@ -15,7 +16,11 @@ export function useDeleteScenario(scenarioId: string, options: UseDeleteScenario
     mutationFn: () => deleteScenario(scenarioId),
     onSuccess: async () => {
       queryClient.removeQueries({ queryKey: scenarioDetailQueryKey(scenarioId) });
-      await queryClient.invalidateQueries({ queryKey: scenarioListQueryKey });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: scenarioListQueryKey }),
+        // Сводки чатов содержат имя сценария — иначе оно остаётся в списке после удаления.
+        queryClient.invalidateQueries({ queryKey: chatListQueryKey }),
+      ]);
       await options.onSuccess?.();
     },
   });

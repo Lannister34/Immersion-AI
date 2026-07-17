@@ -7,20 +7,11 @@ import type {
 } from '@immersion/contracts/providers';
 import type { RuntimeOverviewResponse, RuntimeStartCommand } from '@immersion/contracts/runtime';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
-import {
-  CpuIcon,
-  FolderIcon,
-  HistoryIcon,
-  MoreIcon,
-  PlayIcon,
-  PowerIcon,
-  RefreshIcon,
-  SearchIcon,
-} from '../../shared/ui/icons';
+import { CpuIcon, PlayIcon, PowerIcon, RefreshIcon, SearchIcon } from '../../shared/ui/icons';
 import { saveProviderSettings } from './api/save-provider-settings';
 import { startRuntime } from './api/start-runtime';
 import { stopRuntime } from './api/stop-runtime';
@@ -144,29 +135,43 @@ export function ServerControlScreen() {
   });
   const activeModelName = overview?.serverStatus.model ?? null;
 
+  let runtimeSubtitle = 'Загружаем настройки…';
+  if (snapshot) {
+    runtimeSubtitle =
+      activeMode === 'builtin' ? `Локальный KoboldCpp · ${RUNTIME_STATUS_LABELS[status]}` : 'Внешний API провайдер';
+  }
+
+  let runtimeFallback: ReactNode;
+  if (activeMode === 'builtin') {
+    runtimeFallback = (
+      <div className="empty" style={{ padding: 60 }}>
+        <h2>{runtimeOverviewQuery.isError ? 'Не удалось загрузить runtime' : 'Загрузка runtime'}</h2>
+        <p>
+          {runtimeOverviewQuery.isError
+            ? 'Проверьте rewrite API и состояние встроенного сервера.'
+            : 'Получаем список моделей и состояние сервера.'}
+        </p>
+      </div>
+    );
+  } else {
+    runtimeFallback = (
+      <ExternalProviderForm
+        isSaving={saveProviderMutation.isPending}
+        onSave={(command) => saveProviderMutation.mutateAsync(command)}
+        snapshot={snapshot}
+      />
+    );
+  }
+
   return (
     <main className="main">
-      <Topbar
-        actions={
-          <button className="btn" type="button">
-            <HistoryIcon size={13} /> История запусков
-          </button>
-        }
-        crumbs={[{ label: 'API / Сервер', strong: true }]}
-        search={false}
-      />
+      <Topbar crumbs={[{ label: 'API / Сервер', strong: true }]} />
       <div className="page">
         <div className="page__head">
           <div className="page__title-row">
             <div>
               <h1 className="page__title">LLM-runtime</h1>
-              <div className="page__sub">
-                {snapshot
-                  ? activeMode === 'builtin'
-                    ? `Локальный KoboldCpp · ${RUNTIME_STATUS_LABELS[status]}`
-                    : 'Внешний API провайдер'
-                  : 'Загружаем настройки…'}
-              </div>
+              <div className="page__sub">{runtimeSubtitle}</div>
             </div>
             <div className="row gap-2 card" style={{ padding: 2 }}>
               <button
@@ -263,9 +268,6 @@ export function ServerControlScreen() {
                         value={search}
                       />
                     </div>
-                    <button className="btn" type="button">
-                      <FolderIcon size={13} /> Каталоги
-                    </button>
                   </div>
                 </div>
                 <table className="tbl">
@@ -319,11 +321,7 @@ export function ServerControlScreen() {
                               )}
                             </td>
                             <td style={{ textAlign: 'right' }}>
-                              {isActive ? (
-                                <button className="btn btn--icon btn--xs" type="button">
-                                  <MoreIcon size={12} />
-                                </button>
-                              ) : (
+                              {isActive ? null : (
                                 <button
                                   className="btn btn--xs btn--ghost-bordered"
                                   disabled={startRuntimeMutation.isPending}
@@ -351,21 +349,8 @@ export function ServerControlScreen() {
                 </table>
               </section>
             </>
-          ) : activeMode === 'builtin' ? (
-            <div className="empty" style={{ padding: 60 }}>
-              <h2>{runtimeOverviewQuery.isError ? 'Не удалось загрузить runtime' : 'Загрузка runtime'}</h2>
-              <p>
-                {runtimeOverviewQuery.isError
-                  ? 'Проверьте rewrite API и состояние встроенного сервера.'
-                  : 'Получаем список моделей и состояние сервера.'}
-              </p>
-            </div>
           ) : (
-            <ExternalProviderForm
-              isSaving={saveProviderMutation.isPending}
-              onSave={(command) => saveProviderMutation.mutateAsync(command)}
-              snapshot={snapshot}
-            />
+            runtimeFallback
           )}
         </div>
       </div>

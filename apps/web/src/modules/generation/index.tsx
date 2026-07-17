@@ -15,6 +15,7 @@ export {
   chatReplyPromptPreviewQueryBaseKey,
   chatReplyPromptPreviewQueryKey,
   chatReplyPromptPreviewQueryOptions,
+  chatReplyPromptPreviewQueryRootKey,
 } from './queries/chat-reply-prompt-preview-query';
 export {
   chatGenerationJobsQueryKey,

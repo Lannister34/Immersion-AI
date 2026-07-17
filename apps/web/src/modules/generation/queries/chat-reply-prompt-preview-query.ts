@@ -3,8 +3,10 @@ import { queryOptions } from '@tanstack/react-query';
 
 import { previewChatReplyPrompt } from '../api/preview-chat-reply-prompt';
 
+export const chatReplyPromptPreviewQueryRootKey = ['generation', 'chat-reply-preview'] as const;
+
 export const chatReplyPromptPreviewQueryBaseKey = (chatId: string) =>
-  ['generation', 'chat-reply-preview', chatId] as const;
+  [...chatReplyPromptPreviewQueryRootKey, chatId] as const;
 
 function normalizeOverrides(overrides?: ChatReplyPromptPreviewMessageOverride[]) {
   if (!overrides?.length) {

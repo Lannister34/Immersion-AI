@@ -5,10 +5,9 @@ import {
 } from '@immersion/contracts/lorebooks';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { type ChangeEvent, type MouseEvent, useMemo, useRef, useState } from 'react';
+import { type ChangeEvent, type ReactNode, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
-import { ApiError } from '../../shared/api/client';
 import { formatRelative } from '../../shared/lib/format-relative';
 import { BookIcon, PlusIcon, SearchIcon, TrashIcon, UploadIcon, XIcon } from '../../shared/ui/icons';
 import { createLorebook } from './api/save-lorebook';
@@ -17,19 +16,59 @@ import { lorebookListQueryKey, lorebookListQueryOptions } from './queries/lorebo
 
 export { LorebookEditorScreen } from './editor';
 
+type LorebookSortMode = 'updated' | 'name' | 'entries';
+
+const SORT_LABELS: Record<LorebookSortMode, string> = {
+  updated: 'Активность ↓',
+  name: 'По имени',
+  entries: 'По записям',
+};
+
+const NEXT_SORT_MODE: Record<LorebookSortMode, LorebookSortMode> = {
+  updated: 'name',
+  name: 'entries',
+  entries: 'updated',
+};
+
+function lorebookCountLabel(count: number): string {
+  let suffix = 'ов';
+  if (count === 1) {
+    suffix = '';
+  } else if (count >= 2 && count <= 4) {
+    suffix = 'а';
+  }
+  return `${count} лорбук${suffix} в библиотеке`;
+}
+
+function normalizeEntryKeys(record: Record<string, unknown>): string[] {
+  const rawKeys = record.keys ?? record.key;
+  if (Array.isArray(rawKeys)) {
+    return rawKeys.filter((key): key is string => typeof key === 'string');
+  }
+  if (typeof record.key === 'string') {
+    return [record.key];
+  }
+  return [];
+}
+
+function normalizeEntryPriority(record: Record<string, unknown>): number {
+  if (typeof record.priority === 'number') {
+    return record.priority;
+  }
+  if (typeof record.order === 'number') {
+    return record.order;
+  }
+  return 0;
+}
+
 function normalizeLorebookEntry(raw: unknown) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const record = raw as Record<string, unknown>;
   return {
     content: typeof record.content === 'string' ? record.content : '',
     enabled: typeof record.enabled === 'boolean' ? record.enabled : true,
-    keys: Array.isArray(record.keys ?? record.key)
-      ? ((record.keys ?? record.key) as unknown[]).filter((key): key is string => typeof key === 'string')
-      : typeof record.key === 'string'
-        ? [record.key]
-        : [],
-    priority:
-      typeof record.priority === 'number' ? record.priority : typeof record.order === 'number' ? record.order : 0,
+    keys: normalizeEntryKeys(record),
+    priority: normalizeEntryPriority(record),
   };
 }
 
@@ -39,11 +78,12 @@ function parseLorebookImportFile(raw: string): SaveLorebookCommand {
     throw new Error('Файл лорбука должен содержать JSON-объект.');
   }
   const record = parsed as Record<string, unknown>;
-  const entriesRaw = Array.isArray(record.entries)
-    ? record.entries
-    : record.entries && typeof record.entries === 'object'
-      ? Object.values(record.entries as Record<string, unknown>)
-      : [];
+  let entriesRaw: unknown[] = [];
+  if (Array.isArray(record.entries)) {
+    entriesRaw = record.entries;
+  } else if (record.entries && typeof record.entries === 'object') {
+    entriesRaw = Object.values(record.entries as Record<string, unknown>);
+  }
   const entries = entriesRaw
     .map((entry) => normalizeLorebookEntry(entry))
     .filter((entry): entry is NonNullable<ReturnType<typeof normalizeLorebookEntry>> => entry !== null);
@@ -60,7 +100,7 @@ export function LorebooksScreen() {
   const query = useQuery(lorebookListQueryOptions());
   const [search, setSearch] = useState('');
   const [activeTags, setActiveTags] = useState<readonly string[]>([]);
-  const [sortMode, setSortMode] = useState<'updated' | 'name' | 'entries'>('updated');
+  const [sortMode, setSortMode] = useState<LorebookSortMode>('updated');
   const [importError, setImportError] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const importMutation = useMutation({
@@ -82,13 +122,8 @@ export function LorebooksScreen() {
     setImportError(null);
     importMutation.mutate(file, {
       onError: (error) => {
-        const message =
-          error instanceof ApiError
-            ? error.message
-            : error instanceof Error
-              ? error.message
-              : 'Не удалось импортировать лорбук.';
-        setImportError(message);
+        // ApiError наследует Error — сообщение берём из любого Error, включая ошибки парсинга файла.
+        setImportError(error instanceof Error ? error.message : 'Не удалось импортировать лорбук.');
       },
     });
   };
@@ -125,10 +160,82 @@ export function LorebooksScreen() {
     setActiveTags((current) => (current.includes(tag) ? current.filter((value) => value !== tag) : [...current, tag]));
   };
 
-  const sortLabel = sortMode === 'updated' ? 'Активность ↓' : sortMode === 'name' ? 'По имени' : 'По записям';
+  const sortLabel = SORT_LABELS[sortMode];
   const handleCycleSort = () => {
-    setSortMode((mode) => (mode === 'updated' ? 'name' : mode === 'name' ? 'entries' : 'updated'));
+    setSortMode((mode) => NEXT_SORT_MODE[mode]);
   };
+
+  let subtitle = lorebookCountLabel(items.length);
+  if (query.isLoading) {
+    subtitle = 'Загружаем лорбуки…';
+  } else if (query.isError) {
+    subtitle = 'Не удалось загрузить лорбуки';
+  }
+
+  let body: ReactNode;
+  if (query.isLoading) {
+    body = (
+      <div className="empty">
+        <p className="muted">Загружаем…</p>
+      </div>
+    );
+  } else if (query.isError) {
+    body = (
+      <div className="empty">
+        <h2>Не удалось загрузить лорбуки</h2>
+        <p>Проверьте rewrite API и повторите попытку.</p>
+      </div>
+    );
+  } else if (items.length === 0) {
+    body = (
+      <div className="empty">
+        <h2>Папка лорбуков пуста</h2>
+        <p>
+          Создайте новый лорбук или положите .json-файлы в <code>data/worlds/</code>.
+        </p>
+        <div className="row gap-8" style={{ marginTop: 12, justifyContent: 'center' }}>
+          <Link className="btn btn--primary" to="/lorebooks/new">
+            <PlusIcon size={13} /> Новый лорбук
+          </Link>
+        </div>
+      </div>
+    );
+  } else if (filtered.length === 0) {
+    body = (
+      <div className="empty">
+        <h2>Ничего не найдено</h2>
+        <p>Поиск не дал совпадений по имени или тегам.</p>
+      </div>
+    );
+  } else {
+    body = (
+      <div className="card" style={{ padding: 0, overflow: 'hidden', display: 'grid', gridTemplateRows: 'auto 1fr' }}>
+        <div
+          className="row gap-12"
+          style={{
+            padding: '10px 14px',
+            borderBottom: '1px solid var(--hairline)',
+            fontSize: 'var(--fz-xs)',
+            color: 'var(--muted)',
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) 80px minmax(0, 1fr) 120px 100px',
+            gap: 14,
+          }}
+        >
+          <span>Название</span>
+          <span>Записей</span>
+          <span>Теги</span>
+          <span>Изменён</span>
+          <span />
+        </div>
+        <div>
+          {filtered.map((lorebook) => (
+            <LorebookRow key={lorebook.id} lorebook={lorebook} />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <main className="main">
@@ -157,20 +264,13 @@ export function LorebooksScreen() {
           </>
         }
         crumbs={[{ label: 'Лорбуки', strong: true }]}
-        search={false}
       />
       <div className="page">
         <div className="page__head">
           <div className="page__title-row">
             <div>
               <h1 className="page__title">Лорбуки</h1>
-              <div className="page__sub">
-                {query.isLoading
-                  ? 'Загружаем лорбуки…'
-                  : query.isError
-                    ? 'Не удалось загрузить лорбуки'
-                    : `${items.length} лорбук${items.length === 1 ? '' : items.length >= 2 && items.length <= 4 ? 'а' : 'ов'} в библиотеке`}
-              </div>
+              <div className="page__sub">{subtitle}</div>
               {importError ? (
                 <div style={{ color: 'var(--danger)', fontSize: 'var(--fz-xs)', marginTop: 4 }}>{importError}</div>
               ) : null}
@@ -215,64 +315,7 @@ export function LorebooksScreen() {
             </div>
           ) : null}
         </div>
-        <div className="page__body">
-          {query.isLoading ? (
-            <div className="empty">
-              <p className="muted">Загружаем…</p>
-            </div>
-          ) : query.isError ? (
-            <div className="empty">
-              <h2>Не удалось загрузить лорбуки</h2>
-              <p>Проверьте rewrite API и повторите попытку.</p>
-            </div>
-          ) : items.length === 0 ? (
-            <div className="empty">
-              <h2>Папка лорбуков пуста</h2>
-              <p>
-                Создайте новый лорбук или положите .json-файлы в <code>data/worlds/</code>.
-              </p>
-              <div className="row gap-8" style={{ marginTop: 12, justifyContent: 'center' }}>
-                <Link className="btn btn--primary" to="/lorebooks/new">
-                  <PlusIcon size={13} /> Новый лорбук
-                </Link>
-              </div>
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="empty">
-              <h2>Ничего не найдено</h2>
-              <p>Поиск не дал совпадений по имени или тегам.</p>
-            </div>
-          ) : (
-            <div
-              className="card"
-              style={{ padding: 0, overflow: 'hidden', display: 'grid', gridTemplateRows: 'auto 1fr' }}
-            >
-              <div
-                className="row gap-12"
-                style={{
-                  padding: '10px 14px',
-                  borderBottom: '1px solid var(--hairline)',
-                  fontSize: 'var(--fz-xs)',
-                  color: 'var(--muted)',
-                  display: 'grid',
-                  gridTemplateColumns: 'minmax(0, 1fr) 80px minmax(0, 1fr) 120px 100px',
-                  gap: 14,
-                }}
-              >
-                <span>Название</span>
-                <span>Записей</span>
-                <span>Теги</span>
-                <span>Изменён</span>
-                <span />
-              </div>
-              <div>
-                {filtered.map((lorebook) => (
-                  <LorebookRow key={lorebook.id} lorebook={lorebook} />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        <div className="page__body">{body}</div>
       </div>
     </main>
   );
@@ -290,28 +333,24 @@ function LorebookRow({ lorebook }: LorebookRowProps) {
     },
   });
 
-  const handleAskDelete = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleAskDelete = () => {
     setConfirmDelete(true);
   };
 
-  const handleConfirmDelete = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleConfirmDelete = () => {
     deleteMutation.mutate();
   };
 
-  const handleCancelDelete = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleCancelDelete = () => {
     setConfirmDelete(false);
   };
 
+  // Ссылка — оверлей поверх строки, кнопки-действия подняты выше по z-index:
+  // <button> внутри <a> — невалидный HTML.
   return (
-    <Link
-      params={{ lorebookId: lorebook.id }}
+    <div
       style={{
+        position: 'relative',
         display: 'grid',
         gridTemplateColumns: 'minmax(0, 1fr) 80px minmax(0, 1fr) 120px 100px',
         gap: 14,
@@ -319,11 +358,14 @@ function LorebookRow({ lorebook }: LorebookRowProps) {
         padding: '10px 14px',
         borderBottom: '1px solid var(--hairline)',
         background: 'var(--bg)',
-        color: 'inherit',
-        textDecoration: 'none',
       }}
-      to="/lorebooks/$lorebookId"
     >
+      <Link
+        aria-label={`Открыть лорбук: ${lorebook.name}`}
+        params={{ lorebookId: lorebook.id }}
+        style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'pointer' }}
+        to="/lorebooks/$lorebookId"
+      />
       <div className="row gap-8" style={{ minWidth: 0 }}>
         <BookIcon size={13} stroke="var(--muted)" />
         <strong className="truncate" style={{ fontSize: 'var(--fz-md)' }}>
@@ -343,7 +385,7 @@ function LorebookRow({ lorebook }: LorebookRowProps) {
       <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
         {formatRelative(lorebook.updatedAt)}
       </span>
-      <div className="row gap-4" style={{ justifyContent: 'flex-end' }}>
+      <div className="row gap-4" style={{ justifyContent: 'flex-end', position: 'relative', zIndex: 2 }}>
         {confirmDelete ? (
           <>
             <button
@@ -371,6 +413,6 @@ function LorebookRow({ lorebook }: LorebookRowProps) {
           </button>
         )}
       </div>
-    </Link>
+    </div>
   );
 }
