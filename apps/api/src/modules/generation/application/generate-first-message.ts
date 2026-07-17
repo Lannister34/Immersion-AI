@@ -9,7 +9,7 @@ import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
 import { appendChatMessages, ChatNotFoundError } from '../../chats/application/append-chat-messages.js';
 import { ChatTranscriptNotEmptyError } from '../../chats/application/chat-conflicts.js';
 import { getChatSession } from '../../chats/application/get-chat-session.js';
-import { loadCharacterContextForSession } from '../../chats/application/load-character-context.js';
+import { loadChatPromptContext } from '../../prompting/application/load-chat-prompt-context.js';
 import { resolveChatReplyGenerationPlan } from '../../prompting/application/resolve-chat-reply-generation-plan.js';
 import { resolveGenerationProviderEndpoint } from '../../providers/application/generation-provider.js';
 import { getSettingsOverview } from '../../settings/application/get-settings-overview.js';
@@ -85,7 +85,7 @@ export async function generateFirstMessage(
 
   const endpoint = await resolveGenerationProviderEndpoint();
   const settings = getSettingsOverview();
-  const characterContext = await loadCharacterContextForSession(session);
+  const characterContext = await loadChatPromptContext(session);
   const generationPlan = resolveChatReplyGenerationPlan({
     character: characterContext.character,
     characterScenarioContent: characterContext.characterScenarioContent,

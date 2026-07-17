@@ -5,7 +5,7 @@ import { readCharacterDetail } from '../../characters/infrastructure/file-charac
 import { readLorebookDetail } from '../../lorebooks/infrastructure/file-lorebook-repository.js';
 import { readScenarioDetail } from '../../scenarios/infrastructure/file-scenario-repository.js';
 
-export interface ChatCharacterContext {
+export interface ChatPromptContext {
   character: PromptCharacterSnapshot | null;
   characterScenarioContent: string | null;
   lorebookSections: string[];
@@ -22,7 +22,7 @@ function buildKeywordMatcher(keys: readonly string[]): ((haystack: string) => bo
   };
 }
 
-export async function loadCharacterContextForSession(session: ChatSessionDto): Promise<ChatCharacterContext> {
+export async function loadChatPromptContext(session: ChatSessionDto): Promise<ChatPromptContext> {
   let character: PromptCharacterSnapshot | null = null;
   let characterScenarioContent: string | null = null;
 

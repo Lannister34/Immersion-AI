@@ -12,7 +12,7 @@ import {
   type RuntimeOverviewResponse,
 } from '@immersion/contracts/runtime';
 
-import { getPrimaryRuntimeRoot } from '../../../lib/llm-process.js';
+import { getPrimaryRuntimeRoot } from '../infrastructure/llm-process-manager.js';
 import { getRuntimeOverview } from './get-runtime-overview.js';
 
 const LLAMA_CPP_LATEST_RELEASE_URL = 'https://api.github.com/repos/ggml-org/llama.cpp/releases/latest';

@@ -10,8 +10,8 @@ import {
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
-import { CharacterNotFoundError } from '../../../characters/application/get-character-avatar.js';
-import { ScenarioNotFoundError } from '../../../scenarios/application/get-scenario.js';
+import { CharacterNotFoundError } from '../../../characters/index.js';
+import { ScenarioNotFoundError } from '../../../scenarios/index.js';
 import { ChatMessageNotFoundError, ChatNotFoundError } from '../../application/append-chat-messages.js';
 import { branchChat } from '../../application/branch-chat.js';
 import { createChat } from '../../application/create-chat.js';

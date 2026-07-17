@@ -6,9 +6,10 @@ import {
 } from '@immersion/contracts/providers';
 import { z } from 'zod';
 
-import { getRunningRuntimeBaseUrl } from '../../runtime/application/get-running-runtime-base-url.js';
+import { runtimeEndpointAdapter } from '../infrastructure/runtime-endpoint-adapter.js';
 import { normalizeGenerationProviderBaseUrl } from './generation-provider.js';
 import { getProviderSettings } from './get-provider-settings.js';
+import type { RuntimeEndpointPort } from './runtime-endpoint-port.js';
 
 const ProviderModelsPayloadSchema = z
   .object({
@@ -24,6 +25,7 @@ const ProviderModelsPayloadSchema = z
 
 export interface TestProviderConnectionDependencies {
   fetcher?: typeof fetch;
+  runtimeEndpointPort?: RuntimeEndpointPort;
   timeoutMs?: number;
 }
 
@@ -147,7 +149,8 @@ export async function testProviderConnection(
   const settings = await getProviderSettings();
 
   if (settings.mode === 'builtin') {
-    const runtimeBaseUrl = await getRunningRuntimeBaseUrl();
+    const runtimeEndpointPort = dependencies.runtimeEndpointPort ?? runtimeEndpointAdapter;
+    const runtimeBaseUrl = (await runtimeEndpointPort.getRunningEndpoint())?.baseUrl ?? null;
 
     if (!runtimeBaseUrl) {
       return createErrorResponse(settings, 'builtin_runtime_not_running', 'Встроенный сервер не запущен.', null);

@@ -1,8 +1,6 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
-import { CharacterNotFoundError } from '../../characters/application/get-character-avatar.js';
-import { findCharacterFile, readCharacterDetail } from '../../characters/infrastructure/file-character-repository.js';
-import { ScenarioNotFoundError } from '../../scenarios/application/get-scenario.js';
-import { readScenarioDetail } from '../../scenarios/infrastructure/file-scenario-repository.js';
+import { getCharacter } from '../../characters/index.js';
+import { getScenario } from '../../scenarios/index.js';
 import { FileChatRepository } from '../infrastructure/file-chat-repository.js';
 import { ChatNotFoundError } from './append-chat-messages.js';
 import { toChatSessionResponse } from './chat-session-response.js';
@@ -28,13 +26,10 @@ export async function updateChatBindings(input: UpdateChatBindingsInput): Promis
       updates.characterId = null;
       updates.characterName = null;
     } else {
-      const summary = await findCharacterFile(input.characterId);
-      if (!summary) {
-        throw new CharacterNotFoundError(input.characterId);
-      }
-      const detail = await readCharacterDetail(input.characterId);
-      updates.characterId = summary.id;
-      updates.characterName = detail?.name ?? summary.name;
+      // Throws CharacterNotFoundError with the same route mapping as before.
+      const character = await getCharacter(input.characterId);
+      updates.characterId = character.id;
+      updates.characterName = character.name;
     }
   }
 
@@ -43,10 +38,8 @@ export async function updateChatBindings(input: UpdateChatBindingsInput): Promis
       updates.scenarioId = null;
       updates.scenarioName = null;
     } else {
-      const scenario = await readScenarioDetail(input.scenarioId);
-      if (!scenario) {
-        throw new ScenarioNotFoundError(input.scenarioId);
-      }
+      // Throws ScenarioNotFoundError with the same route mapping as before.
+      const scenario = await getScenario(input.scenarioId);
       updates.scenarioId = scenario.id;
       updates.scenarioName = scenario.name;
     }

@@ -1,8 +1,8 @@
-import { stop } from '../../../lib/llm-process.js';
+import { getLlmProcessManager } from '../infrastructure/llm-process-manager.js';
 import { getRuntimeOverview } from './get-runtime-overview.js';
 
 export async function stopRuntime() {
-  await stop();
+  await getLlmProcessManager().stop();
 
   return getRuntimeOverview();
 }

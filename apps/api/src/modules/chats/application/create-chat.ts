@@ -2,10 +2,8 @@ import crypto from 'node:crypto';
 
 import { type CreateChatCommand, type CreateChatResponse, CreateChatResponseSchema } from '@immersion/contracts/chats';
 
-import { CharacterNotFoundError } from '../../characters/application/get-character-avatar.js';
-import { readCharacterDetail } from '../../characters/infrastructure/file-character-repository.js';
-import { ScenarioNotFoundError } from '../../scenarios/application/get-scenario.js';
-import { readScenarioDetail } from '../../scenarios/infrastructure/file-scenario-repository.js';
+import { getCharacter } from '../../characters/index.js';
+import { getScenario } from '../../scenarios/index.js';
 import { FileChatRepository } from '../infrastructure/file-chat-repository.js';
 import type { AppendChatMessageInput } from './chat-records.js';
 import { toChatSummaryDto } from './chat-session-response.js';
@@ -23,10 +21,8 @@ export async function createChat(command: CreateChatCommand): Promise<CreateChat
   const seedMessages: AppendChatMessageInput[] = [];
 
   if (command.scenarioId) {
-    const scenario = await readScenarioDetail(command.scenarioId);
-    if (!scenario) {
-      throw new ScenarioNotFoundError(command.scenarioId);
-    }
+    // Throws ScenarioNotFoundError with the same route mapping as before.
+    const scenario = await getScenario(command.scenarioId);
     scenarioId = scenario.id;
     scenarioName = scenario.name;
     if (!command.title?.trim()) {
@@ -35,10 +31,8 @@ export async function createChat(command: CreateChatCommand): Promise<CreateChat
   }
 
   if (command.characterId) {
-    const character = await readCharacterDetail(command.characterId);
-    if (!character) {
-      throw new CharacterNotFoundError(command.characterId);
-    }
+    // Throws CharacterNotFoundError with the same route mapping as before.
+    const character = await getCharacter(command.characterId);
     characterId = character.id;
     characterName = character.name;
     if (!command.title?.trim() && !command.scenarioId) {

@@ -127,21 +127,21 @@ function readEntries(stored: StoredLorebook): LorebookEntryDto[] {
   return [];
 }
 
+function readStoredEntryKeys(stored: StoredLorebookEntry): unknown[] {
+  if (Array.isArray(stored.keys)) return stored.keys;
+  if (Array.isArray(stored.key)) return stored.key;
+  if (typeof stored.key === 'string') return [stored.key];
+  return [];
+}
+
 function entryFromStored(stored: StoredLorebookEntry | null | undefined): LorebookEntryDto[] {
   if (!stored || typeof stored !== 'object') return [];
-  const keys = Array.isArray(stored.keys)
-    ? stored.keys
-    : Array.isArray(stored.key)
-      ? stored.key
-      : typeof stored.key === 'string'
-        ? [stored.key]
-        : [];
   const cleanKeys: string[] = [];
-  for (const key of keys) {
+  for (const key of readStoredEntryKeys(stored)) {
     if (typeof key === 'string' && key.trim().length > 0) cleanKeys.push(key.trim());
   }
   const content = typeof stored.content === 'string' ? stored.content : '';
-  const enabled = stored.enabled === false ? false : true;
+  const enabled = stored.enabled !== false;
   const priority =
     typeof stored.priority === 'number' && Number.isFinite(stored.priority) ? Math.trunc(stored.priority) : 0;
   return [

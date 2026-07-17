@@ -241,15 +241,22 @@ function trimTranscriptToContextBudget(
   };
 }
 
+function resolveDefaultSystemPromptTemplate(
+  shouldUseContextualPromptSettings: boolean,
+  character: PromptCharacterSnapshot | null,
+): string {
+  if (!shouldUseContextualPromptSettings) {
+    return EMPTY_SYSTEM_PROMPT_TEMPLATE;
+  }
+
+  return character !== null ? CHARACTER_SYSTEM_PROMPT_TEMPLATE : DEFAULT_SYSTEM_PROMPT_TEMPLATE;
+}
+
 export function buildChatReplyPromptBundle(input: BuildChatReplyPromptInput): ChatReplyPromptBundle {
   const activePreset = input.samplerPreset;
   const character = input.character ?? null;
   const shouldUseContextualPromptSettings = character !== null || isContextualChat(input.session);
-  const defaultSystemPromptTemplate = !shouldUseContextualPromptSettings
-    ? EMPTY_SYSTEM_PROMPT_TEMPLATE
-    : character !== null
-      ? CHARACTER_SYSTEM_PROMPT_TEMPLATE
-      : DEFAULT_SYSTEM_PROMPT_TEMPLATE;
+  const defaultSystemPromptTemplate = resolveDefaultSystemPromptTemplate(shouldUseContextualPromptSettings, character);
   const snapshot = buildPromptInputSnapshot({
     ...(character ? { character } : {}),
     ...(input.characterScenarioContent ? { scenario: { content: input.characterScenarioContent, name: null } } : {}),

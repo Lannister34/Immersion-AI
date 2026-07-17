@@ -1,8 +1,15 @@
 import { buildApiApp } from './app.js';
-import { setupGracefulShutdown } from './lib/llm-process.js';
+import { getLlmProcessManager, setupGracefulShutdown } from './modules/runtime/infrastructure/llm-process-manager.js';
 
 const app = buildApiApp();
 setupGracefulShutdown();
+// Explicit startup step: re-attach to a llama-server left running by a previous
+// API process. This used to be a hidden import-time side effect.
+void getLlmProcessManager()
+  .reconnectToDetachedRuntime()
+  .catch((error: unknown) => {
+    app.log.error({ err: error }, 'llm-process: reconnect error');
+  });
 
 async function startServer() {
   try {
