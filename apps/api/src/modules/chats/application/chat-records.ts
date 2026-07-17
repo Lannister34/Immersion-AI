@@ -40,6 +40,7 @@ export interface CreateGenericChatInput {
   scenarioName?: string | null;
   lorebookIds?: string[];
   createdAt: string;
+  generationSettings?: ChatGenerationSettingsRecord;
   id: string;
   seedMessages?: AppendChatMessageInput[];
   title: string;

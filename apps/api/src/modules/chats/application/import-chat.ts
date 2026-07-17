@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { type ImportChatCommand, type ImportChatResponse, ImportChatResponseSchema } from '@immersion/contracts/chats';
 
 import { FileChatRepository, parseChatTranscriptLeniently } from '../infrastructure/file-chat-repository.js';
+import { createDefaultChatGenerationSettings } from './chat-records.js';
 import { toChatSummaryDto } from './chat-session-response.js';
 import { getDefaultUserName } from './default-user-name.js';
 
@@ -39,11 +40,14 @@ export async function importChat(command: ImportChatCommand): Promise<ImportChat
 
   // Deliberately not binding characterId/scenarioId: imported names may not
   // exist locally, so the header names are preserved as display names only.
+  // Lorebook ids are kept as-is: a missing lorebook is inert at prompt time.
   const chatRepository = new FileChatRepository();
   const summary = await chatRepository.createGenericChat({
     characterName: transcript.header?.characterName ?? null,
     createdAt: transcript.header?.createdAt ?? importedAt,
+    generationSettings: transcript.header?.generationSettings ?? createDefaultChatGenerationSettings(),
     id: crypto.randomUUID(),
+    lorebookIds: transcript.header?.lorebookIds ?? [],
     scenarioName: transcript.header?.scenarioName ?? null,
     seedMessages: transcript.messages,
     title: command.title?.trim() || transcript.header?.title || DEFAULT_IMPORTED_CHAT_TITLE,

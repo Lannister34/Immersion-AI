@@ -1235,6 +1235,38 @@ describe('chat routes', () => {
     ]);
 
     const app = buildApiApp();
+    const roundtripGenerationSettings = {
+      samplerPresetId: 'smoke-model-preset',
+      sampling: {
+        contextTrimStrategy: 'trim_start',
+        maxContextLength: 4096,
+        maxTokens: 256,
+        minP: 0.05,
+        presencePenalty: 0.1,
+        repeatPenalty: 1.15,
+        repeatPenaltyRange: 2048,
+        temperature: 0.65,
+        topK: 50,
+        topP: 0.9,
+      },
+      systemPrompt: 'Отвечай кратко и строго в образе.',
+    };
+    const roundtripLorebookIds = ['world-one.json', 'world-two.json'];
+
+    const settingsResponse = await app.inject({
+      method: 'PUT',
+      url: '/api/chats/roundtrip-chat/generation-settings',
+      payload: roundtripGenerationSettings,
+    });
+    expect(settingsResponse.statusCode).toBe(200);
+
+    const lorebooksResponse = await app.inject({
+      method: 'PUT',
+      url: '/api/chats/roundtrip-chat/lorebooks',
+      payload: { lorebookIds: roundtripLorebookIds },
+    });
+    expect(lorebooksResponse.statusCode).toBe(200);
+
     const exportResponse = await app.inject({
       method: 'GET',
       url: '/api/chats/roundtrip-chat/export',
@@ -1270,6 +1302,11 @@ describe('chat routes', () => {
     expect(importedSession.messages.map(({ role, content, createdAt }) => ({ role, content, createdAt }))).toEqual(
       sourceSession.messages.map(({ role, content, createdAt }) => ({ role, content, createdAt })),
     );
+    // Настройки генерации и лорбуки чата переживают экспорт-импорт без потерь.
+    expect(importedSession.generationSettings).toEqual(roundtripGenerationSettings);
+    expect(importedSession.generationSettings).toEqual(sourceSession.generationSettings);
+    expect(importedSession.lorebookIds).toEqual(roundtripLorebookIds);
+    expect(importedSession.chat.lorebookIds).toEqual(roundtripLorebookIds);
 
     await app.close();
   });

@@ -340,6 +340,8 @@ function getLatestIsoDate(...values: Array<string | null | undefined>) {
 export interface ParsedChatTranscriptHeader {
   characterName: string | null;
   createdAt: string | null;
+  generationSettings: ChatGenerationSettingsRecord;
+  lorebookIds: string[];
   scenarioName: string | null;
   title: string | null;
   userName: string | null;
@@ -382,6 +384,8 @@ export function parseChatTranscriptLeniently(
         header = {
           characterName: trimmedOrNull(storedHeader.character_name ?? ''),
           createdAt: trimmedOrNull(storedHeader.chat_metadata?.createdAt ?? ''),
+          generationSettings: parseStoredGenerationSettings(storedHeader.generation_settings, source),
+          lorebookIds: [...(storedHeader.lorebook_ids ?? [])],
           scenarioName: trimmedOrNull(storedHeader.scenario_name ?? ''),
           title: trimmedOrNull(storedHeader.chat_metadata?.title ?? ''),
           userName: trimmedOrNull(storedHeader.user_name ?? ''),
@@ -604,7 +608,9 @@ export class FileChatRepository implements ChatRepository {
         title: input.title,
         updatedAt: input.createdAt,
       },
-      generation_settings: serializeGenerationSettings(createDefaultChatGenerationSettings()),
+      generation_settings: serializeGenerationSettings(
+        input.generationSettings ?? createDefaultChatGenerationSettings(),
+      ),
       user_name: input.userName,
       character_id: input.characterId ?? '',
       character_name: input.characterName ?? '',
