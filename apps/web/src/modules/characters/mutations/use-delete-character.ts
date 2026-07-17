@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { chatListQueryKey } from '../../chats/queries/chat-list-query';
 import { deleteCharacter } from '../api/delete-character';
 import { characterDetailQueryKey } from '../queries/character-detail-query';
 import { characterListQueryKey } from '../queries/character-list-query';
@@ -15,7 +16,11 @@ export function useDeleteCharacter(characterId: string, options: UseDeleteCharac
     mutationFn: () => deleteCharacter(characterId),
     onSuccess: async () => {
       queryClient.removeQueries({ queryKey: characterDetailQueryKey(characterId) });
-      await queryClient.invalidateQueries({ queryKey: characterListQueryKey });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: characterListQueryKey }),
+        // Сводки чатов содержат имя персонажа — иначе оно остаётся в списке после удаления.
+        queryClient.invalidateQueries({ queryKey: chatListQueryKey }),
+      ]);
       await options.onSuccess?.();
     },
   });

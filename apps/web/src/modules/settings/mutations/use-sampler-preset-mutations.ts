@@ -6,6 +6,7 @@ import type {
 } from '@immersion/contracts/settings';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { chatReplyPromptPreviewQueryRootKey } from '../../generation';
 import {
   createSamplerPreset,
   deleteSamplerPreset,
@@ -14,7 +15,7 @@ import {
 } from '../api/sampler-preset';
 import { settingsOverviewQueryKey } from '../queries/settings-overview-query';
 
-function patchOverviewSampler(
+async function applySamplerUpdate(
   queryClient: ReturnType<typeof useQueryClient>,
   sampler: SettingsOverviewResponse['sampler'],
 ) {
@@ -22,6 +23,11 @@ function patchOverviewSampler(
   if (cached) {
     queryClient.setQueryData<SettingsOverviewResponse>(settingsOverviewQueryKey, { ...cached, sampler });
   }
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: settingsOverviewQueryKey }),
+    // Preset влияет на эффективные настройки генерации — превью контекста нужно пересчитать.
+    queryClient.invalidateQueries({ queryKey: chatReplyPromptPreviewQueryRootKey }),
+  ]);
 }
 
 export function useCreateSamplerPreset(
@@ -32,8 +38,7 @@ export function useCreateSamplerPreset(
   return useMutation({
     mutationFn: (command: CreateSamplerPresetCommand) => createSamplerPreset(command),
     onSuccess: async (response) => {
-      patchOverviewSampler(queryClient, response.sampler);
-      await queryClient.invalidateQueries({ queryKey: settingsOverviewQueryKey });
+      await applySamplerUpdate(queryClient, response.sampler);
       options.onSuccess?.(response);
     },
   });
@@ -52,8 +57,7 @@ export function useUpdateSamplerPreset(
   return useMutation({
     mutationFn: ({ presetId, command }: UpdateSamplerPresetVariables) => updateSamplerPreset(presetId, command),
     onSuccess: async (response) => {
-      patchOverviewSampler(queryClient, response.sampler);
-      await queryClient.invalidateQueries({ queryKey: settingsOverviewQueryKey });
+      await applySamplerUpdate(queryClient, response.sampler);
       options.onSuccess?.(response);
     },
   });
@@ -65,8 +69,7 @@ export function useDeleteSamplerPreset(options: { onSuccess?: () => void } = {})
   return useMutation({
     mutationFn: (presetId: string) => deleteSamplerPreset(presetId),
     onSuccess: async (response) => {
-      patchOverviewSampler(queryClient, response.sampler);
-      await queryClient.invalidateQueries({ queryKey: settingsOverviewQueryKey });
+      await applySamplerUpdate(queryClient, response.sampler);
       options.onSuccess?.();
     },
   });
@@ -78,8 +81,7 @@ export function useSetActiveSamplerPreset() {
   return useMutation({
     mutationFn: (presetId: string) => setActiveSamplerPreset({ presetId }),
     onSuccess: async (response) => {
-      patchOverviewSampler(queryClient, response.sampler);
-      await queryClient.invalidateQueries({ queryKey: settingsOverviewQueryKey });
+      await applySamplerUpdate(queryClient, response.sampler);
     },
   });
 }
