@@ -263,11 +263,17 @@ describe('library CRUD routes', () => {
       expect(payload.character.firstMessage).toContain('светлячками');
       expect(payload.character.source).toBe('json');
       expect(payload.character.isEditable).toBe(true);
-      expect(payload.character.avatarUrl).toMatch(/\.png\/avatar$/);
+      expect(payload.character.avatarUrl).toBe(`/api/characters/${encodeURIComponent(payload.character.id)}/avatar`);
+
+      const avatarResponse = await app.inject({ method: 'GET', url: payload.character.avatarUrl ?? '' });
+      expect(avatarResponse.statusCode).toBe(200);
+      expect(avatarResponse.headers['content-type']).toBe('image/png');
 
       const listResponse = await app.inject({ method: 'GET', url: '/api/characters' });
       const listPayload = CharacterListResponseSchema.parse(listResponse.json());
       expect(listPayload.items.some((item) => item.id === payload.character.id)).toBe(true);
+      // The sibling avatar PNG must not surface as a separate PNG-card character.
+      expect(listPayload.items.filter((item) => item.name === 'Эмбер')).toHaveLength(1);
 
       await app.close();
     });

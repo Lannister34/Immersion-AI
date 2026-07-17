@@ -16,6 +16,7 @@ import {
 
 const CHARACTERS_DIRECTORY = 'characters';
 const JSON_EXTENSION = '.json';
+const AVATAR_FILE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp'] as const;
 
 export interface CharacterFileSummary extends CharacterSummaryDto {
   filePath: string;
@@ -32,6 +33,10 @@ function characterFormatOf(entry: string): CharacterSourceFormat | null {
   return null;
 }
 
+function characterAvatarUrlOf(id: string): string {
+  return `/api/characters/${encodeURIComponent(id)}/avatar`;
+}
+
 export async function listCharacterFiles(): Promise<CharacterFileSummary[]> {
   const directory = resolveCharactersDirectory();
   let entries: string[];
@@ -45,10 +50,21 @@ export async function listCharacterFiles(): Promise<CharacterFileSummary[]> {
     throw error;
   }
 
+  const entrySet = new Set(entries);
+  const jsonBaseNames = new Set(
+    entries
+      .filter((entry) => characterFormatOf(entry) === 'json')
+      .map((entry) => path.basename(entry, path.extname(entry))),
+  );
+
   const summaries: CharacterFileSummary[] = [];
   for (const entry of entries) {
     const source = characterFormatOf(entry);
     if (!source) continue;
+
+    const name = path.basename(entry, path.extname(entry));
+    // A PNG with the same base name as a JSON card is that card's avatar, not a separate character.
+    if (source === 'png' && jsonBaseNames.has(name)) continue;
 
     const filePath = path.join(directory, entry);
     let stats: Awaited<ReturnType<typeof fs.stat>>;
@@ -60,9 +76,10 @@ export async function listCharacterFiles(): Promise<CharacterFileSummary[]> {
     if (!stats.isFile()) continue;
 
     const id = entry;
-    const name = path.basename(entry, path.extname(entry));
+    const hasAvatar =
+      source === 'png' || AVATAR_FILE_EXTENSIONS.some((extension) => entrySet.has(`${name}${extension}`));
     summaries.push({
-      avatarUrl: source === 'png' ? `/api/characters/${encodeURIComponent(id)}/avatar` : null,
+      avatarUrl: hasAvatar ? characterAvatarUrlOf(id) : null,
       filePath,
       id,
       name,
@@ -119,12 +136,25 @@ function sanitizeBaseName(name: string): string {
   return trimmed.length > 80 ? trimmed.slice(0, 80) : trimmed;
 }
 
-async function generateUniqueId(directory: string, base: string): Promise<string> {
-  const baseId = `${base}${JSON_EXTENSION}`;
+async function fileExists(filePath: string): Promise<boolean> {
   try {
-    await fs.access(path.join(directory, baseId));
+    await fs.access(filePath);
+    return true;
   } catch {
-    return baseId;
+    return false;
+  }
+}
+
+async function generateUniqueId(directory: string, base: string): Promise<string> {
+  // Sibling image files with the same base name are treated as the card's avatar,
+  // so a fresh JSON id must not collide with any of them either.
+  const conflicts = await Promise.all(
+    [JSON_EXTENSION, ...AVATAR_FILE_EXTENSIONS].map((extension) =>
+      fileExists(path.join(directory, `${base}${extension}`)),
+    ),
+  );
+  if (!conflicts.some(Boolean)) {
+    return `${base}${JSON_EXTENSION}`;
   }
   const suffix = randomUUID().slice(0, 8);
   return `${base}-${suffix}${JSON_EXTENSION}`;
@@ -258,9 +288,10 @@ export async function writeCharacterFile(id: string, input: SaveCharacterFileInp
     updatedAt: now,
   };
   await writeJsonFileAtomically(filePath, payload);
+  const avatarFilePath = await findCharacterAvatarFilePath(id);
 
   return {
-    avatarUrl: null,
+    avatarUrl: avatarFilePath ? characterAvatarUrlOf(id) : null,
     createdAt,
     description: input.description,
     exampleDialogue: input.exampleDialogue,
@@ -325,10 +356,61 @@ export async function deleteCharacterFile(id: string): Promise<boolean> {
   const filePath = resolveCharacterFilePath(id);
   try {
     await fs.unlink(filePath);
-    return true;
   } catch (error) {
     const candidate = error as NodeJS.ErrnoException;
     if (candidate.code === 'ENOENT') return false;
     throw error;
   }
+  if (id.toLowerCase().endsWith(JSON_EXTENSION)) {
+    // JSON cards own their sibling avatar image; do not leave orphans behind.
+    await deleteCharacterAvatarFiles(id);
+  }
+  return true;
+}
+
+function avatarCandidatePathsOf(id: string): string[] {
+  const directory = resolveCharactersDirectory();
+  const baseName = path.basename(id, path.extname(id));
+  return AVATAR_FILE_EXTENSIONS.map((extension) => resolveContainedFilePath(directory, `${baseName}${extension}`));
+}
+
+/** Finds the sibling avatar image of a JSON card, if any. */
+export async function findCharacterAvatarFilePath(id: string): Promise<string | null> {
+  for (const candidate of avatarCandidatePathsOf(id)) {
+    try {
+      const stats = await fs.stat(candidate);
+      if (stats.isFile()) return candidate;
+    } catch {
+      // Missing candidate — keep looking.
+    }
+  }
+  return null;
+}
+
+/** Stores the avatar of a JSON card as a sibling file, replacing any previous avatar. */
+export async function writeCharacterAvatarFile(id: string, bytes: Buffer, extension: string): Promise<void> {
+  const directory = resolveCharactersDirectory();
+  await fs.mkdir(directory, { recursive: true });
+  const baseName = path.basename(id, path.extname(id));
+  const targetPath = resolveContainedFilePath(directory, `${baseName}${extension}`);
+  for (const candidate of avatarCandidatePathsOf(id)) {
+    if (candidate === targetPath) continue;
+    await fs.rm(candidate, { force: true });
+  }
+  await writeFileAtomically(targetPath, bytes);
+}
+
+/** Removes every sibling avatar image of a JSON card. Returns false when none existed. */
+export async function deleteCharacterAvatarFiles(id: string): Promise<boolean> {
+  let removed = false;
+  for (const candidate of avatarCandidatePathsOf(id)) {
+    try {
+      await fs.unlink(candidate);
+      removed = true;
+    } catch (error) {
+      const failure = error as NodeJS.ErrnoException;
+      if (failure.code !== 'ENOENT') throw error;
+    }
+  }
+  return removed;
 }

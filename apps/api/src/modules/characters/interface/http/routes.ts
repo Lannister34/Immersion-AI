@@ -3,18 +3,29 @@ import {
   CharacterIdSchema,
   ImportCharacterCardCommandSchema,
   SaveCharacterCommandSchema,
+  UploadCharacterAvatarCommandSchema,
 } from '@immersion/contracts/characters';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 
 import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
 import { deleteCharacter } from '../../application/delete-character.js';
+import { deleteCharacterAvatar } from '../../application/delete-character-avatar.js';
 import { InvalidCharacterCardError } from '../../application/extract-png-character-card.js';
 import { getCharacter } from '../../application/get-character.js';
-import { CharacterNotFoundError, getCharacterAvatar } from '../../application/get-character-avatar.js';
+import {
+  CharacterAvatarNotFoundError,
+  CharacterNotFoundError,
+  getCharacterAvatar,
+} from '../../application/get-character-avatar.js';
 import { importCharacterCard } from '../../application/import-character-card.js';
 import { listCharacters } from '../../application/list-characters.js';
 import { CharacterNotEditableError, createCharacter, updateCharacter } from '../../application/save-character.js';
+import {
+  CharacterAvatarOwnedByCardError,
+  InvalidAvatarImageError,
+  uploadCharacterAvatar,
+} from '../../application/upload-character-avatar.js';
 
 const CharacterRouteParamsSchema = z.object({
   characterId: CharacterIdSchema,
@@ -23,6 +34,22 @@ const CharacterRouteParamsSchema = z.object({
 const toProblem = createToProblem((error) => {
   if (error instanceof CharacterNotFoundError) {
     return problem(404, 'character_not_found', 'Character not found.');
+  }
+
+  if (error instanceof CharacterAvatarNotFoundError) {
+    return problem(404, 'avatar_not_found', 'У персонажа нет загруженного аватара.');
+  }
+
+  if (error instanceof CharacterAvatarOwnedByCardError) {
+    return problem(
+      409,
+      'avatar_owned_by_card',
+      'Аватар этого персонажа — сама PNG-карточка, отдельный файл не хранится.',
+    );
+  }
+
+  if (error instanceof InvalidAvatarImageError) {
+    return problem(400, 'invalid_avatar_image', error.message);
   }
 
   if (error instanceof CharacterNotEditableError) {
@@ -108,6 +135,33 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(204).send();
     } catch (error) {
       request.log.error({ err: error }, 'Failed to delete character');
+      const mapped = toProblem(error);
+
+      return reply.status(mapped.statusCode).send(mapped.body);
+    }
+  });
+
+  app.put('/:characterId/avatar', async (request, reply) => {
+    try {
+      const { characterId } = CharacterRouteParamsSchema.parse(request.params);
+      const command = UploadCharacterAvatarCommandSchema.parse(request.body);
+      const character = await uploadCharacterAvatar(characterId, command);
+      return CharacterDetailResponseSchema.parse({ character });
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to upload character avatar');
+      const mapped = toProblem(error);
+
+      return reply.status(mapped.statusCode).send(mapped.body);
+    }
+  });
+
+  app.delete('/:characterId/avatar', async (request, reply) => {
+    try {
+      const { characterId } = CharacterRouteParamsSchema.parse(request.params);
+      await deleteCharacterAvatar(characterId);
+      return reply.status(204).send();
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to delete character avatar');
       const mapped = toProblem(error);
 
       return reply.status(mapped.statusCode).send(mapped.body);
