@@ -127,14 +127,16 @@ function toMessages(counted: CountedPromptMessage[]) {
   return counted.map((entry) => entry.message);
 }
 
-function trimFromStart(messages: CountedPromptMessage[], tokenBudget: number) {
+function trimFromStart(messages: CountedPromptMessage[], tokenBudget: number, pinnedTailCount: number) {
   const keptMessages: CountedPromptMessage[] = [];
   let remainingTokens = tokenBudget;
 
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const counted = messages[index]!;
 
-    if (keptMessages.length > 0 && counted.tokens > remainingTokens) {
+    // Хвост из pinnedTailCount сообщений не вытесняется даже сверх бюджета:
+    // в continue-режиме это продолжаемый ответ + инструкция «продолжай».
+    if (keptMessages.length >= pinnedTailCount && counted.tokens > remainingTokens) {
       break;
     }
 
@@ -145,19 +147,22 @@ function trimFromStart(messages: CountedPromptMessage[], tokenBudget: number) {
   return keptMessages.reverse();
 }
 
-function trimFromMiddle(messages: CountedPromptMessage[], tokenBudget: number) {
-  if (messages.length <= 1) {
+function trimFromMiddle(messages: CountedPromptMessage[], tokenBudget: number, pinnedTailCount: number) {
+  if (messages.length <= pinnedTailCount) {
     return messages;
   }
 
   const keptIndexes = new Set<number>();
-  const latestIndex = messages.length - 1;
-  let remainingTokens = tokenBudget - messages[latestIndex]!.tokens;
+  const firstPinnedIndex = messages.length - pinnedTailCount;
+  let remainingTokens = tokenBudget;
 
-  keptIndexes.add(latestIndex);
+  for (let index = firstPinnedIndex; index < messages.length; index += 1) {
+    keptIndexes.add(index);
+    remainingTokens -= messages[index]!.tokens;
+  }
 
   let leftIndex = 0;
-  let rightIndex = latestIndex - 1;
+  let rightIndex = firstPinnedIndex - 1;
   let takeLeft = true;
 
   while (leftIndex <= rightIndex) {
@@ -186,6 +191,7 @@ function trimFromMiddle(messages: CountedPromptMessage[], tokenBudget: number) {
 function trimTranscriptToContextBudget(
   countedMessages: CountedPromptMessage[],
   samplerPreset: ActiveSamplerPreset,
+  pinnedTailCount: number,
 ): {
   messages: ChatReplyPromptMessage[];
   tokenEstimate: ChatReplyPromptTokenEstimate;
@@ -199,8 +205,7 @@ function trimTranscriptToContextBudget(
     samplerPreset.maxContextLength <= 0 ? 0 : Math.max(1, samplerPreset.maxContextLength - samplerPreset.maxTokens);
 
   if (samplerPreset.maxContextLength <= 0) {
-    const latestMessage = countedMessages.at(-1);
-    const trimmedMessages = latestMessage ? [latestMessage] : [];
+    const trimmedMessages = countedMessages.slice(-pinnedTailCount);
     const transcriptAfterTrimTokens = sumTokens(trimmedMessages.filter((counted) => counted.message.role !== 'system'));
 
     return {
@@ -237,8 +242,8 @@ function trimTranscriptToContextBudget(
   const transcriptBudget = Math.max(1, promptBudget - systemTokens);
   const trimmedTranscript =
     samplerPreset.contextTrimStrategy === 'trim_start'
-      ? trimFromStart(transcriptMessages, transcriptBudget)
-      : trimFromMiddle(transcriptMessages, transcriptBudget);
+      ? trimFromStart(transcriptMessages, transcriptBudget, pinnedTailCount)
+      : trimFromMiddle(transcriptMessages, transcriptBudget, pinnedTailCount);
   const trimmedMessages = [...systemMessages, ...trimmedTranscript];
   const transcriptAfterTrimTokens = sumTokens(trimmedTranscript);
 
@@ -366,7 +371,10 @@ function toBudgetedBundle(
     message,
     tokens: counts[index] ?? fallbackCounts[index] ?? 1,
   }));
-  const budgetedPrompt = trimTranscriptToContextBudget(countedMessages, input.samplerPreset);
+  // Continue/first-message добавляют хвостовую инструкцию: продолжаемое сообщение
+  // и инструкция пинуются вместе, иначе обрезка может выбросить сам объект продолжения.
+  const pinnedTailCount = input.trailingUserInstruction?.trim() ? 2 : 1;
+  const budgetedPrompt = trimTranscriptToContextBudget(countedMessages, input.samplerPreset, pinnedTailCount);
 
   return {
     diagnostics: {

@@ -66,7 +66,7 @@ describe('ProviderTokenCounter', () => {
   function buildCounter(now?: () => number) {
     return new ProviderTokenCounter({
       ...(now ? { now } : {}),
-      resolveTokenizeBaseUrl: () => Promise.resolve(BASE_URL),
+      resolveTokenizeTarget: () => Promise.resolve({ baseUrl: BASE_URL, model: null }),
     });
   }
 
@@ -134,7 +134,7 @@ describe('ProviderTokenCounter', () => {
     const fetchMock = vi.fn();
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     const counter = new ProviderTokenCounter({
-      resolveTokenizeBaseUrl: () => Promise.resolve(null),
+      resolveTokenizeTarget: () => Promise.resolve(null),
     });
 
     const result = await counter.countTokens(['abcd', '']);

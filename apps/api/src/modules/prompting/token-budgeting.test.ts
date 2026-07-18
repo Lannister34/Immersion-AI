@@ -186,7 +186,7 @@ describe('token-accurate context budgeting', () => {
     expect(bundle.diagnostics.tokenEstimate.finalTotal).toBe(10);
   });
 
-  it('budgets the trailing continue instruction instead of overflowing a full context', async () => {
+  it('pins the continued message together with the trailing instruction even over budget', async () => {
     const tokenCounter = buildFakeTokenCounter({
       CONTINUE: 8,
       LATEST: 5,
@@ -207,18 +207,22 @@ describe('token-accurate context budgeting', () => {
       tokenCounter,
     );
 
-    // Budget is 10: the instruction (8) leaves no room for the transcript,
-    // so the transcript is trimmed and the total stays inside the budget.
+    // Бюджет 10, а хвост LATEST(5) + инструкция(8) = 13: продолжаемое сообщение
+    // нельзя вытеснять — «продолжай» без самого текста порождает бессмыслицу.
+    // Старые сообщения (OLD) обрезаются, допустимое переполнение остаётся.
     expect(bundle.messages).toEqual([
+      {
+        role: 'user',
+        content: 'LATEST',
+      },
       {
         role: 'user',
         content: 'CONTINUE the reply.',
       },
     ]);
-    expect(bundle.diagnostics.tokenEstimate.finalTotal).toBeLessThanOrEqual(
-      bundle.diagnostics.tokenEstimate.promptBudget,
-    );
+    expect(bundle.diagnostics.tokenEstimate.transcriptAfterTrim).toBe(13);
     expect(bundle.diagnostics.tokenEstimate.transcriptBeforeTrim).toBe(19);
+    expect(bundle.diagnostics.trimmedMessageCount).toBe(1);
   });
 
   it('keeps the trailing instruction last when the transcript fits the budget', async () => {
