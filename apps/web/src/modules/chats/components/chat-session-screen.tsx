@@ -432,6 +432,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
             {tokenStats ? (
               <div className="row gap-12" style={{ minWidth: 240 }}>
                 <TokenBar
+                  approximate={tokenStats.tokenCountMethod === 'approximate'}
                   fill={tokenStats.totalTokens}
                   label={`${tokenStats.totalTokens.toLocaleString('ru-RU')} / ${tokenStats.contextWindow.toLocaleString('ru-RU')}`}
                   total={tokenStats.contextWindow}

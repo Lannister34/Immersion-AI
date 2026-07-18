@@ -510,6 +510,116 @@ describe('generation routes', () => {
     await app.close();
   });
 
+  it('reports approximate token counting in preview when no tokenize-capable provider is available', async () => {
+    const providerRequests = mockProviderSuccess('Preview must not call provider.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: {
+        chatId: chat.id,
+        draftUserMessage: 'Считай токены эвристикой.',
+      },
+    });
+    const payload = ChatReplyPromptPreviewResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(payload.diagnostics.tokenCountMethod).toBe('approximate');
+    // External providers are never tokenized: no provider traffic at all.
+    expect(providerRequests).toHaveLength(0);
+
+    await app.close();
+  });
+
+  it('reports exact token counting in preview via the llama-server tokenize endpoint', async () => {
+    await writeProviderSettings({
+      backendMode: 'builtin',
+    });
+    await writeDetachedRuntimeState(path.join(temporaryDataRoot, 'models', 'sandbox.gguf'), 6011);
+    const tokenizeRequests: string[] = [];
+
+    globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : input.toString();
+      tokenizeRequests.push(url);
+
+      if (url === 'http://127.0.0.1:6011/tokenize') {
+        const body = typeof init?.body === 'string' ? (JSON.parse(init.body) as { content?: string }) : {};
+        const tokenCount = Math.ceil((body.content ?? '').length / 3);
+
+        return new Response(JSON.stringify({ tokens: Array.from({ length: tokenCount }, (_, index) => index) }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        });
+      }
+
+      return new Response('not found', { status: 404 });
+    }) as typeof fetch;
+
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: {
+        chatId: chat.id,
+        draftUserMessage: 'Считай токены точно через llama-server.',
+      },
+    });
+    const payload = ChatReplyPromptPreviewResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(payload.diagnostics.tokenCountMethod).toBe('exact');
+    expect(tokenizeRequests.every((url) => url.startsWith('http://127.0.0.1:6011/'))).toBe(true);
+    expect(tokenizeRequests.some((url) => url.endsWith('/tokenize'))).toBe(true);
+    expect(tokenizeRequests.some((url) => url.includes('/chat/completions'))).toBe(false);
+
+    await app.close();
+  });
+
+  it('reports exact token counting in preview via the KoboldCpp tokencount endpoint', async () => {
+    await writeProviderSettings({
+      backendMode: 'builtin',
+    });
+    await writeDetachedRuntimeState(path.join(temporaryDataRoot, 'models', 'sandbox.gguf'), 6012);
+    const tokenizeRequests: string[] = [];
+
+    globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : input.toString();
+      tokenizeRequests.push(url);
+
+      if (url === 'http://127.0.0.1:6012/api/extra/tokencount') {
+        const body = typeof init?.body === 'string' ? (JSON.parse(init.body) as { prompt?: string }) : {};
+
+        return new Response(JSON.stringify({ value: Math.ceil((body.prompt ?? '').length / 3) }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        });
+      }
+
+      return new Response('not found', { status: 404 });
+    }) as typeof fetch;
+
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: {
+        chatId: chat.id,
+        draftUserMessage: 'Считай токены точно через KoboldCpp.',
+      },
+    });
+    const payload = ChatReplyPromptPreviewResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(payload.diagnostics.tokenCountMethod).toBe('exact');
+    expect(tokenizeRequests.some((url) => url.endsWith('/api/extra/tokencount'))).toBe(true);
+    expect(tokenizeRequests.some((url) => url.includes('/chat/completions'))).toBe(false);
+
+    await app.close();
+  });
+
   it('calls the active provider and persists the user message with the assistant reply', async () => {
     const providerRequests = mockProviderSuccess('Assistant reply from provider.');
     const app = buildApiApp();
@@ -1695,12 +1805,15 @@ describe('generation routes', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(providerRequests).toHaveLength(1);
-    expect(providerRequests[0]).toMatchObject({
+    // Builtin mode may additionally probe the runtime tokenize endpoint;
+    // the completion call itself must stay a single request.
+    const completionRequests = providerRequests.filter((request) => request.url.includes('/chat/completions'));
+    expect(completionRequests).toHaveLength(1);
+    expect(completionRequests[0]).toMatchObject({
       authorization: null,
       url: 'http://127.0.0.1:6006/v1/chat/completions',
     });
-    expect(providerRequests[0]?.body).toMatchObject({
+    expect(completionRequests[0]?.body).toMatchObject({
       ...MODEL_BOUND_SMOKE_SAMPLING,
       model: 'nested/secondary.gguf',
       stream: false,

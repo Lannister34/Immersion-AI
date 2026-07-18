@@ -146,6 +146,9 @@ export const ChatReplyPromptPreviewRendererDiagnosticsSchema = z.object({
 });
 export type ChatReplyPromptPreviewRendererDiagnostics = z.infer<typeof ChatReplyPromptPreviewRendererDiagnosticsSchema>;
 
+export const TokenCountMethodSchema = z.enum(['approximate', 'exact']);
+export type TokenCountMethod = z.infer<typeof TokenCountMethodSchema>;
+
 export const ChatReplyPromptPreviewTokenEstimateSchema = z.object({
   finalTotal: z.number().int().nonnegative(),
   promptBudget: z.number().int().nonnegative(),
@@ -164,6 +167,7 @@ export const ChatReplyPromptPreviewResponseSchema = z.object({
     renderer: ChatReplyPromptPreviewRendererDiagnosticsSchema,
     systemPromptIncluded: z.boolean(),
     systemMessageCount: z.number().int().nonnegative(),
+    tokenCountMethod: TokenCountMethodSchema,
     tokenEstimate: ChatReplyPromptPreviewTokenEstimateSchema,
     transcriptMessageCount: z.number().int().nonnegative(),
     trimmedMessageCount: z.number().int().nonnegative(),

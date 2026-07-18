@@ -1,9 +1,9 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 import type { PromptCharacterSnapshot } from '@immersion/domain/prompting';
 
-import { readCharacterDetail } from '../../characters/infrastructure/file-character-repository.js';
-import { readLorebookDetail } from '../../lorebooks/infrastructure/file-lorebook-repository.js';
-import { readScenarioDetail } from '../../scenarios/infrastructure/file-scenario-repository.js';
+import { findCharacter } from '../../characters/index.js';
+import { findLorebook } from '../../lorebooks/index.js';
+import { findScenario } from '../../scenarios/index.js';
 
 export interface ChatPromptContext {
   character: PromptCharacterSnapshot | null;
@@ -27,7 +27,7 @@ export async function loadChatPromptContext(session: ChatSessionDto): Promise<Ch
   let characterScenarioContent: string | null = null;
 
   if (session.characterId) {
-    const detail = await readCharacterDetail(session.characterId);
+    const detail = await findCharacter(session.characterId);
     if (detail) {
       character = {
         description: detail.description.trim() || null,
@@ -42,7 +42,7 @@ export async function loadChatPromptContext(session: ChatSessionDto): Promise<Ch
 
   // Linked scenario wins over the character's per-card scenario when present.
   if (session.scenarioId) {
-    const scenario = await readScenarioDetail(session.scenarioId);
+    const scenario = await findScenario(session.scenarioId);
     if (scenario) {
       const scene = scenario.content.trim() || scenario.concept.trim();
       if (scene.length > 0) {
@@ -77,7 +77,7 @@ async function collectLorebookSections(session: ChatSessionDto): Promise<string[
 
   const sections: string[] = [];
   for (const lorebookId of session.lorebookIds) {
-    const lorebook = await readLorebookDetail(lorebookId);
+    const lorebook = await findLorebook(lorebookId);
     if (!lorebook) continue;
 
     const triggered: { content: string; priority: number; keys: string[] }[] = [];
