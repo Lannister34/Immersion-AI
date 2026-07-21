@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import type { CharacterDetailDto, CharacterSourceFormat, CharacterSummaryDto } from '@immersion/contracts/characters';
+import type { CharacterDetailDto, CharacterSourceFormat } from '@immersion/contracts/characters';
 
 import { writeFileAtomically, writeJsonFileAtomically } from '../../../lib/atomic-file.js';
 import { resolveContainedFilePath } from '../../../lib/contained-path.js';
@@ -19,8 +19,13 @@ const CHARACTERS_DIRECTORY = 'characters';
 const JSON_EXTENSION = '.json';
 const AVATAR_FILE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp'] as const;
 
-export interface CharacterFileSummary extends CharacterSummaryDto {
+export interface CharacterFileSummary {
+  avatarUrl: string | null;
   filePath: string;
+  id: string;
+  name: string;
+  source: CharacterSourceFormat;
+  updatedAt: string;
 }
 
 function resolveCharactersDirectory() {

@@ -10,6 +10,7 @@ import {
   ChatTitleConflictError,
   ChatTranscriptNotEmptyError,
 } from '../application/chat-conflicts.js';
+import type { ChatFileStatRecord, ChatSummaryWithSearchText } from '../application/chat-read-model.js';
 import type {
   AppendChatMessageInput,
   ChatGenerationSettingsRecord,
@@ -708,6 +709,61 @@ export class FileChatRepository implements ChatRepository {
 
   async getGenericChatSession(chatId: string) {
     return readChatFile(chatId);
+  }
+
+  async listChatFileStats(): Promise<ChatFileStatRecord[]> {
+    let entries: string[];
+
+    try {
+      entries = await fs.readdir(resolveChatsDirectory());
+    } catch (error) {
+      const candidate = error as NodeJS.ErrnoException;
+      if (candidate.code === 'ENOENT') {
+        return [];
+      }
+
+      throw error;
+    }
+
+    const stats = await Promise.all(
+      entries
+        .filter((entry) => entry.endsWith('.jsonl'))
+        .map(async (entry) => {
+          try {
+            const fileStats = await fs.stat(path.join(resolveChatsDirectory(), entry));
+            if (!fileStats.isFile()) {
+              return null;
+            }
+
+            return {
+              chatId: path.parse(entry).name,
+              fileMtimeMs: fileStats.mtimeMs,
+              fileSize: fileStats.size,
+            } satisfies ChatFileStatRecord;
+          } catch {
+            // Файл исчез между readdir и stat — параллельное удаление, просто пропускаем.
+            return null;
+          }
+        }),
+    );
+
+    return stats.filter((stat): stat is ChatFileStatRecord => stat !== null);
+  }
+
+  async readChatSummaryWithSearchText(chatId: string): Promise<ChatSummaryWithSearchText | null> {
+    const session = await readChatFile(chatId);
+    if (!session) {
+      return null;
+    }
+
+    return {
+      searchText: {
+        characterNameLower: session.characterName?.toLowerCase() ?? null,
+        messageTextsLower: session.messages.map((message) => message.content.toLowerCase()),
+        titleLower: session.chat.title.toLowerCase(),
+      },
+      summary: session.chat,
+    };
   }
 
   async listGenericChats(options: ListGenericChatsOptions = {}): Promise<ChatSummaryRecord[]> {

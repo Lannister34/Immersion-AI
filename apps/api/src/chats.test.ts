@@ -471,7 +471,22 @@ describe('chat routes', () => {
     await app.close();
   });
 
-  it('fails fast when a canonical chat file is malformed', async () => {
+  // Осознанная смена контракта: раньше битый файл ронял весь список (500),
+  // теперь список деградирует мягко и исключает только битый чат.
+  // Чтение одной сессии сохраняет прежнее поведение с ошибкой.
+  it('excludes a malformed chat file from the list but keeps failing the single-chat read', async () => {
+    await writeGenericChatFile('healthy-session', [
+      JSON.stringify({
+        chat_metadata: {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          title: 'Живой чат',
+          updatedAt: '2026-01-01T00:00:01.000Z',
+        },
+        user_name: 'Тестер',
+        character_name: '',
+      }),
+      JSON.stringify({ is_user: true, mes: 'Привет', send_date: '2026-01-01T00:00:01.000Z' }),
+    ]);
     await writeGenericChatFile('broken-session', [
       JSON.stringify({
         user_name: 'Тестер',
@@ -485,15 +500,14 @@ describe('chat routes', () => {
       method: 'GET',
       url: '/api/chats',
     });
+    const listPayload = ChatListResponseSchema.parse(listResponse.json());
     const sessionResponse = await app.inject({
       method: 'GET',
       url: '/api/chats/broken-session',
     });
 
-    expect(listResponse.statusCode).toBe(500);
-    expect(listResponse.json()).toMatchObject({
-      code: 'internal_error',
-    });
+    expect(listResponse.statusCode).toBe(200);
+    expect(listPayload.items.map((item) => item.id)).toEqual(['healthy-session']);
     expect(sessionResponse.statusCode).toBe(500);
     expect(sessionResponse.json()).toMatchObject({
       code: 'internal_error',

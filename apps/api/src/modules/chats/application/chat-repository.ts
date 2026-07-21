@@ -1,3 +1,4 @@
+import type { ChatFileStatRecord, ChatSummaryWithSearchText } from './chat-read-model.js';
 import type {
   AppendChatMessageInput,
   ChatGenerationSettingsRecord,
@@ -35,7 +36,9 @@ export interface ChatRepository {
   deleteGenericChat(chatId: string): Promise<boolean>;
   forkGenericChat(input: ForkGenericChatInput): Promise<ChatSummaryRecord | null>;
   getGenericChatSession(chatId: string): Promise<ChatSessionRecord | null>;
+  listChatFileStats(): Promise<ChatFileStatRecord[]>;
   listGenericChats(options?: ListGenericChatsOptions): Promise<ChatSummaryRecord[]>;
+  readChatSummaryWithSearchText(chatId: string): Promise<ChatSummaryWithSearchText | null>;
   truncateGenericChatMessagesFromIndex(
     chatId: string,
     fromIndex: number,
