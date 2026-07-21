@@ -8,6 +8,7 @@ import { createApiUrl } from '../../shared/api/client';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { avatarColor, avatarInitial } from '../../shared/lib/avatar';
 import { formatRelative } from '../../shared/lib/format-relative';
+import { pluralRu } from '../../shared/lib/plural';
 import { readFileAsBase64 } from '../../shared/lib/read-file-as-base64';
 import { ChatIcon, PlusIcon, SearchIcon, SortIcon, TrashIcon, UploadIcon, XIcon } from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
@@ -18,29 +19,12 @@ import { characterListQueryKey, characterListQueryOptions } from './queries/char
 
 export { CharacterEditorScreen } from './editor';
 
-// Локальный помощник склонения (1/2–4/5+ с исключением 11–14);
-// дедупликация с общим helper-ом — на этапе слияния слайсов.
-function pluralizeRu(count: number, one: string, few: string, many: string): string {
-  const mod100 = Math.abs(count) % 100;
-  if (mod100 >= 11 && mod100 <= 14) {
-    return many;
-  }
-  const mod10 = mod100 % 10;
-  if (mod10 === 1) {
-    return one;
-  }
-  if (mod10 >= 2 && mod10 <= 4) {
-    return few;
-  }
-  return many;
-}
-
 function characterCardsLabel(count: number): string {
-  return `${count} ${pluralizeRu(count, 'карта', 'карты', 'карт')} в библиотеке`;
+  return `${pluralRu(count, ['карта', 'карты', 'карт'])} в библиотеке`;
 }
 
 function characterChatsLabel(count: number): string {
-  return `${count} ${pluralizeRu(count, 'чат', 'чата', 'чатов')}`;
+  return pluralRu(count, ['чат', 'чата', 'чатов']);
 }
 
 export function CharactersScreen() {

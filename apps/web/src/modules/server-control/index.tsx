@@ -7,10 +7,11 @@ import type {
 } from '@immersion/contracts/providers';
 import type { RuntimeOverviewResponse, RuntimeStartCommand } from '@immersion/contracts/runtime';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
+import { pluralRu } from '../../shared/lib/plural';
 import { CpuIcon, PlayIcon, PowerIcon, SearchIcon, SlidersIcon } from '../../shared/ui/icons';
 import { saveProviderSettings } from './api/save-provider-settings';
 import { startRuntime } from './api/start-runtime';
@@ -28,20 +29,11 @@ function toProviderCommand(snapshot: ProviderSettingsSnapshot, mode: ProviderMod
   };
 }
 
-function formatDirCount(count: number): string {
-  const mod100 = count % 100;
-  const mod10 = count % 10;
-  if (mod100 >= 11 && mod100 <= 14) return `${count} каталогов`;
-  if (mod10 === 1) return `${count} каталог`;
-  if (mod10 >= 2 && mod10 <= 4) return `${count} каталога`;
-  return `${count} каталогов`;
-}
-
 function formatModelsDirsLabel(modelsDirs: string[]): string {
   const [firstDir] = modelsDirs;
   if (firstDir === undefined) return 'каталоги не заданы';
   if (modelsDirs.length === 1) return firstDir;
-  return formatDirCount(modelsDirs.length);
+  return pluralRu(modelsDirs.length, ['каталог', 'каталога', 'каталогов']);
 }
 
 function formatBytes(value: number): string {
@@ -438,12 +430,20 @@ function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFo
   const [form, setForm] = useState<ProviderFormState>(baseline);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const appliedBaselineRef = useRef(baseline);
+  const appliedProviderRef = useRef(selectedProvider);
 
+  // Смена провайдера всегда загружает его сохранённый конфиг; защита от сброса
+  // фоновым refetch действует только внутри одного и того же провайдера.
   useEffect(() => {
-    setForm(baseline);
+    const previousBaseline = appliedBaselineRef.current;
+    const providerChanged = appliedProviderRef.current !== selectedProvider;
+    appliedBaselineRef.current = baseline;
+    appliedProviderRef.current = selectedProvider;
+    setForm((current) => (providerChanged || formsEqual(current, previousBaseline) ? baseline : current));
     setSavedAt(null);
     setErrorMessage(null);
-  }, [baseline]);
+  }, [baseline, selectedProvider]);
 
   if (!snapshot) {
     return (

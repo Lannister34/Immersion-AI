@@ -5,6 +5,7 @@ import { type ChangeEvent, type ReactNode, useDeferredValue, useMemo, useRef, us
 import { Topbar } from '../../../app/layout/topbar';
 import { ApiError } from '../../../shared/api/client';
 import { formatRelative } from '../../../shared/lib/format-relative';
+import { pluralRu } from '../../../shared/lib/plural';
 import { readFileAsBase64 } from '../../../shared/lib/read-file-as-base64';
 import { PlusIcon, SearchIcon, SortIcon, UploadIcon } from '../../../shared/ui/icons';
 import { createChat } from '../api/create-chat';
@@ -221,7 +222,7 @@ export function ChatListScreen() {
               <div className="page__sub">
                 {chatListQuery.isLoading
                   ? 'Загружаем сессии…'
-                  : `${allItems.length} чат${allItems.length === 1 ? '' : 'а'}` +
+                  : pluralRu(allItems.length, ['чат', 'чата', 'чатов']) +
                     (lastUpdated ? ` · последняя активность ${formatRelative(lastUpdated)}` : '')}
               </div>
               {importMutation.isError ? (

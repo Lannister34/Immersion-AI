@@ -59,7 +59,7 @@ export function Composer({
         </div>
         <div className="row gap-8">
           <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-            <span className="kbd">Enter</span> отправить
+            <span className="kbd">Enter</span> отправить · <span className="kbd">Shift+Enter</span> — перенос строки
           </span>
           {isStreaming ? (
             <button className="btn btn--ghost-bordered" onClick={onCancel} type="button">
