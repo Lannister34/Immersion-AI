@@ -10,7 +10,9 @@ export type CharacterSourceFormat = z.infer<typeof CharacterSourceFormatSchema>;
 
 export const CharacterSummaryDtoSchema = z.object({
   avatarUrl: z.string().nullable(),
+  chatCount: z.number().int().min(0),
   id: CharacterIdSchema,
+  lastChatAt: z.string().nullable(),
   name: z.string().min(1),
   source: CharacterSourceFormatSchema,
   updatedAt: z.string().min(1),

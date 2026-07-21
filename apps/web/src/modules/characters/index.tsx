@@ -18,14 +18,29 @@ import { characterListQueryKey, characterListQueryOptions } from './queries/char
 
 export { CharacterEditorScreen } from './editor';
 
-function characterCardsLabel(count: number): string {
-  let suffix = '';
-  if (count === 1) {
-    suffix = 'а';
-  } else if (count >= 2 && count <= 4) {
-    suffix = 'ы';
+// Локальный помощник склонения (1/2–4/5+ с исключением 11–14);
+// дедупликация с общим helper-ом — на этапе слияния слайсов.
+function pluralizeRu(count: number, one: string, few: string, many: string): string {
+  const mod100 = Math.abs(count) % 100;
+  if (mod100 >= 11 && mod100 <= 14) {
+    return many;
   }
-  return `${count} карт${suffix} в библиотеке`;
+  const mod10 = mod100 % 10;
+  if (mod10 === 1) {
+    return one;
+  }
+  if (mod10 >= 2 && mod10 <= 4) {
+    return few;
+  }
+  return many;
+}
+
+function characterCardsLabel(count: number): string {
+  return `${count} ${pluralizeRu(count, 'карта', 'карты', 'карт')} в библиотеке`;
+}
+
+function characterChatsLabel(count: number): string {
+  return `${count} ${pluralizeRu(count, 'чат', 'чата', 'чатов')}`;
 }
 
 export function CharactersScreen() {
@@ -347,6 +362,12 @@ function CharacterCard({ character }: CharacterCardProps) {
         <div className="muted" style={{ fontSize: 'var(--fz-xs)', fontFamily: 'var(--font-mono)' }}>
           {character.source.toUpperCase()} · {character.id}
         </div>
+        {character.chatCount > 0 ? (
+          <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+            {characterChatsLabel(character.chatCount)}
+            {character.lastChatAt ? ` · последний ${formatRelative(character.lastChatAt)}` : null}
+          </div>
+        ) : null}
       </div>
       <div
         className="between"

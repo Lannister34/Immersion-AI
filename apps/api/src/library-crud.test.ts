@@ -265,6 +265,49 @@ describe('library CRUD routes', () => {
       await app.close();
     });
 
+    it('reports chat usage stats from the chat index on the character list', async () => {
+      const app = buildApiApp();
+
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: '/api/characters',
+        payload: {
+          name: 'Ирма',
+          description: 'Хранительница архива',
+          personality: '',
+          scenario: '',
+          firstMessage: 'Привет, что ищем сегодня?',
+          exampleDialogue: '',
+          systemPrompt: '',
+          tags: [],
+        },
+      });
+      const createPayload = CharacterDetailResponseSchema.parse(createResponse.json());
+      expect(createResponse.statusCode).toBe(201);
+
+      const beforeResponse = await app.inject({ method: 'GET', url: '/api/characters' });
+      const beforePayload = CharacterListResponseSchema.parse(beforeResponse.json());
+      expect(beforePayload.items.find((item) => item.id === createPayload.character.id)).toMatchObject({
+        chatCount: 0,
+        lastChatAt: null,
+      });
+
+      const chatResponse = await app.inject({
+        method: 'POST',
+        url: '/api/chats',
+        payload: { characterId: createPayload.character.id },
+      });
+      expect(chatResponse.statusCode).toBe(201);
+
+      const afterResponse = await app.inject({ method: 'GET', url: '/api/characters' });
+      const afterPayload = CharacterListResponseSchema.parse(afterResponse.json());
+      const afterItem = afterPayload.items.find((item) => item.id === createPayload.character.id);
+      expect(afterItem?.chatCount).toBe(1);
+      expect(afterItem?.lastChatAt).toBeTruthy();
+
+      await app.close();
+    });
+
     it('imports a SillyTavern PNG character card and returns the editable JSON detail', async () => {
       const cardJson = {
         spec: 'chara_card_v2',
