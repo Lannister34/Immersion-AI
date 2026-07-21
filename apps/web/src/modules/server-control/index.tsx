@@ -431,16 +431,19 @@ function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFo
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const appliedBaselineRef = useRef(baseline);
+  const appliedProviderRef = useRef(selectedProvider);
 
-  // Сбрасываем форму на серверное состояние только пока пользователь её не редактировал:
-  // фоновый refetch не должен затирать введённые, но ещё не сохранённые значения.
+  // Смена провайдера всегда загружает его сохранённый конфиг; защита от сброса
+  // фоновым refetch действует только внутри одного и того же провайдера.
   useEffect(() => {
     const previousBaseline = appliedBaselineRef.current;
+    const providerChanged = appliedProviderRef.current !== selectedProvider;
     appliedBaselineRef.current = baseline;
-    setForm((current) => (formsEqual(current, previousBaseline) ? baseline : current));
+    appliedProviderRef.current = selectedProvider;
+    setForm((current) => (providerChanged || formsEqual(current, previousBaseline) ? baseline : current));
     setSavedAt(null);
     setErrorMessage(null);
-  }, [baseline]);
+  }, [baseline, selectedProvider]);
 
   if (!snapshot) {
     return (
