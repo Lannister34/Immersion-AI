@@ -9,6 +9,7 @@ import { type ChangeEvent, type ReactNode, useMemo, useRef, useState } from 'rea
 
 import { Topbar } from '../../app/layout/topbar';
 import { formatRelative } from '../../shared/lib/format-relative';
+import { pluralRu } from '../../shared/lib/plural';
 import { BookIcon, PlusIcon, SearchIcon, TrashIcon, UploadIcon, XIcon } from '../../shared/ui/icons';
 import { createLorebook } from './api/save-lorebook';
 import { useDeleteLorebook } from './mutations/use-delete-lorebook';
@@ -31,13 +32,7 @@ const NEXT_SORT_MODE: Record<LorebookSortMode, LorebookSortMode> = {
 };
 
 function lorebookCountLabel(count: number): string {
-  let suffix = 'ов';
-  if (count === 1) {
-    suffix = '';
-  } else if (count >= 2 && count <= 4) {
-    suffix = 'а';
-  }
-  return `${count} лорбук${suffix} в библиотеке`;
+  return `${pluralRu(count, ['лорбук', 'лорбука', 'лорбуков'])} в библиотеке`;
 }
 
 function normalizeEntryKeys(record: Record<string, unknown>): string[] {

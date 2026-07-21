@@ -6,6 +6,7 @@ import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } 
 import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { formatRelative } from '../../shared/lib/format-relative';
+import { pluralRu } from '../../shared/lib/plural';
 import { Field } from '../../shared/ui/field';
 import { PlusIcon, SparkleIcon, TrashIcon } from '../../shared/ui/icons';
 import { generateLorebookDraft, useGenerationAvailability } from '../generation';
@@ -15,13 +16,7 @@ import { lorebookDetailQueryKey, lorebookDetailQueryOptions } from './queries/lo
 import { lorebookListQueryKey } from './queries/lorebook-list-query';
 
 function entryCountLabel(count: number): string {
-  let suffix = 'ей';
-  if (count === 1) {
-    suffix = 'ь';
-  } else if (count >= 2 && count <= 4) {
-    suffix = 'и';
-  }
-  return `${count} запис${suffix}`;
+  return pluralRu(count, ['запись', 'записи', 'записей']);
 }
 
 interface LorebookEditorScreenProps {

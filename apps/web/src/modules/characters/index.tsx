@@ -8,6 +8,7 @@ import { createApiUrl } from '../../shared/api/client';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { avatarColor, avatarInitial } from '../../shared/lib/avatar';
 import { formatRelative } from '../../shared/lib/format-relative';
+import { pluralRu } from '../../shared/lib/plural';
 import { readFileAsBase64 } from '../../shared/lib/read-file-as-base64';
 import { ChatIcon, PlusIcon, SearchIcon, SortIcon, TrashIcon, UploadIcon, XIcon } from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
@@ -19,13 +20,7 @@ import { characterListQueryKey, characterListQueryOptions } from './queries/char
 export { CharacterEditorScreen } from './editor';
 
 function characterCardsLabel(count: number): string {
-  let suffix = '';
-  if (count === 1) {
-    suffix = 'а';
-  } else if (count >= 2 && count <= 4) {
-    suffix = 'ы';
-  }
-  return `${count} карт${suffix} в библиотеке`;
+  return `${pluralRu(count, ['карта', 'карты', 'карт'])} в библиотеке`;
 }
 
 export function CharactersScreen() {

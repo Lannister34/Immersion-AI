@@ -2,19 +2,14 @@ import type { RuntimeServerStatus } from '@immersion/contracts/runtime';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
+import { pluralRu } from '../../shared/lib/plural';
 import { ChevronDownIcon, ChevronRightIcon, CopyIcon } from '../../shared/ui/icons';
 import { runtimeLogsQueryOptions } from './queries/runtime-logs-query';
 
 const LOGS_POLL_INTERVAL_MS = 2000;
 
-function formatLineCount(count: number): string {
-  const mod100 = count % 100;
-  const mod10 = count % 10;
-  if (mod100 >= 11 && mod100 <= 14) return `${count} строк`;
-  if (mod10 === 1) return `${count} строка`;
-  if (mod10 >= 2 && mod10 <= 4) return `${count} строки`;
-  return `${count} строк`;
-}
+// Порог «липкого низа»: пока пользователь ближе к низу, новые строки докручивают лог автоматически.
+const STICKY_BOTTOM_THRESHOLD_PX = 40;
 
 type CopyFeedback = 'idle' | 'copied' | 'failed';
 
@@ -27,6 +22,7 @@ export function ServerLogsCard({ status }: ServerLogsCardProps) {
   const [lastStatus, setLastStatus] = useState<RuntimeServerStatus>(status);
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback>('idle');
   const scrollRef = useRef<HTMLPreElement>(null);
+  const stickToBottomRef = useRef(true);
 
   // Автораскрытие при переходе в ошибку: причина неудачного старта должна быть видна сразу.
   if (status !== lastStatus) {
@@ -45,13 +41,22 @@ export function ServerLogsCard({ status }: ServerLogsCardProps) {
   const lines = logsQuery.data?.lines ?? [];
   const lineCount = lines.length;
 
+  // Докручиваем к свежим строкам, только если пользователь и так был у низа лога.
+  // Если он читает старые строки выше — позицию не трогаем.
   useEffect(() => {
     if (lines.length === 0) return;
     const element = scrollRef.current;
-    if (element) {
+    if (element && stickToBottomRef.current) {
       element.scrollTop = element.scrollHeight;
     }
   }, [lines]);
+
+  const handleLogsScroll = () => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const distanceToBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+    stickToBottomRef.current = distanceToBottom <= STICKY_BOTTOM_THRESHOLD_PX;
+  };
 
   useEffect(() => {
     if (copyFeedback === 'idle') return;
@@ -106,7 +111,7 @@ export function ServerLogsCard({ status }: ServerLogsCardProps) {
           <h2 style={{ margin: 0, fontSize: 'var(--fz-md)', fontWeight: 600 }}>Логи сервера</h2>
           {expanded ? (
             <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
-              {formatLineCount(lineCount)}
+              {pluralRu(lineCount, ['строка', 'строки', 'строк'])}
             </span>
           ) : null}
         </button>
@@ -131,13 +136,14 @@ export function ServerLogsCard({ status }: ServerLogsCardProps) {
       {expanded ? (
         <pre
           className="mono"
+          onScroll={handleLogsScroll}
           ref={scrollRef}
           style={{
             margin: 0,
             padding: '12px 14px',
             borderTop: '1px solid var(--hairline)',
-            background: '#0b0d12',
-            color: '#c9d1d9',
+            background: 'var(--bg)',
+            color: 'var(--text-1)',
             fontSize: 'var(--fz-xs)',
             lineHeight: 1.5,
             maxHeight: 320,

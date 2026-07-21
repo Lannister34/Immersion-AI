@@ -9,6 +9,7 @@ import { type ChangeEvent, type ReactNode, useMemo, useRef, useState } from 'rea
 
 import { Topbar } from '../../app/layout/topbar';
 import { formatRelative } from '../../shared/lib/format-relative';
+import { pluralRu } from '../../shared/lib/plural';
 import { PlusIcon, SearchIcon, TrashIcon, UploadIcon, XIcon } from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
 import { chatListQueryKey } from '../chats/queries/chat-list-query';
@@ -19,13 +20,7 @@ import { scenarioListQueryKey, scenarioListQueryOptions } from './queries/scenar
 export { ScenarioEditorScreen } from './editor';
 
 function scenarioCountLabel(count: number): string {
-  let suffix = 'ев';
-  if (count === 1) {
-    suffix = 'й';
-  } else if (count >= 2 && count <= 4) {
-    suffix = 'я';
-  }
-  return `${count} сценари${suffix} в библиотеке`;
+  return `${pluralRu(count, ['сценарий', 'сценария', 'сценариев'])} в библиотеке`;
 }
 
 function parseScenarioImportFile(raw: string): SaveScenarioCommand {
