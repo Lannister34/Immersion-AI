@@ -1124,8 +1124,16 @@ select:disabled {
 
 .tpl-mark {
   color: transparent;
-  background: var(--accent-soft);
+  background: oklch(0.72 0.18 295 / 0.26);
   border-radius: 3px;
+  transition: background 0.12s ease-out;
+}
+
+/* При наведении и во время ввода подсветка ярче: так плейсхолдеры легко найти
+   глазами, но они не спорят с текстом, когда поле просто лежит на экране. */
+.tpl-field:hover .tpl-mark,
+.tpl-field:focus-within .tpl-mark {
+  background: oklch(0.72 0.18 295 / 0.45);
 }
 
 /* Действия в *звёздочках* — приглушённый курсив, как принято в ролевых чатах. */
