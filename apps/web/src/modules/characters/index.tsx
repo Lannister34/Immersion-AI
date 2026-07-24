@@ -422,12 +422,21 @@ function CharacterCard({ character }: CharacterCardProps) {
         >
           {character.name}
         </strong>
-        <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-          {character.chatCount > 0
-            ? `${characterChatsLabel(character.chatCount)}${
-                character.lastChatAt ? ` · ${formatRelative(character.lastChatAt)}` : ''
-              }`
-            : 'Чатов пока нет'}
+        <div style={{ fontSize: 'var(--fz-xs)' }}>
+          {character.chatCount > 0 ? (
+            <Link
+              className="muted"
+              search={{ character: character.name }}
+              style={{ position: 'relative', zIndex: 2 }}
+              title="Показать чаты с этим персонажем"
+              to="/chat"
+            >
+              {characterChatsLabel(character.chatCount)}
+              {character.lastChatAt ? ` · ${formatRelative(character.lastChatAt)}` : ''}
+            </Link>
+          ) : (
+            <span className="muted">Чатов пока нет</span>
+          )}
         </div>
       </div>
       <div
@@ -463,7 +472,6 @@ function CharactersListTable({ characters }: CharactersListTableProps) {
         <thead>
           <tr>
             <th>Персонаж</th>
-            <th>Файл</th>
             <th>Чаты</th>
             <th>Изменён</th>
             <th />
@@ -512,17 +520,25 @@ function CharacterListRow({ character }: CharacterCardProps) {
             {character.avatarUrl ? null : initial}
           </span>
           <strong style={{ fontWeight: 600 }}>{character.name}</strong>
+          <span className="muted mono" style={{ fontSize: 'var(--fz-2xs)' }} title={character.id}>
+            {character.source.toUpperCase()}
+          </span>
         </Link>
       </td>
-      <td className="muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
-        {character.source.toUpperCase()} · {character.id}
-      </td>
-      <td className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-        {character.chatCount > 0
-          ? `${characterChatsLabel(character.chatCount)}${
-              character.lastChatAt ? ` · ${formatRelative(character.lastChatAt)}` : ''
-            }`
-          : '—'}
+      <td style={{ fontSize: 'var(--fz-xs)' }}>
+        {character.chatCount > 0 ? (
+          <Link
+            search={{ character: character.name }}
+            style={{ color: 'inherit' }}
+            title="Показать чаты с этим персонажем"
+            to="/chat"
+          >
+            {characterChatsLabel(character.chatCount)}
+            {character.lastChatAt ? ` · ${formatRelative(character.lastChatAt)}` : ''}
+          </Link>
+        ) : (
+          <span className="muted">—</span>
+        )}
       </td>
       <td className="muted mono tnum" style={{ fontSize: 'var(--fz-xs)' }}>
         {formatRelative(character.updatedAt)}

@@ -157,7 +157,9 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
       queryClient.setQueryData(characterDetailQueryKey(response.character.id), response);
       await queryClient.invalidateQueries({ queryKey: characterListQueryKey });
       if (isNew) {
-        await navigate({ to: '/characters/$characterId', params: { characterId: response.character.id } });
+        // После создания возвращаемся в библиотеку: карточка уже сохранена,
+        // открытая форма создаёт впечатление незавершённого действия.
+        await navigate({ to: '/characters' });
       }
     },
   });

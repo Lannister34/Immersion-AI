@@ -57,10 +57,29 @@ const homeRoute = createRoute({
   component: HomeScreen,
 });
 
+interface ChatListSearch {
+  character?: string;
+}
+
+// Фильтр по персонажу живёт в URL: ссылка из библиотеки персонажей
+// переживает перезагрузку и делится как обычная ссылка.
+function validateChatListSearch(search: Record<string, unknown>): ChatListSearch {
+  const character = typeof search.character === 'string' ? search.character.trim() : '';
+
+  return character.length > 0 ? { character } : {};
+}
+
+function ChatIndexRouteComponent() {
+  const { character } = chatIndexRoute.useSearch();
+
+  return <ChatListScreen characterFilter={character ?? null} />;
+}
+
 const chatIndexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/chat',
-  component: ChatListScreen,
+  component: ChatIndexRouteComponent,
+  validateSearch: validateChatListSearch,
 });
 
 const chatSessionRoute = createRoute({

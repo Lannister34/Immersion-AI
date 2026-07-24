@@ -43,13 +43,21 @@ function getImportErrorMessage(error: unknown): string {
   return 'Не удалось импортировать чат. Проверьте файл и повторите попытку.';
 }
 
-export function ChatListScreen() {
+export interface ChatListScreenProps {
+  /** Фильтр по персонажу приходит из search-параметра маршрута. */
+  characterFilter: string | null;
+}
+
+export function ChatListScreen({ characterFilter }: ChatListScreenProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [search, setSearch] = useState('');
-  const [characterFilter, setCharacterFilter] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<'updated' | 'name'>('updated');
+
+  const applyCharacterFilter = (name: string | null) => {
+    void navigate({ to: '/chat', search: name === null ? {} : { character: name } });
+  };
   const [importNotice, setImportNotice] = useState<ImportNotice | null>(null);
   const deferredSearch = useDeferredValue(search);
   const chatListQuery = useQuery(chatListQueryOptions(deferredSearch));
@@ -272,7 +280,7 @@ export function ChatListScreen() {
                 aria-pressed={characterFilter === null}
                 className="filter-chip"
                 data-active={characterFilter === null ? 'true' : 'false'}
-                onClick={() => setCharacterFilter(null)}
+                onClick={() => applyCharacterFilter(null)}
                 type="button"
               >
                 Все
@@ -283,7 +291,7 @@ export function ChatListScreen() {
                   className="filter-chip"
                   data-active={characterFilter === name ? 'true' : 'false'}
                   key={name}
-                  onClick={() => setCharacterFilter((current) => (current === name ? null : name))}
+                  onClick={() => applyCharacterFilter(characterFilter === name ? null : name)}
                   type="button"
                 >
                   {name} <span className="dim">{count}</span>
