@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import { getApiErrorMessage } from '../../../shared/api/get-api-error-message';
 import { pluralRu } from '../../../shared/lib/plural';
+import { ChevronRightIcon } from '../../../shared/ui/icons';
 import { useUpdateChatGenerationSettings } from '../mutations/use-update-chat-generation-settings';
 import {
   countSamplingOverrides,
@@ -67,6 +68,8 @@ export function GenerationSettingsSection({
   const [draft, setDraft] = useState<GenerationSettingsDraft>(baseline);
   const [appliedBaseline, setAppliedBaseline] = useState(baseline);
   const [errors, setErrors] = useState<SamplingOverrideErrors>({});
+  // Раздел свёрнут по умолчанию: в обычной работе хватает пресета и system prompt.
+  const [samplingOpen, setSamplingOpen] = useState(false);
   if (!draftsEqual(appliedBaseline, baseline)) {
     setAppliedBaseline(baseline);
     setDraft(baseline);
@@ -178,33 +181,61 @@ export function GenerationSettingsSection({
           value={draft.systemPrompt}
         />
       </div>
-      <div className="col" style={{ gap: 6 }}>
-        <div className="between">
-          <span style={{ fontSize: 'var(--fz-xs)' }}>Параметры sampler</span>
+      <div className="col" style={{ gap: 8 }}>
+        <button
+          aria-expanded={samplingOpen}
+          className="row gap-6"
+          onClick={() => setSamplingOpen((open) => !open)}
+          style={{
+            alignItems: 'center',
+            background: 'transparent',
+            border: 0,
+            color: 'inherit',
+            cursor: 'pointer',
+            font: 'inherit',
+            padding: 0,
+            textAlign: 'left',
+          }}
+          type="button"
+        >
+          <span
+            style={{
+              display: 'inline-flex',
+              transform: samplingOpen ? 'rotate(90deg)' : 'none',
+              transition: 'transform 0.15s ease-out',
+            }}
+          >
+            <ChevronRightIcon size={12} />
+          </span>
+          <span style={{ flex: 1, fontSize: 'var(--fz-xs)' }}>Параметры sampler</span>
           <span className="muted mono" style={{ fontSize: 'var(--fz-2xs)' }}>
             {overrideCount > 0 ? pluralRu(overrideCount, ['поле', 'поля', 'полей']) : 'из пресета'}
           </span>
-        </div>
-        <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
-          Пустое поле наследует значение пресета — оно показано подсказкой.
-        </div>
-        <SamplingOverridesFields
-          disabled={mutation.isPending}
-          draft={draft.sampling}
-          errors={errors}
-          inherited={inheritedSampling}
-          onChange={handleSamplingChange}
-        />
-        {overrideCount > 0 ? (
-          <button
-            className="btn btn--xs"
-            disabled={mutation.isPending}
-            onClick={handleClearOverrides}
-            style={{ alignSelf: 'flex-start' }}
-            type="button"
-          >
-            Сбросить все переопределения
-          </button>
+        </button>
+        {samplingOpen ? (
+          <>
+            <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
+              Выключенный параметр наследует значение пресета — оно показано в поле.
+            </div>
+            <SamplingOverridesFields
+              disabled={mutation.isPending}
+              draft={draft.sampling}
+              errors={errors}
+              inherited={inheritedSampling}
+              onChange={handleSamplingChange}
+            />
+            {overrideCount > 0 ? (
+              <button
+                className="btn btn--xs"
+                disabled={mutation.isPending}
+                onClick={handleClearOverrides}
+                style={{ alignSelf: 'flex-start' }}
+                type="button"
+              >
+                Сбросить все переопределения
+              </button>
+            ) : null}
+          </>
         ) : null}
       </div>
       {errorMessage ? (

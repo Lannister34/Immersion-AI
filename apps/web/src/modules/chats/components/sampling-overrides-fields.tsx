@@ -1,7 +1,8 @@
-import { XIcon } from '../../../shared/ui/icons';
 import {
   type InheritedSampling,
   NUMERIC_SAMPLING_FIELDS,
+  type NumericSamplingField,
+  resolveSliderRange,
   type SamplingOverrideErrors,
   type SamplingOverrideKey,
   type SamplingOverridesDraft,
@@ -11,15 +12,25 @@ export interface SamplingOverridesFieldsProps {
   disabled: boolean;
   draft: SamplingOverridesDraft;
   errors: SamplingOverrideErrors;
-  /** Значения пресета: показываем их подсказкой, пока чат не переопределил поле. */
+  /** Значения пресета: показываем их, пока чат не переопределил поле. */
   inherited: InheritedSampling | undefined;
   onChange: (key: SamplingOverrideKey, value: string) => void;
 }
 
-const TRIM_STRATEGY_LABELS: Record<InheritedSampling['contextTrimStrategy'], string> = {
-  trim_middle: 'trim_middle',
-  trim_start: 'trim_start',
-};
+function OverrideDot() {
+  return (
+    <span
+      style={{
+        background: 'var(--accent)',
+        borderRadius: '50%',
+        display: 'inline-block',
+        height: 5,
+        width: 5,
+      }}
+      title="Переопределено для этого чата"
+    />
+  );
+}
 
 export function SamplingOverridesFields({
   disabled,
@@ -28,89 +39,126 @@ export function SamplingOverridesFields({
   inherited,
   onChange,
 }: SamplingOverridesFieldsProps) {
-  const renderRow = (key: SamplingOverrideKey, label: string, control: React.ReactNode) => {
-    const isOverridden = draft[key].trim().length > 0;
-    const error = errors[key];
+  const renderNumericField = (field: NumericSamplingField) => {
+    const raw = draft[field.key].trim();
+    const isOverridden = raw.length > 0;
+    const error = errors[field.key];
+    const inheritedValue = inherited?.[field.key];
+    const numericValue = Number(raw.replace(',', '.'));
+    const sliderValue = Number.isFinite(numericValue) ? numericValue : (inheritedValue ?? field.slider.min);
+    const sliderRange = resolveSliderRange(field, sliderValue);
+
+    const handleToggle = (enabled: boolean) => {
+      // Включение стартует от значения, которое действует сейчас, — правка
+      // всегда начинается с понятной точки, а не с нуля.
+      onChange(field.key, enabled ? String(inheritedValue ?? field.slider.min) : '');
+    };
 
     return (
-      <div className="col" key={key} style={{ gap: 2 }}>
+      <div className="col" key={field.key} style={{ gap: 3 }}>
         <div className="row gap-6" style={{ alignItems: 'center' }}>
+          <input
+            aria-label={`Переопределить ${field.label}`}
+            checked={isOverridden}
+            disabled={disabled}
+            onChange={(event) => handleToggle(event.currentTarget.checked)}
+            type="checkbox"
+          />
           <span
-            className="mono"
-            style={{ color: isOverridden ? 'var(--text)' : 'var(--muted)', flex: 1, fontSize: 'var(--fz-2xs)' }}
+            className="mono row gap-4"
+            style={{
+              alignItems: 'center',
+              color: isOverridden ? 'var(--text)' : 'var(--muted)',
+              flex: 1,
+              fontSize: 'var(--fz-2xs)',
+              minWidth: 0,
+            }}
           >
-            {label}
+            <span className="truncate">{field.label}</span>
+            {isOverridden ? <OverrideDot /> : null}
           </span>
-          {control}
-          <button
-            className="btn btn--icon btn--xs"
-            disabled={disabled || !isOverridden}
-            onClick={() => onChange(key, '')}
-            style={{ opacity: isOverridden ? 1 : 0.25 }}
-            title="Вернуть значение пресета"
-            type="button"
-          >
-            <XIcon size={10} />
-          </button>
-        </div>
-        {error ? <span style={{ color: 'var(--danger)', fontSize: 'var(--fz-2xs)' }}>{error}</span> : null}
-      </div>
-    );
-  };
-
-  const inheritedTrim = inherited ? TRIM_STRATEGY_LABELS[inherited.contextTrimStrategy] : 'пресет';
-
-  return (
-    <div className="col" style={{ gap: 6 }}>
-      {renderRow(
-        'contextTrimStrategy',
-        'trim',
-        <select
-          className="input mono"
-          disabled={disabled}
-          onChange={(event) => {
-            const { value } = event.currentTarget;
-            onChange('contextTrimStrategy', value);
-          }}
-          style={{
-            borderColor: draft.contextTrimStrategy.length > 0 ? 'var(--accent)' : undefined,
-            fontSize: 'var(--fz-2xs)',
-            padding: '3px 6px',
-            width: 110,
-          }}
-          value={draft.contextTrimStrategy}
-        >
-          <option value="">{`↳ ${inheritedTrim}`}</option>
-          <option value="trim_middle">trim_middle</option>
-          <option value="trim_start">trim_start</option>
-        </select>,
-      )}
-      {NUMERIC_SAMPLING_FIELDS.map((field) =>
-        renderRow(
-          field.key,
-          field.label,
           <input
             className="input mono tnum"
-            disabled={disabled}
+            disabled={disabled || !isOverridden}
             inputMode="decimal"
             onChange={(event) => {
               const { value } = event.currentTarget;
               onChange(field.key, value);
             }}
-            placeholder={inherited ? String(inherited[field.key]) : '—'}
+            placeholder={inheritedValue === undefined ? '—' : String(inheritedValue)}
             step={field.step}
-            style={{
-              borderColor: draft[field.key].trim().length > 0 ? 'var(--accent)' : undefined,
-              fontSize: 'var(--fz-2xs)',
-              padding: '3px 6px',
-              textAlign: 'right',
-              width: 110,
-            }}
+            style={{ fontSize: 'var(--fz-2xs)', padding: '2px 6px', textAlign: 'right', width: 68 }}
             type="number"
-            value={draft[field.key]}
-          />,
-        ),
-      )}
+            value={raw}
+          />
+        </div>
+        {isOverridden ? (
+          <input
+            aria-label={field.label}
+            className="range"
+            disabled={disabled}
+            max={sliderRange.max}
+            min={sliderRange.min}
+            onChange={(event) => {
+              const { value } = event.currentTarget;
+              onChange(field.key, value);
+            }}
+            step={sliderRange.step}
+            type="range"
+            value={sliderValue}
+          />
+        ) : null}
+        {error ? <span style={{ color: 'var(--danger)', fontSize: 'var(--fz-2xs)' }}>{error}</span> : null}
+      </div>
+    );
+  };
+
+  const isTrimOverridden = draft.contextTrimStrategy.length > 0;
+
+  return (
+    <div className="col" style={{ gap: 10 }}>
+      <div className="row gap-6" style={{ alignItems: 'center' }}>
+        <input
+          aria-label="Переопределить стратегию обрезки"
+          checked={isTrimOverridden}
+          disabled={disabled}
+          onChange={(event) =>
+            onChange(
+              'contextTrimStrategy',
+              event.currentTarget.checked ? (inherited?.contextTrimStrategy ?? 'trim_middle') : '',
+            )
+          }
+          type="checkbox"
+        />
+        <span
+          className="mono row gap-4"
+          style={{
+            alignItems: 'center',
+            color: isTrimOverridden ? 'var(--text)' : 'var(--muted)',
+            flex: 1,
+            fontSize: 'var(--fz-2xs)',
+            minWidth: 0,
+          }}
+        >
+          <span className="truncate">trim</span>
+          {isTrimOverridden ? <OverrideDot /> : null}
+        </span>
+        <select
+          aria-label="Стратегия обрезки контекста"
+          className="input mono"
+          disabled={disabled || !isTrimOverridden}
+          onChange={(event) => {
+            const { value } = event.currentTarget;
+            onChange('contextTrimStrategy', value);
+          }}
+          style={{ fontSize: 'var(--fz-2xs)', padding: '2px 4px', width: 110 }}
+          value={isTrimOverridden ? draft.contextTrimStrategy : (inherited?.contextTrimStrategy ?? 'trim_middle')}
+        >
+          <option value="trim_middle">trim_middle</option>
+          <option value="trim_start">trim_start</option>
+        </select>
+      </div>
+      {NUMERIC_SAMPLING_FIELDS.map(renderNumericField)}
     </div>
   );
 }

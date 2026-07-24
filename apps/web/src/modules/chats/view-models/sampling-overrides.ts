@@ -12,27 +12,84 @@ export type SamplingOverridesDraft = Record<SamplingOverrideKey, string>;
 
 export type SamplingOverrideErrors = Partial<Record<SamplingOverrideKey, string>>;
 
+export interface SamplingSliderRange {
+  max: number;
+  min: number;
+  step: number;
+}
+
 export interface NumericSamplingField {
   /** Только целые значения. */
   integer: boolean;
   key: NumericSamplingKey;
   /** Технические имена совпадают с карточкой пресета в настройках. */
   label: string;
+  /** Нижняя граница контракта; null — ограничения нет. */
   min: number | null;
+  /** Практичный диапазон ползунка: ввод числом по-прежнему шире. */
+  slider: SamplingSliderRange;
   step: number;
 }
 
 export const NUMERIC_SAMPLING_FIELDS: NumericSamplingField[] = [
-  { integer: false, key: 'temperature', label: 'temperature', min: 0, step: 0.05 },
-  { integer: false, key: 'topP', label: 'top_p', min: 0, step: 0.01 },
-  { integer: true, key: 'topK', label: 'top_k', min: 0, step: 1 },
-  { integer: false, key: 'minP', label: 'min_p', min: 0, step: 0.01 },
-  { integer: false, key: 'repeatPenalty', label: 'rep_pen', min: 0, step: 0.01 },
-  { integer: true, key: 'repeatPenaltyRange', label: 'rep_pen_range', min: 0, step: 32 },
-  { integer: false, key: 'presencePenalty', label: 'presence_penalty', min: null, step: 0.05 },
-  { integer: true, key: 'maxTokens', label: 'max_length', min: 1, step: 16 },
-  { integer: true, key: 'maxContextLength', label: 'context', min: 1, step: 512 },
+  {
+    integer: false,
+    key: 'temperature',
+    label: 'temperature',
+    min: 0,
+    slider: { max: 2, min: 0, step: 0.01 },
+    step: 0.05,
+  },
+  { integer: false, key: 'topP', label: 'top_p', min: 0, slider: { max: 1, min: 0, step: 0.01 }, step: 0.01 },
+  { integer: true, key: 'topK', label: 'top_k', min: 0, slider: { max: 200, min: 0, step: 1 }, step: 1 },
+  { integer: false, key: 'minP', label: 'min_p', min: 0, slider: { max: 1, min: 0, step: 0.005 }, step: 0.01 },
+  {
+    integer: false,
+    key: 'repeatPenalty',
+    label: 'rep_pen',
+    min: 0,
+    slider: { max: 2, min: 0, step: 0.01 },
+    step: 0.01,
+  },
+  {
+    integer: true,
+    key: 'repeatPenaltyRange',
+    label: 'rep_pen_range',
+    min: 0,
+    slider: { max: 8192, min: 0, step: 64 },
+    step: 32,
+  },
+  {
+    integer: false,
+    key: 'presencePenalty',
+    label: 'presence_penalty',
+    min: null,
+    slider: { max: 2, min: -2, step: 0.05 },
+    step: 0.05,
+  },
+  { integer: true, key: 'maxTokens', label: 'max_length', min: 1, slider: { max: 4096, min: 16, step: 16 }, step: 16 },
+  {
+    integer: true,
+    key: 'maxContextLength',
+    label: 'context',
+    min: 1,
+    slider: { max: 32_768, min: 512, step: 512 },
+    step: 512,
+  },
 ];
+
+/** Ползунок должен дотягиваться до текущего значения, даже если оно вне обычного диапазона. */
+export function resolveSliderRange(field: NumericSamplingField, value: number): SamplingSliderRange {
+  if (!Number.isFinite(value)) {
+    return field.slider;
+  }
+
+  return {
+    max: Math.max(field.slider.max, value),
+    min: Math.min(field.slider.min, value),
+    step: field.slider.step,
+  };
+}
 
 export const SAMPLING_OVERRIDE_KEYS: SamplingOverrideKey[] = [
   'contextTrimStrategy',
