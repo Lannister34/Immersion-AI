@@ -30,6 +30,16 @@ function getUiLanguage(value: unknown) {
   return value === 'en' ? 'en' : 'ru';
 }
 
+// Курсив действий включён исторически, подсветка речи — опция по желанию.
+function getMessageFormatting(value: unknown) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+
+  return {
+    actionsItalic: getBoolean(source.actionsItalic, true),
+    quotesHighlighted: getBoolean(source.quotesHighlighted, false),
+  };
+}
+
 function getResponseLanguage(value: unknown) {
   return value === 'en' || value === 'none' ? value : 'ru';
 }
@@ -140,6 +150,7 @@ export function getSettingsOverview(): SettingsOverviewResponse {
       responseLanguage: getResponseLanguage(source.responseLanguage),
       streamingEnabled: getBoolean(source.streamingEnabled, true),
       thinkingEnabled: getBoolean(source.thinkingEnabled, true),
+      messageFormatting: getMessageFormatting(source.messageFormatting),
     },
     sampler: {
       activePresetId,

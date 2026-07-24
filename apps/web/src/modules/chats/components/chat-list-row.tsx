@@ -7,6 +7,7 @@ import { avatarColor, avatarInitial } from '../../../shared/lib/avatar';
 import { formatRelative } from '../../../shared/lib/format-relative';
 import { TrashIcon, XIcon } from '../../../shared/ui/icons';
 import { useDeleteChat } from '../mutations/use-delete-chat';
+import { stripMessageMarkup } from '../view-models/message-content';
 
 export interface ChatListRowProps {
   chat: ChatSummaryDto;
@@ -15,7 +16,8 @@ export interface ChatListRowProps {
 export function ChatListRow({ chat }: ChatListRowProps) {
   const displayName = chat.characterName ?? chat.title;
   const subline = chat.characterName ? chat.title : 'свободный чат';
-  const preview = chat.lastMessagePreview ?? 'Сообщений пока нет.';
+  // Превью показываем без служебных символов разметки: звёздочек и бэктиков.
+  const preview = chat.lastMessagePreview ? stripMessageMarkup(chat.lastMessagePreview) : 'Сообщений пока нет.';
   const [confirmDelete, setConfirmDelete] = useState(false);
   const deleteMutation = useDeleteChat(chat.id);
 

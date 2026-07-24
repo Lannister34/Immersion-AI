@@ -4,6 +4,13 @@ export const UiLanguageSchema = z.enum(['ru', 'en']);
 export const ResponseLanguageSchema = z.enum(['ru', 'en', 'none']);
 export const ContextTrimStrategySchema = z.enum(['trim_middle', 'trim_start']);
 
+/** Оформление сообщений в чате: разметка в стиле ролевых чатов. */
+export const MessageFormattingSchema = z.object({
+  actionsItalic: z.boolean(),
+  quotesHighlighted: z.boolean(),
+});
+export type MessageFormatting = z.infer<typeof MessageFormattingSchema>;
+
 export const SettingsProfileSchema = z.object({
   userName: z.string(),
   userPersona: z.string(),
@@ -12,6 +19,7 @@ export const SettingsProfileSchema = z.object({
   responseLanguage: ResponseLanguageSchema,
   streamingEnabled: z.boolean(),
   thinkingEnabled: z.boolean(),
+  messageFormatting: MessageFormattingSchema,
 });
 
 export const SamplerPresetSummarySchema = z.object({
@@ -56,6 +64,7 @@ export const UpdateSettingsProfileCommandSchema = z.object({
   responseLanguage: ResponseLanguageSchema,
   streamingEnabled: z.boolean(),
   thinkingEnabled: z.boolean(),
+  messageFormatting: MessageFormattingSchema,
 });
 
 export type UpdateSettingsProfileCommand = z.infer<typeof UpdateSettingsProfileCommandSchema>;

@@ -37,6 +37,7 @@ describe('settings profile routes', () => {
         responseLanguage: 'ru',
         streamingEnabled: true,
         thinkingEnabled: true,
+        messageFormatting: { actionsItalic: true, quotesHighlighted: false },
       }),
     );
 
@@ -53,6 +54,7 @@ describe('settings profile routes', () => {
         responseLanguage: 'en',
         streamingEnabled: false,
         thinkingEnabled: false,
+        messageFormatting: { actionsItalic: true, quotesHighlighted: false },
       },
     });
     const putPayload = UpdateSettingsProfileResponseSchema.parse(putResponse.json());
@@ -118,6 +120,7 @@ describe('settings profile routes', () => {
         responseLanguage: 'ru',
         streamingEnabled: true,
         thinkingEnabled: true,
+        messageFormatting: { actionsItalic: true, quotesHighlighted: false },
       },
     });
     expect(response.statusCode).toBe(200);
@@ -146,6 +149,7 @@ describe('settings profile routes', () => {
         responseLanguage: 'ru',
         streamingEnabled: true,
         thinkingEnabled: true,
+        messageFormatting: { actionsItalic: true, quotesHighlighted: false },
       },
     });
 

@@ -21,6 +21,7 @@ export async function updateSettingsProfile(
     responseLanguage: command.responseLanguage,
     streamingEnabled: command.streamingEnabled,
     thinkingEnabled: command.thinkingEnabled,
+    messageFormatting: command.messageFormatting,
   };
 
   await updateLegacyUserSettingsSource((existing) => ({
@@ -32,6 +33,7 @@ export async function updateSettingsProfile(
     responseLanguage: nextProfile.responseLanguage,
     streamingEnabled: nextProfile.streamingEnabled,
     thinkingEnabled: nextProfile.thinkingEnabled,
+    messageFormatting: nextProfile.messageFormatting,
   }));
 
   return UpdateSettingsProfileResponseSchema.parse({ profile: nextProfile });

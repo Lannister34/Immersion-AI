@@ -18,6 +18,8 @@ interface ProfileFormState {
   responseLanguage: 'ru' | 'en' | 'none';
   streamingEnabled: boolean;
   thinkingEnabled: boolean;
+  actionsItalic: boolean;
+  quotesHighlighted: boolean;
 }
 
 function profileToFormState(profile: SettingsOverviewResponse['profile']): ProfileFormState {
@@ -29,6 +31,8 @@ function profileToFormState(profile: SettingsOverviewResponse['profile']): Profi
     responseLanguage: profile.responseLanguage,
     streamingEnabled: profile.streamingEnabled,
     thinkingEnabled: profile.thinkingEnabled,
+    actionsItalic: profile.messageFormatting.actionsItalic,
+    quotesHighlighted: profile.messageFormatting.quotesHighlighted,
   };
 }
 
@@ -40,7 +44,9 @@ function profileFormsEqual(left: ProfileFormState, right: ProfileFormState): boo
     left.uiLanguage === right.uiLanguage &&
     left.responseLanguage === right.responseLanguage &&
     left.streamingEnabled === right.streamingEnabled &&
-    left.thinkingEnabled === right.thinkingEnabled
+    left.thinkingEnabled === right.thinkingEnabled &&
+    left.actionsItalic === right.actionsItalic &&
+    left.quotesHighlighted === right.quotesHighlighted
   );
 }
 
@@ -53,6 +59,10 @@ function profileFormToCommand(form: ProfileFormState): UpdateSettingsProfileComm
     responseLanguage: form.responseLanguage,
     streamingEnabled: form.streamingEnabled,
     thinkingEnabled: form.thinkingEnabled,
+    messageFormatting: {
+      actionsItalic: form.actionsItalic,
+      quotesHighlighted: form.quotesHighlighted,
+    },
   };
 }
 
@@ -183,6 +193,20 @@ export function ProfileCard({ data }: ProfileCardProps) {
             id="profile-thinking"
             label="Показывать reasoning"
             onChange={(value) => setForm((current) => ({ ...current, thinkingEnabled: value }))}
+          />
+          <ToggleRow
+            checked={form.actionsItalic}
+            hint="текст в *звёздочках* показывается курсивом"
+            id="profile-actions-italic"
+            label="Действия курсивом"
+            onChange={(value) => setForm((current) => ({ ...current, actionsItalic: value }))}
+          />
+          <ToggleRow
+            checked={form.quotesHighlighted}
+            hint="реплики в кавычках выделяются цветом"
+            id="profile-quotes-highlighted"
+            label="Подсветка речи"
+            onChange={(value) => setForm((current) => ({ ...current, quotesHighlighted: value }))}
           />
         </div>
         {errorMessage ? (

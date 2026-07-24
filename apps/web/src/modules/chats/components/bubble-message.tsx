@@ -1,3 +1,4 @@
+import type { MessageFormatting } from '@immersion/contracts/settings';
 import { useQuery } from '@tanstack/react-query';
 import { type CSSProperties, useEffect, useState } from 'react';
 
@@ -15,6 +16,7 @@ export interface BubbleMessageProps {
   canRegenerate: boolean;
   characterAvatarUrl: string | null;
   chatId: string;
+  formatting: MessageFormatting;
   isMutating: boolean;
   isSystem: boolean;
   isUser: boolean;
@@ -43,6 +45,7 @@ export function BubbleMessage({
   canRegenerate,
   characterAvatarUrl,
   chatId,
+  formatting,
   isMutating,
   isSystem,
   isUser,
@@ -251,7 +254,7 @@ export function BubbleMessage({
             </div>
           </div>
         ) : (
-          <div className={isUser ? 'bubble bubble--user' : 'bubble'}>{renderMessageContent(text)}</div>
+          <div className={isUser ? 'bubble bubble--user' : 'bubble'}>{renderMessageContent(text, formatting)}</div>
         )}
         {mode === 'view' ? (
           <div className="row gap-4 bubble-row__actions" style={{ justifyContent: isUser ? 'flex-end' : 'flex-start' }}>

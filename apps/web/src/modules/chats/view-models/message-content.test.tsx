@@ -1,10 +1,11 @@
+import type { MessageFormatting } from '@immersion/contracts/settings';
 import { isValidElement } from 'react';
 import { describe, expect, it } from 'vitest';
 
-import { renderMessageContent } from './message-content';
+import { renderMessageContent, stripMessageMarkup } from './message-content';
 
-function describeNodes(text: string): string[] {
-  return renderMessageContent(text).map((node) => {
+function describeNodes(text: string, formatting?: MessageFormatting): string[] {
+  return renderMessageContent(text, formatting).map((node) => {
     if (typeof node === 'string') {
       return `text:${node}`;
     }
@@ -34,5 +35,33 @@ describe('renderMessageContent', () => {
 
   it('spans several lines inside one action', () => {
     expect(describeNodes('*первая\nвторая*')).toEqual(['em:первая\nвторая']);
+  });
+
+  it('keeps actions plain when the italics option is off', () => {
+    expect(describeNodes('*действие*', { actionsItalic: false, quotesHighlighted: false })).toEqual([
+      'text:*действие*',
+    ]);
+  });
+
+  it('highlights quoted speech when the option is on', () => {
+    expect(describeNodes('Он сказал "привет" тихо', { actionsItalic: true, quotesHighlighted: true })).toEqual([
+      'text:Он сказал ',
+      'span:«,привет,»',
+      'text: тихо',
+    ]);
+  });
+});
+
+describe('stripMessageMarkup', () => {
+  it('removes markup characters for previews', () => {
+    expect(stripMessageMarkup('*Мария улыбается* Привет! **важно** `код`')).toBe('Мария улыбается Привет! важно код');
+  });
+
+  it('drops a dangling asterisk left by truncation', () => {
+    expect(stripMessageMarkup('*Мария сидит в парке и листает')).toBe('Мария сидит в парке и листает');
+  });
+
+  it('keeps a standalone asterisk that is not markup', () => {
+    expect(stripMessageMarkup('5 * 3 = 15')).toBe('5 * 3 = 15');
   });
 });

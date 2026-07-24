@@ -26,6 +26,7 @@ import { useUpdateChatMessage } from '../mutations/use-update-chat-message';
 import { useUpdateChatTitle } from '../mutations/use-update-chat-title';
 import { chatSessionQueryOptions } from '../queries/chat-session-query';
 import { toContextStats } from '../view-models/context-stats';
+import { DEFAULT_MESSAGE_FORMATTING } from '../view-models/message-content';
 import { BubbleMessage } from './bubble-message';
 import { Composer } from './composer';
 import { RightPanel } from './right-panel';
@@ -273,6 +274,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
           canRegenerate={isLastAssistant && !isMutating}
           characterAvatarUrl={session.characterAvatarUrl}
           chatId={chatId}
+          formatting={settingsOverviewQuery.data?.profile.messageFormatting ?? DEFAULT_MESSAGE_FORMATTING}
           isMutating={isMutating}
           isSystem={message.role === 'system'}
           isUser={message.role === 'user'}
