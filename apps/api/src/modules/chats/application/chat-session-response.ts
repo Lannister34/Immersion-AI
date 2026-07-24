@@ -33,6 +33,7 @@ export function toChatSummaryDto(summary: ChatSummaryRecord): ChatSummaryDto {
 
 function toChatGenerationSettingsDto(settings: ChatGenerationSettingsRecord): ChatGenerationSettingsDto {
   return {
+    additionalInstructions: settings.additionalInstructions,
     samplerPresetId: settings.samplerPresetId,
     sampling: {
       contextTrimStrategy: settings.sampling.contextTrimStrategy,

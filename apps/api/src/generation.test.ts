@@ -1566,6 +1566,7 @@ describe('generation routes', () => {
     const chat = await createChat(app);
 
     await updateChatGenerationSettings(app, chat.id, {
+      additionalInstructions: null,
       samplerPresetId: 'default',
       systemPrompt: 'Custom system prompt for this chat.',
       sampling: {
@@ -1614,6 +1615,7 @@ describe('generation routes', () => {
     const chat = await createChat(app);
 
     await updateChatGenerationSettings(app, chat.id, {
+      additionalInstructions: null,
       samplerPresetId: null,
       systemPrompt: 'Custom system prompt for {{user}}.',
       sampling: EMPTY_CHAT_SAMPLING_OVERRIDES,
@@ -1671,6 +1673,7 @@ describe('generation routes', () => {
       },
     ]);
     await updateChatGenerationSettings(app, chat.id, {
+      additionalInstructions: null,
       samplerPresetId: null,
       systemPrompt: null,
       sampling: {
@@ -1760,6 +1763,7 @@ describe('generation routes', () => {
     const chat = await createChat(app);
 
     await updateChatGenerationSettings(app, chat.id, {
+      additionalInstructions: null,
       samplerPresetId: 'smoke-model-preset',
       systemPrompt: null,
       sampling: EMPTY_CHAT_SAMPLING_OVERRIDES,
@@ -1818,6 +1822,7 @@ describe('generation routes', () => {
     const chat = await createChat(app);
 
     await updateChatGenerationSettings(app, chat.id, {
+      additionalInstructions: null,
       samplerPresetId: 'smoke-model-preset',
       systemPrompt: null,
       sampling: EMPTY_CHAT_SAMPLING_OVERRIDES,
@@ -1907,6 +1912,7 @@ describe('generation routes', () => {
     const chat = await createChat(app);
 
     await updateChatGenerationSettings(app, chat.id, {
+      additionalInstructions: null,
       samplerPresetId: null,
       systemPrompt: 'Preserve this setting on provider failure.',
       sampling: EMPTY_CHAT_SAMPLING_OVERRIDES,

@@ -322,12 +322,20 @@ function buildUntrimmedChatReplyPrompt(input: BuildChatReplyPromptInput): Untrim
     .map((section) => section.trim())
     .filter((section) => section.length > 0)
     .join('\n\n');
-  const systemSections = [
-    characterContext,
-    lorebookContext.length > 0 ? `World context:\n${lorebookContext}` : null,
-    basePrompt.prompt,
-    languageInstruction,
-  ].filter((section): section is string => section !== null && section.trim().length > 0);
+  // Ручной промпт чата — это весь системный блок целиком: он для того и нужен,
+  // чтобы автосборка (персонаж, лорбуки, язык, доп. инструкции) отключилась.
+  const isManualSystemPrompt = basePrompt.source.kind === 'chat-override';
+  const systemSections = (
+    isManualSystemPrompt
+      ? [basePrompt.prompt]
+      : [
+          characterContext,
+          lorebookContext.length > 0 ? `World context:\n${lorebookContext}` : null,
+          basePrompt.prompt,
+          languageInstruction,
+          input.session.generationSettings.additionalInstructions,
+        ]
+  ).filter((section): section is string => section !== null && section.trim().length > 0);
   const messages: ChatReplyPromptMessage[] = [];
 
   if (systemSections.length > 0) {

@@ -162,6 +162,7 @@ describe('chat routes', () => {
     expect(sessionPayload.chat.id).toBe(createPayload.chat.id);
     expect(sessionPayload.userName).toBe('\u0422\u0435\u0441\u0442\u0435\u0440');
     expect(sessionPayload.generationSettings).toMatchObject({
+      additionalInstructions: null,
       samplerPresetId: null,
       systemPrompt: null,
     });
@@ -184,6 +185,7 @@ describe('chat routes', () => {
       method: 'PUT',
       url: `/api/chats/${createPayload.chat.id}/generation-settings`,
       payload: {
+        additionalInstructions: null,
         samplerPresetId: 'smoke-model-preset',
         systemPrompt: 'You are concise. Reply to {{user}}.',
         sampling: {
@@ -204,6 +206,7 @@ describe('chat routes', () => {
 
     expect(updateResponse.statusCode).toBe(200);
     expect(updatePayload.generationSettings).toEqual({
+      additionalInstructions: null,
       samplerPresetId: 'smoke-model-preset',
       systemPrompt: 'You are concise. Reply to {{user}}.',
       sampling: {
@@ -266,6 +269,7 @@ describe('chat routes', () => {
       method: 'PUT',
       url: `/api/chats/${createPayload.chat.id}/generation-settings`,
       payload: {
+        additionalInstructions: null,
         samplerPresetId: null,
         systemPrompt: null,
         sampling: {
@@ -305,6 +309,7 @@ describe('chat routes', () => {
       method: 'PUT',
       url: `/api/chats/${createPayload.chat.id}/generation-settings`,
       payload: {
+        additionalInstructions: null,
         samplerPresetId: 'missing-preset',
         systemPrompt: null,
         sampling: {
@@ -341,6 +346,7 @@ describe('chat routes', () => {
     });
     const createPayload = CreateChatResponseSchema.parse(createResponse.json());
     const validPayload = {
+      additionalInstructions: null,
       samplerPresetId: 'smoke-model-preset',
       systemPrompt: 'Keep this prompt.',
       sampling: {
@@ -464,6 +470,7 @@ describe('chat routes', () => {
     ]);
     expect(sessionPayload.chat.title).toBe('Первое сообщение');
     expect(sessionPayload.generationSettings).toMatchObject({
+      additionalInstructions: null,
       samplerPresetId: null,
       systemPrompt: null,
     });
@@ -1322,6 +1329,7 @@ describe('chat routes', () => {
       method: 'PUT',
       url: '/api/chats/missing-chat/generation-settings',
       payload: {
+        additionalInstructions: null,
         samplerPresetId: null,
         systemPrompt: null,
         sampling: {
@@ -1370,6 +1378,7 @@ describe('chat routes', () => {
 
     const app = buildApiApp();
     const roundtripGenerationSettings = {
+      additionalInstructions: 'Не забывай про метель за окном.',
       samplerPresetId: 'smoke-model-preset',
       sampling: {
         contextTrimStrategy: 'trim_start',

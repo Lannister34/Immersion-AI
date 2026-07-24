@@ -25,6 +25,7 @@ export interface DraftGenerationContext {
 // Драфт-генерация не привязана к чату, поэтому чатовых оверрайдов нет:
 // работает активный пресет либо привязка пресета к модели.
 const NO_CHAT_GENERATION_SETTINGS: ChatGenerationSettingsDto = {
+  additionalInstructions: null,
   samplerPresetId: null,
   sampling: {
     contextTrimStrategy: null,

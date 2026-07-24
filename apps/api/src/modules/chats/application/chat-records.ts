@@ -69,6 +69,7 @@ export interface ChatSamplingOverridesRecord {
 }
 
 export interface ChatGenerationSettingsRecord {
+  additionalInstructions: string | null;
   samplerPresetId: string | null;
   sampling: ChatSamplingOverridesRecord;
   systemPrompt: string | null;
@@ -91,6 +92,7 @@ export function createDefaultChatSamplingOverrides(): ChatSamplingOverridesRecor
 
 export function createDefaultChatGenerationSettings(): ChatGenerationSettingsRecord {
   return {
+    additionalInstructions: null,
     samplerPresetId: null,
     sampling: createDefaultChatSamplingOverrides(),
     systemPrompt: null,

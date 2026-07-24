@@ -356,6 +356,7 @@ describe('FileChatRepository', () => {
     const updatedSession = await repository.updateGenericChatGenerationSettings(
       chatId,
       {
+        additionalInstructions: null,
         samplerPresetId: 'default',
         systemPrompt: 'Chat prompt.',
         sampling: {

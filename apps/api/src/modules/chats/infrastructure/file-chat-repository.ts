@@ -69,6 +69,7 @@ interface StoredChatSamplingOverrides {
 }
 
 interface StoredChatGenerationSettings {
+  additional_instructions?: unknown;
   sampler_preset_id?: unknown;
   sampling?: StoredChatSamplingOverrides;
   system_prompt?: unknown;
@@ -154,6 +155,7 @@ function parseStoredGenerationSettings(value: unknown, filePath: string): ChatGe
   const samplingSource =
     source.sampling && typeof source.sampling === 'object' && !Array.isArray(source.sampling) ? source.sampling : {};
   const parsed = ChatGenerationSettingsDtoSchema.safeParse({
+    additionalInstructions: getNullableString(source.additional_instructions),
     samplerPresetId: getNullableString(source.sampler_preset_id),
     sampling: {
       ...createDefaultChatSamplingOverrides(),
@@ -183,6 +185,7 @@ function parseStoredGenerationSettings(value: unknown, filePath: string): ChatGe
 
 function serializeGenerationSettings(settings: ChatGenerationSettingsRecord): StoredChatGenerationSettings {
   return {
+    additional_instructions: settings.additionalInstructions,
     sampler_preset_id: settings.samplerPresetId,
     sampling: {
       context_trim_strategy: settings.sampling.contextTrimStrategy,

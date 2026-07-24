@@ -48,8 +48,11 @@ export const ChatSamplingOverridesDtoSchema = z.object({
 export type ChatSamplingOverridesDto = z.infer<typeof ChatSamplingOverridesDtoSchema>;
 
 export const ChatGenerationSettingsDtoSchema = z.object({
+  /** Дописывается в конец собранного промпта; ручной промпт её вытесняет. */
+  additionalInstructions: z.string().max(20_000).nullable(),
   samplerPresetId: z.string().min(1).nullable(),
   sampling: ChatSamplingOverridesDtoSchema,
+  /** Ручной системный промпт: заменяет всю сборку целиком. */
   systemPrompt: z.string().max(20_000).nullable(),
 });
 export type ChatGenerationSettingsDto = z.infer<typeof ChatGenerationSettingsDtoSchema>;

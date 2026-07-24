@@ -72,6 +72,7 @@ const settings: SettingsOverviewResponse = {
 };
 
 const emptyChatSettings: ChatGenerationSettingsDto = {
+  additionalInstructions: null,
   samplerPresetId: null,
   sampling: {
     contextTrimStrategy: null,
