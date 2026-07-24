@@ -9,6 +9,7 @@ import { formatRelative } from '../../shared/lib/format-relative';
 import { pluralRu } from '../../shared/lib/plural';
 import { Field } from '../../shared/ui/field';
 import { PlusIcon, SparkleIcon, TrashIcon } from '../../shared/ui/icons';
+import { TemplateTextarea } from '../../shared/ui/template-textarea';
 import { generateLorebookDraft, useGenerationAvailability } from '../generation';
 import { createLorebook, updateLorebook } from './api/save-lorebook';
 import { useDeleteLorebook } from './mutations/use-delete-lorebook';
@@ -498,12 +499,11 @@ function EntryCard({ busy, entry, index, onChange, onRemove }: EntryCardProps) {
         />
       </Field>
       <Field id={`lorebook-entry-content-${index}`} label="Контекст">
-        <textarea
-          className="textarea"
+        <TemplateTextarea
           disabled={busy}
           id={`lorebook-entry-content-${index}`}
           maxLength={20_000}
-          onChange={(event) => onChange({ content: event.currentTarget.value })}
+          onChange={(next) => onChange({ content: next })}
           rows={4}
           value={entry.content}
         />

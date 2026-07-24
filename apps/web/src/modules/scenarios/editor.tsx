@@ -8,6 +8,7 @@ import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { formatRelative } from '../../shared/lib/format-relative';
 import { Field } from '../../shared/ui/field';
 import { ChatIcon, SparkleIcon, TrashIcon } from '../../shared/ui/icons';
+import { TemplateTextarea } from '../../shared/ui/template-textarea';
 import { createChat } from '../chats/api/create-chat';
 import { chatListQueryKey } from '../chats/queries/chat-list-query';
 import { generateScenarioDraft, generateScenarioFirstMessage, useGenerationAvailability } from '../generation';
@@ -358,12 +359,11 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
                 id="scenario-content"
                 label="Сцена"
               >
-                <textarea
-                  className="textarea"
+                <TemplateTextarea
                   disabled={saveMutation.isPending}
                   id="scenario-content"
                   maxLength={20_000}
-                  onChange={(event) => setField('content', event.currentTarget.value)}
+                  onChange={(next) => setField('content', next)}
                   rows={10}
                   value={form.content}
                 />
@@ -394,12 +394,11 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
                 id="scenario-first-message"
                 label="Первая фраза"
               >
-                <textarea
-                  className="textarea"
+                <TemplateTextarea
                   disabled={saveMutation.isPending || firstMessageMutation.isPending}
                   id="scenario-first-message"
                   maxLength={20_000}
-                  onChange={(event) => setField('firstMessage', event.currentTarget.value)}
+                  onChange={(next) => setField('firstMessage', next)}
                   rows={5}
                   value={form.firstMessage}
                 />

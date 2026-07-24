@@ -1100,6 +1100,34 @@ select:disabled {
   border: 1px solid transparent;
 }
 
+/* Поле с подсветкой плейсхолдеров: подложка и ввод делят метрики класса .textarea. */
+.tpl-field {
+  position: relative;
+}
+
+.tpl-field__backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: transparent;
+  background: transparent;
+  border-color: transparent;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.tpl-field__input {
+  position: relative;
+  background: transparent;
+}
+
+.tpl-mark {
+  color: transparent;
+  background: var(--accent-soft);
+  border-radius: 3px;
+}
+
 /* Действия в *звёздочках* — приглушённый курсив, как принято в ролевых чатах. */
 .bubble__action {
   color: var(--muted);

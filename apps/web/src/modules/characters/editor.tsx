@@ -9,6 +9,7 @@ import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { formatRelative } from '../../shared/lib/format-relative';
 import { Field } from '../../shared/ui/field';
 import { ChatIcon, CopyIcon, SparkleIcon, TrashIcon } from '../../shared/ui/icons';
+import { TemplateTextarea } from '../../shared/ui/template-textarea';
 import { createChat } from '../chats/api/create-chat';
 import { chatListQueryKey } from '../chats/queries/chat-list-query';
 import {
@@ -521,12 +522,11 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                   id="character-mes-example"
                   label="Примеры диалогов"
                 >
-                  <textarea
-                    className="textarea"
+                  <TemplateTextarea
                     disabled={!canEdit || saveMutation.isPending}
                     id="character-mes-example"
                     maxLength={20_000}
-                    onChange={(event) => setField('exampleDialogue', event.currentTarget.value)}
+                    onChange={(next) => setField('exampleDialogue', next)}
                     rows={5}
                     value={form.exampleDialogue}
                   />
@@ -556,12 +556,11 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                   id="character-scenario"
                   label="Сцена"
                 >
-                  <textarea
-                    className="textarea"
+                  <TemplateTextarea
                     disabled={!canEdit || saveMutation.isPending}
                     id="character-scenario"
                     maxLength={5_000}
-                    onChange={(event) => setField('scenario', event.currentTarget.value)}
+                    onChange={(next) => setField('scenario', next)}
                     rows={3}
                     value={form.scenario}
                   />
@@ -573,12 +572,11 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                   id="character-first-mes"
                   label="Первая фраза"
                 >
-                  <textarea
-                    className="textarea"
+                  <TemplateTextarea
                     disabled={!canEdit || saveMutation.isPending}
                     id="character-first-mes"
                     maxLength={20_000}
-                    onChange={(event) => setField('firstMessage', event.currentTarget.value)}
+                    onChange={(next) => setField('firstMessage', next)}
                     rows={4}
                     value={form.firstMessage}
                   />
@@ -597,12 +595,11 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                   id="character-system-prompt"
                   label="System Prompt (опционально)"
                 >
-                  <textarea
-                    className="textarea"
+                  <TemplateTextarea
                     disabled={!canEdit || saveMutation.isPending}
                     id="character-system-prompt"
                     maxLength={20_000}
-                    onChange={(event) => setField('systemPrompt', event.currentTarget.value)}
+                    onChange={(next) => setField('systemPrompt', next)}
                     rows={4}
                     value={form.systemPrompt}
                   />
