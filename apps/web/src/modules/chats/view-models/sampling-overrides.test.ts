@@ -4,10 +4,25 @@ import { describe, expect, it } from 'vitest';
 import {
   countSamplingOverrides,
   createEmptySamplingDraft,
+  type InheritedSampling,
   parseSamplingDraft,
   samplingDraftsEqual,
   toSamplingDraft,
+  toSamplingFieldViewModels,
 } from './sampling-overrides';
+
+const PRESET: InheritedSampling = {
+  contextTrimStrategy: 'trim_middle',
+  maxContextLength: 8192,
+  maxTokens: 512,
+  minP: 0.05,
+  presencePenalty: 0,
+  repeatPenalty: 1.1,
+  repeatPenaltyRange: 2048,
+  temperature: 0.8,
+  topK: 40,
+  topP: 0.95,
+};
 
 const EMPTY_OVERRIDES: ChatSamplingOverridesDto = {
   contextTrimStrategy: null,
@@ -39,6 +54,51 @@ describe('toSamplingDraft', () => {
     expect(draft.topK).toBe('40');
     expect(draft.contextTrimStrategy).toBe('trim_start');
     expect(draft.minP).toBe('');
+  });
+});
+
+describe('toSamplingFieldViewModels', () => {
+  function findRow(rows: ReturnType<typeof toSamplingFieldViewModels>, key: string) {
+    const row = rows.find((candidate) => candidate.field.key === key);
+    if (!row) {
+      throw new Error(`Field is missing from the view model: ${key}`);
+    }
+    return row;
+  }
+
+  it('shows the preset value while the chat has no override of its own', () => {
+    const rows = toSamplingFieldViewModels(createEmptySamplingDraft(), {}, PRESET);
+    const temperature = findRow(rows, 'temperature');
+
+    expect(temperature.isOverridden).toBe(false);
+    expect(temperature.value).toBe('0.8');
+    expect(temperature.inheritedText).toBe('0.8');
+  });
+
+  it('keeps the preset value visible for the undo hint after an override', () => {
+    const rows = toSamplingFieldViewModels({ ...createEmptySamplingDraft(), temperature: '1.15' }, {}, PRESET);
+    const temperature = findRow(rows, 'temperature');
+
+    expect(temperature.isOverridden).toBe(true);
+    expect(temperature.value).toBe('1.15');
+    expect(temperature.inheritedText).toBe('0.8');
+  });
+
+  it('leaves the field empty when there is nothing to inherit yet', () => {
+    const rows = toSamplingFieldViewModels(createEmptySamplingDraft(), {}, undefined);
+
+    expect(findRow(rows, 'topK').value).toBe('');
+  });
+
+  it('carries the field error next to its own row', () => {
+    const rows = toSamplingFieldViewModels(
+      { ...createEmptySamplingDraft(), topK: '12.5' },
+      { topK: 'Только целое число' },
+      PRESET,
+    );
+
+    expect(findRow(rows, 'topK').error).toBe('Только целое число');
+    expect(findRow(rows, 'topP').error).toBeUndefined();
   });
 });
 

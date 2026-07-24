@@ -13,7 +13,7 @@ export interface ComposerProps {
   onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   onContinue: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
-  onOpenLorebooks: () => void;
+  onOpenContext: () => void;
   onOpenSettings: () => void;
   onSubmit: (event?: FormEvent) => void;
   value: string;
@@ -30,7 +30,7 @@ export function Composer({
   onChange,
   onContinue,
   onKeyDown,
-  onOpenLorebooks,
+  onOpenContext,
   onOpenSettings,
   onSubmit,
   value,
@@ -51,10 +51,10 @@ export function Composer({
       />
       <div className="between">
         <div className="row gap-4">
-          <button className="btn btn--icon" onClick={onOpenLorebooks} title="Лорбуки чата" type="button">
+          <button className="btn btn--icon" onClick={onOpenContext} title="Контекст чата" type="button">
             <BookIcon size={14} />
           </button>
-          <button className="btn btn--icon" onClick={onOpenSettings} title="Настройки генерации" type="button">
+          <button className="btn btn--icon" onClick={onOpenSettings} title="Параметры модели" type="button">
             <SlidersIcon size={14} />
           </button>
           <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }} title="Длина сообщения в символах">

@@ -1,13 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import {
+  type FormEvent,
+  type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import { Topbar } from '../../../app/layout/topbar';
 import { useUiShellStore } from '../../../app/store/ui-shell';
 import { ApiError, createApiUrl } from '../../../shared/api/client';
 import { getApiErrorMessage } from '../../../shared/api/get-api-error-message';
-import { avatarColor, avatarInitial } from '../../../shared/lib/avatar';
-import { formatRelative } from '../../../shared/lib/format-relative';
 import { useDebouncedValue } from '../../../shared/lib/use-debounced-value';
 import { DownloadIcon, SparkleIcon, TrashIcon } from '../../../shared/ui/icons';
 import {
@@ -28,9 +33,9 @@ import { chatSessionQueryOptions } from '../queries/chat-session-query';
 import { toContextStats } from '../view-models/context-stats';
 import { DEFAULT_MESSAGE_FORMATTING } from '../view-models/message-content';
 import { BubbleMessage } from './bubble-message';
+import { ChatHeader } from './chat-header';
 import { Composer } from './composer';
 import { RightPanel } from './right-panel';
-import { TokenBar } from './token-bar';
 
 export interface ChatSessionScreenProps {
   chatId: string;
@@ -57,12 +62,28 @@ function describeGenerateTitleError(error: unknown): string | null {
 export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const [draftMessage, setDraftMessage] = useState('');
   const debouncedDraftMessage = useDebouncedValue(draftMessage, 400);
-  const openSection = useUiShellStore((state) => state.chatRightPanelSection);
-  const setOpenSection = useUiShellStore((state) => state.setChatRightPanelSection);
+  const panelTab = useUiShellStore((state) => state.chatRightPanelTab);
+  const setPanelTab = useUiShellStore((state) => state.setChatRightPanelTab);
   const isPanelOpen = useUiShellStore((state) => state.chatRightPanelOpen);
   const closePanel = useUiShellStore((state) => state.closeChatRightPanel);
-  const openPanelSection = useUiShellStore((state) => state.openChatRightPanelSection);
+  const openPanelTab = useUiShellStore((state) => state.openChatRightPanelTab);
+  const panelWidth = useUiShellStore((state) => state.chatPanelWidth);
+  const setPanelWidth = useUiShellStore((state) => state.setChatPanelWidth);
   const navigate = useNavigate();
+
+  // Тянем за левый край панели: ширина считается от правого края окна.
+  const startPanelResize = (event: ReactPointerEvent<HTMLElement>) => {
+    event.preventDefault();
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      setPanelWidth(window.innerWidth - moveEvent.clientX);
+    };
+    const onPointerUp = () => {
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+    };
+    document.addEventListener('pointermove', onPointerMove);
+    document.addEventListener('pointerup', onPointerUp);
+  };
 
   const chatSessionQuery = useQuery(chatSessionQueryOptions(chatId));
   const generationReadinessQuery = useQuery(generationReadinessQueryOptions());
@@ -81,12 +102,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
     },
   });
   const [confirmDeleteChat, setConfirmDeleteChat] = useState(false);
-  const [renamingTitle, setRenamingTitle] = useState<string | null>(null);
-  const renameChatMutation = useUpdateChatTitle(chatId, {
-    onSuccess: () => {
-      setRenamingTitle(null);
-    },
-  });
+  const renameChatMutation = useUpdateChatTitle(chatId);
   const chatReplyGeneration = useChatReplyGeneration(chatId);
   const generateTitleMutation = useGenerateChatTitle(chatId);
   const generateFirstMessageMutation = useGenerateFirstMessage(chatId);
@@ -178,18 +194,6 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
     ? getApiErrorMessage(generateFirstMessageMutation.error, 'Не удалось сгенерировать первое сообщение.')
     : null;
 
-  const commitRename = () => {
-    if (renamingTitle === null || renameChatMutation.isPending) {
-      return;
-    }
-    const value = renamingTitle.trim();
-    if (value.length > 0 && value !== session.chat.title) {
-      renameChatMutation.mutate({ title: value });
-    } else {
-      setRenamingTitle(null);
-    }
-  };
-
   const blockReason = generationAvailability.blockReason;
   const isStreaming = Boolean(chatReplyGeneration.activeJob);
   const canSend =
@@ -255,6 +259,10 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const messageCount = session.messages.length;
   const lastUpdated = session.chat.updatedAt;
   const tokenStats = toContextStats(promptPreviewQuery.data);
+  // Панель показывает собранный системный промпт как заготовку для ручной правки.
+  const assembledPrompt = promptPreviewQuery.data?.request.messages.find(
+    (message) => message.role === 'system',
+  )?.content;
 
   const renderTranscriptMessages = () => {
     const lastAssistantId = [...session.messages].reverse().find((m) => m.role === 'assistant')?.id;
@@ -314,7 +322,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: isPanelOpen ? 'minmax(0, 1fr) 320px' : 'minmax(0, 1fr)',
+        gridTemplateColumns: isPanelOpen ? `minmax(0, 1fr) ${panelWidth}px` : 'minmax(0, 1fr)',
         minHeight: 0,
         overflow: 'hidden',
       }}
@@ -323,7 +331,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
         <Topbar
           crumbs={[
             { label: 'Чаты', to: '/chat' },
-            { label: `${characterDisplay} · ${session.chat.title}`, strong: true },
+            { label: characterDisplay, strong: true },
           ]}
           actions={
             <>
@@ -376,108 +384,24 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
             overflow: 'hidden',
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              padding: '12px 22px',
-              borderBottom: '1px solid var(--hairline)',
-            }}
-          >
-            <div
-              className="avatar avatar--36"
-              style={
-                session.characterAvatarUrl
-                  ? {
-                      background: `center / cover no-repeat url("${createApiUrl(session.characterAvatarUrl)}")`,
-                      border: 0,
-                    }
-                  : { background: avatarColor(characterDisplay), color: 'white', border: 0 }
+          <ChatHeader
+            avatarUrl={session.characterAvatarUrl}
+            canGenerateTitle={!isStreaming && !generationAvailability.isBlocked && messageCount > 0}
+            characterName={characterDisplay}
+            errorMessage={renameChatErrorMessage ?? generateTitleErrorMessage}
+            isGeneratingTitle={generateTitleMutation.isPending}
+            isRenaming={renameChatMutation.isPending}
+            messageCount={messageCount}
+            onGenerateTitle={() => {
+              if (!generateTitleMutation.isPending) {
+                generateTitleMutation.mutate();
               }
-            >
-              {session.characterAvatarUrl ? null : avatarInitial(characterDisplay)}
-            </div>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontWeight: 600, fontSize: 'var(--fz-md)' }}>{characterDisplay}</div>
-              <div className="muted row gap-6" style={{ fontSize: 'var(--fz-xs)', alignItems: 'center' }}>
-                {renamingTitle !== null ? (
-                  <input
-                    autoFocus
-                    className="input"
-                    disabled={renameChatMutation.isPending}
-                    onBlur={commitRename}
-                    onChange={(event) => setRenamingTitle(event.currentTarget.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault();
-                        commitRename();
-                      } else if (event.key === 'Escape') {
-                        event.preventDefault();
-                        setRenamingTitle(null);
-                      }
-                    }}
-                    style={{ height: 24, padding: '2px 6px', fontSize: 'var(--fz-xs)', maxWidth: 320 }}
-                    value={renamingTitle}
-                  />
-                ) : (
-                  <button
-                    disabled={generateTitleMutation.isPending}
-                    onClick={() => setRenamingTitle(session.chat.title)}
-                    style={{
-                      background: 'transparent',
-                      border: 0,
-                      color: 'inherit',
-                      cursor: 'text',
-                      font: 'inherit',
-                      padding: 0,
-                      textAlign: 'left',
-                    }}
-                    title="Переименовать чат"
-                    type="button"
-                  >
-                    {session.chat.title}
-                  </button>
-                )}
-                {!isStreaming && renamingTitle === null ? (
-                  <button
-                    className="btn"
-                    disabled={generateTitleMutation.isPending || generationAvailability.isBlocked || messageCount === 0}
-                    onClick={() => {
-                      if (!generateTitleMutation.isPending) {
-                        generateTitleMutation.mutate();
-                      }
-                    }}
-                    style={{ fontSize: 'var(--fz-xs)', height: 24, padding: '2px 8px' }}
-                    title="Сгенерировать название чата по переписке"
-                    type="button"
-                  >
-                    <SparkleIcon size={12} />{' '}
-                    {generateTitleMutation.isPending ? 'Генерируем…' : 'Сгенерировать название'}
-                  </button>
-                ) : null}
-                <span>
-                  · {messageCount} сообщ. · ред. {formatRelative(lastUpdated)}
-                </span>
-                {renameChatErrorMessage ? (
-                  <span style={{ color: 'var(--danger)' }}>{renameChatErrorMessage}</span>
-                ) : null}
-                {generateTitleErrorMessage ? (
-                  <span style={{ color: 'var(--danger)' }}>{generateTitleErrorMessage}</span>
-                ) : null}
-              </div>
-            </div>
-            {tokenStats ? (
-              <div className="row gap-12" style={{ minWidth: 240 }}>
-                <TokenBar
-                  approximate={tokenStats.tokenCountMethod === 'approximate'}
-                  fill={tokenStats.totalTokens}
-                  label={`${tokenStats.totalTokens.toLocaleString('ru-RU')} / ${tokenStats.contextWindow.toLocaleString('ru-RU')}`}
-                  total={tokenStats.contextWindow}
-                />
-              </div>
-            ) : null}
-          </div>
+            }}
+            onRename={(title) => renameChatMutation.mutate({ title })}
+            stats={tokenStats}
+            title={session.chat.title}
+            updatedAt={lastUpdated}
+          />
           <div
             onScroll={handleTranscriptScroll}
             ref={transcriptRef}
@@ -579,8 +503,8 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                 onAnswer={() => void onAnswer()}
                 onContinue={() => void onContinue()}
                 onKeyDown={onComposerKeyDown}
-                onOpenLorebooks={() => openPanelSection('lorebooks')}
-                onOpenSettings={() => openPanelSection('settings')}
+                onOpenContext={() => openPanelTab('context')}
+                onOpenSettings={() => openPanelTab('model')}
                 onSubmit={onSubmit}
                 value={draftMessage}
               />
@@ -590,20 +514,21 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
       </main>
       {isPanelOpen ? (
         <RightPanel
+          assembledPrompt={assembledPrompt}
           characterAvatarUrl={session.characterAvatarUrl}
           characterId={session.characterId}
           characterName={session.characterName}
           chatId={chatId}
-          contextStats={tokenStats}
           effectiveSampling={promptPreviewQuery.data?.effectiveSettings.sampling}
           generationSettings={session.generationSettings}
           lorebookIds={session.lorebookIds}
+          modelBindingPresetId={promptPreviewQuery.data?.effectiveSettings.modelBindingPresetId ?? null}
           onClose={closePanel}
-          onSectionToggle={(id) => setOpenSection(openSection === id ? null : id)}
-          openSection={openSection}
-          scenarioId={session.scenarioId}
+          onResizeStart={startPanelResize}
+          onTabChange={setPanelTab}
           scenarioName={session.scenarioName}
           settingsOverview={settingsOverviewQuery.data}
+          tab={panelTab}
         />
       ) : null}
     </div>

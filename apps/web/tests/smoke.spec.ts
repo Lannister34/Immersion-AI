@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
 const smokeDataRoot = process.env.IMMERSION_SMOKE_DATA_ROOT;
 
@@ -15,6 +15,11 @@ const smokeChatsPath = path.join(smokeDataRoot, 'chats');
 let baselineUserSettings = '';
 
 test.describe.configure({ mode: 'serial' });
+
+/** Название чата — заголовок экрана; рядом с ним живёт кнопка переименования. */
+function chatTitle(page: Page) {
+  return page.getByRole('heading', { level: 1 });
+}
 
 async function resetSmokeData() {
   await fs.writeFile(smokeUserSettingsPath, baselineUserSettings, 'utf8');
@@ -128,7 +133,7 @@ test('imports a chat from a JSONL export file and opens the new session', async 
   expect((await importResponse).status()).toBe(201);
 
   await expect(page).toHaveURL(/\/chat\/[A-Za-z0-9_-]+$/);
-  await expect(page.locator('button[title="Переименовать чат"]')).toContainText('Импортированный смоук-чат');
+  await expect(chatTitle(page)).toHaveText('Импортированный смоук-чат');
   await expect(page.getByText('Привет из файла')).toBeVisible();
   await expect(page.getByText('Ответ из файла')).toBeVisible();
 });
@@ -154,8 +159,45 @@ test('opens a freshly created chat from the list, renames it inline, and surface
   );
   await renameInput.press('Enter');
   await putRename;
-  await expect(renameButton).toContainText('Renamed smoke chat');
+  await expect(chatTitle(page)).toHaveText('Renamed smoke chat');
 
   await page.reload();
-  await expect(page.locator('button[title="Переименовать чат"]')).toContainText('Renamed smoke chat');
+  await expect(chatTitle(page)).toHaveText('Renamed smoke chat');
+});
+
+test('overrides a model parameter and chat instructions from the settings panel', async ({ page }) => {
+  await page.goto('/chat');
+
+  await expect(page.getByRole('heading', { name: 'Чаты' })).toBeVisible();
+  await page.getByRole('button', { name: /Свободный чат/i }).click();
+  await expect(page).toHaveURL(/\/chat\/[A-Za-z0-9_-]+$/);
+
+  const resetButton = page.getByRole('button', { name: 'Сбросить изменения' });
+  await expect(resetButton).toBeHidden();
+
+  const savedTemperature = page.waitForResponse(
+    (response) => response.url().includes('/generation-settings') && response.request().method() === 'PUT',
+  );
+  await page.locator('#chat-sampling-temperature').fill('1.25');
+  await savedTemperature;
+  await expect(resetButton).toBeVisible();
+
+  const clearedTemperature = page.waitForResponse(
+    (response) => response.url().includes('/generation-settings') && response.request().method() === 'PUT',
+  );
+  await resetButton.click();
+  await clearedTemperature;
+  await expect(resetButton).toBeHidden();
+
+  await page.getByRole('button', { name: 'Контекст', exact: true }).click();
+  const savedInstructions = page.waitForResponse(
+    (response) => response.url().includes('/generation-settings') && response.request().method() === 'PUT',
+  );
+  await page.locator('#chat-additional-instructions').fill('Отвечай коротко.');
+  await savedInstructions;
+
+  // После перезагрузки панель открывается на «Модели»: вкладка — состояние сеанса, а не URL.
+  await page.reload();
+  await page.getByRole('button', { name: 'Контекст', exact: true }).click();
+  await expect(page.locator('#chat-additional-instructions')).toHaveValue('Отвечай коротко.');
 });

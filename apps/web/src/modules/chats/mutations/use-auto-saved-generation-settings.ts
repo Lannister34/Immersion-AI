@@ -21,23 +21,29 @@ const TYPING_DELAY_MS = 500;
 const RETRY_WHILE_IN_FLIGHT_MS = 200;
 
 export interface GenerationSettingsDraft {
+  additionalInstructions: string;
   samplerPresetId: string;
   sampling: SamplingOverridesDraft;
+  /** Пустая строка — промпт собирается автоматически. */
   systemPrompt: string;
 }
 
 export interface AutoSavedGenerationSettings {
-  clearSamplingOverrides: () => void;
+  /** После сохранения значений в новый набор чат просто ссылается на него. */
+  adoptSamplerPreset: (presetId: string) => void;
   draft: GenerationSettingsDraft;
   errors: SamplingOverrideErrors;
+  resetModelOverrides: () => void;
   saveError: string | null;
+  setAdditionalInstructions: (value: string) => void;
   setSampling: (key: SamplingOverrideKey, value: string, options?: { immediate?: boolean }) => void;
   setSamplerPresetId: (presetId: string) => void;
-  setSystemPrompt: (value: string) => void;
+  setSystemPrompt: (value: string, options?: { immediate?: boolean }) => void;
 }
 
 function toDraft(generationSettings: ChatGenerationSettingsDto): GenerationSettingsDraft {
   return {
+    additionalInstructions: generationSettings.additionalInstructions ?? '',
     samplerPresetId: generationSettings.samplerPresetId ?? INHERIT_PRESET_VALUE,
     sampling: toSamplingDraft(generationSettings.sampling),
     systemPrompt: generationSettings.systemPrompt ?? '',
@@ -46,6 +52,7 @@ function toDraft(generationSettings: ChatGenerationSettingsDto): GenerationSetti
 
 function draftsEqual(left: GenerationSettingsDraft, right: GenerationSettingsDraft): boolean {
   return (
+    left.additionalInstructions === right.additionalInstructions &&
     left.samplerPresetId === right.samplerPresetId &&
     left.systemPrompt === right.systemPrompt &&
     samplingDraftsEqual(left.sampling, right.sampling)
@@ -54,7 +61,7 @@ function draftsEqual(left: GenerationSettingsDraft, right: GenerationSettingsDra
 
 /**
  * Черновик настроек генерации чата с сохранением без кнопки: изменение уходит
- * на сервер само. Драфт один на всю панель — обе секции пишут в одну и ту же
+ * на сервер само. Драфт один на всю панель — обе вкладки пишут в одну и ту же
  * настройку, и раздельные черновики затирали бы друг друга.
  */
 export function useAutoSavedGenerationSettings(
@@ -110,6 +117,7 @@ export function useAutoSavedGenerationSettings(
     inFlightRef.current = true;
     mutation.mutate(
       {
+        additionalInstructions: next.additionalInstructions.trim().length > 0 ? next.additionalInstructions : null,
         samplerPresetId: next.samplerPresetId === INHERIT_PRESET_VALUE ? null : next.samplerPresetId,
         sampling: parsedSampling.overrides,
         systemPrompt: next.systemPrompt.trim().length > 0 ? next.systemPrompt : null,
@@ -140,12 +148,23 @@ export function useAutoSavedGenerationSettings(
   };
 
   return {
-    clearSamplingOverrides: () => {
-      schedule({ ...draft, sampling: createEmptySamplingDraft() }, IMMEDIATE_DELAY_MS);
+    adoptSamplerPreset: (presetId) => {
+      // Привязка и очистка полей уходят одним запросом: иначе между двумя
+      // сохранениями чат на мгновение остался бы со старыми переопределениями.
+      schedule({ ...draft, samplerPresetId: presetId, sampling: createEmptySamplingDraft() }, IMMEDIATE_DELAY_MS);
     },
     draft,
     errors,
+    resetModelOverrides: () => {
+      schedule(
+        { ...draft, samplerPresetId: INHERIT_PRESET_VALUE, sampling: createEmptySamplingDraft() },
+        IMMEDIATE_DELAY_MS,
+      );
+    },
     saveError: mutation.error ? getApiErrorMessage(mutation.error, 'Не удалось сохранить настройки чата.') : null,
+    setAdditionalInstructions: (value) => {
+      schedule({ ...draft, additionalInstructions: value }, TYPING_DELAY_MS);
+    },
     setSampling: (key, value, options) => {
       schedule(
         { ...draft, sampling: { ...draft.sampling, [key]: value } },
@@ -155,8 +174,8 @@ export function useAutoSavedGenerationSettings(
     setSamplerPresetId: (presetId) => {
       schedule({ ...draft, samplerPresetId: presetId }, IMMEDIATE_DELAY_MS);
     },
-    setSystemPrompt: (value) => {
-      schedule({ ...draft, systemPrompt: value }, TYPING_DELAY_MS);
+    setSystemPrompt: (value, options) => {
+      schedule({ ...draft, systemPrompt: value }, options?.immediate ? IMMEDIATE_DELAY_MS : TYPING_DELAY_MS);
     },
   };
 }

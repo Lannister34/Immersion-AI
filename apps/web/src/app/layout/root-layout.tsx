@@ -62,7 +62,6 @@ export function RootLayout() {
     ? {
         initial: userName.slice(0, 1).toUpperCase(),
         name: userName,
-        hint: settingsQuery.data?.profile.userPersona ? 'persona задана' : 'persona не задана',
       }
     : undefined;
 

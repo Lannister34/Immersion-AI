@@ -9,6 +9,7 @@ import { SamplerCard } from './components/sampler-card';
 import { settingsOverviewQueryOptions } from './queries/settings-overview-query';
 
 export { getSettingsOverview } from './api/get-settings-overview';
+export { useCreateSamplerPreset } from './mutations/use-sampler-preset-mutations';
 export { settingsOverviewQueryKey, settingsOverviewQueryOptions } from './queries/settings-overview-query';
 
 interface SettingsSection {

@@ -5,6 +5,7 @@ import {
   BookIcon,
   ChatIcon,
   ChevronRightIcon,
+  EditIcon,
   type IconProps,
   ServerIcon,
   SettingsIcon,
@@ -23,7 +24,6 @@ interface RuntimeBadge {
 interface PersonaBadge {
   initial: string;
   name: string;
-  hint?: string | undefined;
 }
 
 type SidebarLinkPath = '/chat' | '/characters' | '/scenarios' | '/lorebooks' | '/settings' | '/server';
@@ -63,7 +63,7 @@ export function Sidebar({ runtime, persona, workspaceCounts }: SidebarProps) {
   return (
     <aside className="sb">
       <div className="sb__brand">
-        <div className="sb__logo">IA</div>
+        <div className="sb__logo">AI</div>
         <div className="sb__brand-name">Immersion</div>
         <span className="sb__brand-meta">v0.4</span>
       </div>
@@ -94,15 +94,16 @@ export function Sidebar({ runtime, persona, workspaceCounts }: SidebarProps) {
           <ChevronRightIcon size={14} />
         </Link>
         {persona ? (
-          <div className="sb__user">
+          <Link className="sb__user" title="Открыть настройки профиля" to="/settings">
             <div className="sb__avatar">{persona.initial}</div>
-            <div className="truncate">
-              <div style={{ fontWeight: 600, fontSize: 'var(--fz-sm)' }}>{persona.name}</div>
-              {persona.hint ? (
-                <div style={{ color: 'var(--muted-dim)', fontSize: 'var(--fz-2xs)' }}>{persona.hint}</div>
-              ) : null}
+            <div className="truncate" style={{ flex: 1, minWidth: 0 }}>
+              <div className="truncate" style={{ fontWeight: 600, fontSize: 'var(--fz-sm)' }}>
+                {persona.name}
+              </div>
+              <div style={{ color: 'var(--muted-dim)', fontSize: 'var(--fz-2xs)' }}>ваш профиль</div>
             </div>
-          </div>
+            <EditIcon size={13} />
+          </Link>
         ) : null}
       </div>
     </aside>

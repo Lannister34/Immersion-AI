@@ -12,83 +12,106 @@ export type SamplingOverridesDraft = Record<SamplingOverrideKey, string>;
 
 export type SamplingOverrideErrors = Partial<Record<SamplingOverrideKey, string>>;
 
-export interface SamplingSliderRange {
-  max: number;
-  min: number;
-  step: number;
-}
-
 export interface NumericSamplingField {
+  /** Одна строка по-русски: что параметр делает с ответом. */
+  hint: string;
   /** Только целые значения. */
   integer: boolean;
   key: NumericSamplingKey;
-  /** Технические имена совпадают с карточкой пресета в настройках. */
+  /** Человеческое имя; технические top_p и rep_pen в интерфейс не выносим. */
   label: string;
   /** Нижняя граница контракта; null — ограничения нет. */
   min: number | null;
-  /** Практичный диапазон ползунка: ввод числом по-прежнему шире. */
-  slider: SamplingSliderRange;
   step: number;
 }
 
 export const NUMERIC_SAMPLING_FIELDS: NumericSamplingField[] = [
   {
+    hint: 'Насколько модель уходит от самого вероятного продолжения',
     integer: false,
     key: 'temperature',
-    label: 'temperature',
+    label: 'Temperature',
     min: 0,
-    slider: { max: 2, min: 0, step: 0.01 },
     step: 0.05,
   },
-  { integer: false, key: 'topP', label: 'top_p', min: 0, slider: { max: 1, min: 0, step: 0.01 }, step: 0.01 },
-  { integer: true, key: 'topK', label: 'top_k', min: 0, slider: { max: 200, min: 0, step: 1 }, step: 1 },
-  { integer: false, key: 'minP', label: 'min_p', min: 0, slider: { max: 1, min: 0, step: 0.005 }, step: 0.01 },
   {
+    hint: 'Берёт только самые вероятные слова — до этой суммы вероятностей',
     integer: false,
-    key: 'repeatPenalty',
-    label: 'rep_pen',
+    key: 'topP',
+    label: 'Top P',
     min: 0,
-    slider: { max: 2, min: 0, step: 0.01 },
     step: 0.01,
   },
   {
+    hint: 'Не больше такого числа слов-кандидатов на каждом шаге',
+    integer: true,
+    key: 'topK',
+    label: 'Top K',
+    min: 0,
+    step: 1,
+  },
+  {
+    hint: 'Отбрасывает слова слабее этой доли от самого вероятного',
+    integer: false,
+    key: 'minP',
+    label: 'Min P',
+    min: 0,
+    step: 0.01,
+  },
+  {
+    hint: 'Насколько сильно наказывать за повтор уже сказанного',
+    integer: false,
+    key: 'repeatPenalty',
+    label: 'Repeat Penalty',
+    min: 0,
+    step: 0.01,
+  },
+  {
+    hint: 'Сколько последних токенов проверять на повторы',
     integer: true,
     key: 'repeatPenaltyRange',
-    label: 'rep_pen_range',
+    label: 'Repeat Range',
     min: 0,
-    slider: { max: 8192, min: 0, step: 64 },
     step: 32,
   },
   {
+    hint: 'Наказывать за возврат к уже упомянутым темам',
     integer: false,
     key: 'presencePenalty',
-    label: 'presence_penalty',
+    label: 'Presence Penalty',
     min: null,
-    slider: { max: 2, min: -2, step: 0.05 },
     step: 0.05,
   },
-  { integer: true, key: 'maxTokens', label: 'max_length', min: 1, slider: { max: 4096, min: 16, step: 16 }, step: 16 },
   {
+    hint: 'Предел длины одного ответа, в токенах',
+    integer: true,
+    key: 'maxTokens',
+    label: 'Max Length',
+    min: 1,
+    step: 16,
+  },
+  {
+    hint: 'Сколько токенов истории уходит в модель',
     integer: true,
     key: 'maxContextLength',
-    label: 'context',
+    label: 'Context',
     min: 1,
-    slider: { max: 32_768, min: 512, step: 512 },
     step: 512,
   },
 ];
 
-/** Ползунок должен дотягиваться до текущего значения, даже если оно вне обычного диапазона. */
-export function resolveSliderRange(field: NumericSamplingField, value: number): SamplingSliderRange {
-  if (!Number.isFinite(value)) {
-    return field.slider;
-  }
+/** Стратегия обрезки живёт рядом с числовыми полями, но выбирается списком. */
+export const CONTEXT_TRIM_FIELD = {
+  hint: 'Что выбросить, когда история не влезает в окно',
+  label: 'Обрезка контекста',
+  options: [
+    { label: 'обрезать середину', value: 'trim_middle' },
+    { label: 'обрезать начало', value: 'trim_start' },
+  ],
+} as const;
 
-  return {
-    max: Math.max(field.slider.max, value),
-    min: Math.min(field.slider.min, value),
-    step: field.slider.step,
-  };
+export function describeContextTrimStrategy(value: string): string {
+  return CONTEXT_TRIM_FIELD.options.find((option) => option.value === value)?.label ?? value;
 }
 
 export const SAMPLING_OVERRIDE_KEYS: SamplingOverrideKey[] = [
@@ -123,6 +146,45 @@ export function samplingDraftsEqual(left: SamplingOverridesDraft, right: Samplin
 
 export function countSamplingOverrides(draft: SamplingOverridesDraft): number {
   return SAMPLING_OVERRIDE_KEYS.filter((key) => draft[key].trim().length > 0).length;
+}
+
+export interface SamplingFieldViewModel {
+  error: string | undefined;
+  field: NumericSamplingField;
+  /** Значение из пресета — для подписи кнопки возврата. */
+  inheritedText: string;
+  isOverridden: boolean;
+  /** То, что стоит в поле: своё значение чата либо унаследованное. */
+  value: string;
+}
+
+function formatInherited(value: number | undefined): string {
+  return value === undefined ? '' : String(value);
+}
+
+/**
+ * Поле всегда показывает действующее значение: пока чат ничего не менял — из
+ * пресета, дальше — своё. Отдельного «включить параметр» нет, правка сама
+ * создаёт переопределение.
+ */
+export function toSamplingFieldViewModels(
+  draft: SamplingOverridesDraft,
+  errors: SamplingOverrideErrors,
+  inherited: InheritedSampling | undefined,
+): SamplingFieldViewModel[] {
+  return NUMERIC_SAMPLING_FIELDS.map((field) => {
+    const raw = draft[field.key];
+    const isOverridden = raw.trim().length > 0;
+    const inheritedText = formatInherited(inherited?.[field.key]);
+
+    return {
+      error: errors[field.key],
+      field,
+      inheritedText,
+      isOverridden,
+      value: isOverridden ? raw : inheritedText,
+    };
+  });
 }
 
 export interface SamplingDraftParseResult {

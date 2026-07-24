@@ -207,7 +207,7 @@ select:disabled {
   place-items: center;
   color: var(--accent-fg);
   font-weight: 700;
-  font-size: 12px;
+  font-size: var(--fz-xs);
   letter-spacing: 0.02em;
   box-shadow:
     0 0 0 1px oklch(0 0 0 / 0.4),
@@ -1021,7 +1021,7 @@ select:disabled {
   border-left: 1px solid var(--hairline);
   background: var(--bg-2);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
@@ -1035,52 +1035,263 @@ select:disabled {
   border-bottom: 1px solid var(--hairline);
 }
 
+.rp__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.rp__tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--fz-sm);
+  font-weight: 600;
+  transition:
+    background 120ms ease-out,
+    color 120ms ease-out;
+}
+
+.rp__tab:hover {
+  color: var(--text-1);
+}
+
+.rp__tab[data-active="true"] {
+  background: var(--surface-2);
+  border-color: var(--hairline);
+  color: var(--text);
+}
+
 .rp__body {
   overflow: auto;
   display: grid;
   align-content: start;
 }
 
-.rp__section {
+/* Панель тянется за левый край; ручка живёт в шапке панели. */
+.rp__resize {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 2px;
+  color: var(--muted-dim);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.rp__resize span {
+  display: block;
+  width: 1px;
+  height: 12px;
+  background: currentColor;
+}
+
+.rp__resize:hover {
+  color: var(--text-1);
+}
+
+/* Строка параметра модели: имя с подсказкой, значение, возврат к пресету. */
+.rp-param {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 66px 22px;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 0;
+  border-bottom: 1px solid oklch(0.3 0.006 270 / 0.35);
+}
+
+.rp-param--wide {
+  grid-template-columns: minmax(0, 1fr) 148px 22px;
+  border-bottom: 0;
+}
+
+.rp-param__name {
+  font-size: var(--fz-sm);
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.rp-param[data-overridden="true"] .rp-param__name {
+  color: var(--text);
+}
+
+.rp-param__hint {
+  font-size: var(--fz-2xs);
+  line-height: 1.4;
+  color: var(--muted-dim);
+}
+
+.rp-param__value {
+  width: 100%;
+  padding: 3px 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fz-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.rp-param__value:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.rp-param[data-overridden="true"] .rp-param__value {
+  background: var(--surface-2);
+  border-color: oklch(0.72 0.18 295 / 0.55);
+  color: var(--text);
+}
+
+.rp-param__select {
+  width: 148px;
+  padding: 4px 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--fz-xs);
+}
+
+.rp-param[data-overridden="true"] .rp-param__select {
+  background: var(--surface-2);
+  border-color: oklch(0.72 0.18 295 / 0.55);
+  color: var(--text);
+}
+
+.rp-param__undo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-xs);
+  color: var(--muted-dim);
+  visibility: hidden;
+}
+
+.rp-param[data-overridden="true"] .rp-param__undo {
+  visibility: visible;
+}
+
+.rp-param__undo:hover {
+  background: var(--surface);
+  color: var(--text-1);
+}
+
+/* Точка «в этом чате есть своё значение». */
+.mark-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+}
+
+/* Привязки чата: персонаж, сценарий, лорбуки. */
+.rp-binding {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
   border-bottom: 1px solid var(--hairline);
 }
 
-.rp__section-toggle {
+.rp-binding:last-child {
+  border-bottom: 0;
+}
+
+.rp-binding__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--muted);
+  flex: none;
+}
+
+/* Раскрывающийся блок итогового промпта. */
+.disclosure {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 12px 14px;
+  padding: 9px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
   background: transparent;
-  border: 0;
-  cursor: pointer;
-  color: var(--text);
-  font-size: var(--fz-sm);
-  font-weight: 600;
-  transition: background 120ms ease-out;
+  text-align: left;
+  transition: border-color 120ms ease-out;
 }
 
-.rp__section-toggle:hover {
+.disclosure:hover {
   background: var(--surface);
 }
 
-.rp__section-toggle .chevron {
+.disclosure[data-overridden="true"] {
+  border-color: oklch(0.72 0.18 295 / 0.55);
+}
+
+.disclosure .chevron {
   color: var(--muted);
-  transition:
-    transform 0.15s,
-    color 0.15s;
+  transition: transform 0.15s;
+  flex: none;
 }
 
-.rp__section-toggle:hover .chevron {
-  color: var(--text-1);
-}
-
-.rp__section[data-open="true"] .chevron {
+.disclosure[data-open="true"] .chevron {
   transform: rotate(90deg);
 }
 
-.rp__section-body {
-  padding: 0 14px 14px;
+/* Кнопка-счётчик контекста в шапке чата и её всплывающая статистика. */
+.tokenbtn {
+  display: grid;
+  grid-template-columns: 200px auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.tokenbtn:hover {
+  border-color: var(--hairline-strong);
+}
+
+.tokenbtn .chevron {
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+
+.tokenbtn[data-open="true"] .chevron {
+  transform: rotate(180deg);
+}
+
+.chat-stats {
+  position: absolute;
+  top: 58px;
+  right: 22px;
+  z-index: 5;
+  width: 264px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
 }
 
 /* Bubbles */
