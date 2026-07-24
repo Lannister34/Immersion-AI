@@ -474,7 +474,9 @@ function CharactersListTable({ characters }: CharactersListTableProps) {
             <th>Персонаж</th>
             <th>Чаты</th>
             <th>Изменён</th>
-            <th />
+            {/* Ширина фиксирована под самое широкое состояние: подтверждение
+                удаления не должно двигать остальные колонки. */}
+            <th style={{ width: 200 }} />
           </tr>
         </thead>
         <tbody>
@@ -543,7 +545,7 @@ function CharacterListRow({ character }: CharacterCardProps) {
       <td className="muted mono tnum" style={{ fontSize: 'var(--fz-xs)' }}>
         {formatRelative(character.updatedAt)}
       </td>
-      <td style={{ textAlign: 'right' }}>
+      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
         <div className="row gap-4" style={{ justifyContent: 'flex-end' }}>
           <button
             className="btn btn--xs btn--primary"
