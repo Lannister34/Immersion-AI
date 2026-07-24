@@ -8,6 +8,7 @@ import { useDebouncedValue } from '../../../shared/lib/use-debounced-value';
 import { BranchIcon, CopyIcon, EditIcon, RefreshIcon, TrashIcon } from '../../../shared/ui/icons';
 import { chatReplyPromptPreviewQueryOptions } from '../../generation';
 import { toContextStats } from '../view-models/context-stats';
+import { renderMessageContent } from '../view-models/message-content';
 
 export interface BubbleMessageProps {
   branchTitleDefault: string;
@@ -250,7 +251,7 @@ export function BubbleMessage({
             </div>
           </div>
         ) : (
-          <div className={isUser ? 'bubble bubble--user' : 'bubble'}>{text}</div>
+          <div className={isUser ? 'bubble bubble--user' : 'bubble'}>{renderMessageContent(text)}</div>
         )}
         {mode === 'view' ? (
           <div className="row gap-4 bubble-row__actions" style={{ justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
