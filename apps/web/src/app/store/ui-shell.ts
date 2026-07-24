@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type ChatRightPanelSection = 'settings' | 'character' | 'lorebooks' | 'context' | null;
+export type ChatRightPanelSection = 'settings' | 'sampler' | 'character' | 'lorebooks' | 'context' | null;
 
 interface UiShellState {
   chatRightPanelOpen: boolean;

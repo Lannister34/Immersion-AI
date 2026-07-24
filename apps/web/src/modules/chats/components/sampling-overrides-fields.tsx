@@ -14,7 +14,8 @@ export interface SamplingOverridesFieldsProps {
   errors: SamplingOverrideErrors;
   /** Значения пресета: показываем их, пока чат не переопределил поле. */
   inherited: InheritedSampling | undefined;
-  onChange: (key: SamplingOverrideKey, value: string) => void;
+  /** immediate — для дискретных действий: их не нужно ждать после паузы. */
+  onChange: (key: SamplingOverrideKey, value: string, options?: { immediate?: boolean }) => void;
 }
 
 function OverrideDot() {
@@ -51,7 +52,7 @@ export function SamplingOverridesFields({
     const handleToggle = (enabled: boolean) => {
       // Включение стартует от значения, которое действует сейчас, — правка
       // всегда начинается с понятной точки, а не с нуля.
-      onChange(field.key, enabled ? String(inheritedValue ?? field.slider.min) : '');
+      onChange(field.key, enabled ? String(inheritedValue ?? field.slider.min) : '', { immediate: true });
     };
 
     return (
@@ -126,6 +127,7 @@ export function SamplingOverridesFields({
             onChange(
               'contextTrimStrategy',
               event.currentTarget.checked ? (inherited?.contextTrimStrategy ?? 'trim_middle') : '',
+              { immediate: true },
             )
           }
           type="checkbox"
@@ -149,7 +151,7 @@ export function SamplingOverridesFields({
           disabled={disabled || !isTrimOverridden}
           onChange={(event) => {
             const { value } = event.currentTarget;
-            onChange('contextTrimStrategy', value);
+            onChange('contextTrimStrategy', value, { immediate: true });
           }}
           style={{ fontSize: 'var(--fz-2xs)', padding: '2px 4px', width: 110 }}
           value={isTrimOverridden ? draft.contextTrimStrategy : (inherited?.contextTrimStrategy ?? 'trim_middle')}
