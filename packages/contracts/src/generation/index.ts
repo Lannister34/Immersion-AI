@@ -58,9 +58,17 @@ export const ContinueChatReplyCommandSchema = z.object({
 });
 export type ContinueChatReplyCommand = z.infer<typeof ContinueChatReplyCommandSchema>;
 
+/** Ответ на уже существующее последнее сообщение пользователя: новое сообщение не добавляется. */
+export const AnswerChatReplyCommandSchema = z.object({
+  chatId: ChatIdSchema,
+  mode: z.literal('answer'),
+});
+export type AnswerChatReplyCommand = z.infer<typeof AnswerChatReplyCommandSchema>;
+
 export const StartChatReplyGenerationCommandSchema = z.union([
   StartChatReplyCommandSchema,
   ContinueChatReplyCommandSchema,
+  AnswerChatReplyCommandSchema,
 ]);
 export type StartChatReplyGenerationCommand = z.infer<typeof StartChatReplyGenerationCommandSchema>;
 

@@ -1017,6 +1017,41 @@ export class FileChatRepository implements ChatRepository {
     });
   }
 
+  async deleteGenericChatMessage(chatId: string, messageIndex: number, updatedAt: string) {
+    return withChatWriteQueue(chatId, async () => {
+      const currentSession = await readChatFile(chatId);
+
+      if (!currentSession) {
+        return null;
+      }
+
+      if (messageIndex < 1 || messageIndex > currentSession.messages.length) {
+        return null;
+      }
+
+      const filePath = resolveChatFilePath(chatId);
+      const rawContent = await fs.readFile(filePath, 'utf8');
+      const lines = rawContent
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      const existingHeader = lines[0] ? parseStoredHeaderRecord(lines[0], filePath) : null;
+      const existingMessageLines = existingHeader ? lines.slice(1) : lines;
+      const keptMessageLines = [
+        ...existingMessageLines.slice(0, messageIndex - 1),
+        ...existingMessageLines.slice(messageIndex),
+      ];
+      const nextLines = [
+        JSON.stringify(updateHeaderRecord(existingHeader, currentSession, updatedAt)),
+        ...keptMessageLines,
+      ];
+
+      await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
+
+      return readChatFile(chatId);
+    });
+  }
+
   async truncateGenericChatMessagesFromIndex(chatId: string, fromIndex: number, updatedAt: string) {
     return withChatWriteQueue(chatId, async () => {
       const currentSession = await readChatFile(chatId);

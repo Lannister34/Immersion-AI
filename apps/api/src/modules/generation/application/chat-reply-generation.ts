@@ -21,6 +21,7 @@ import { getProviderTokenCounter } from '../infrastructure/provider-token-counte
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import {
   ChatReplyGenerationFailedError,
+  NothingToAnswerError,
   NothingToContinueError,
   ProviderGenerationError,
 } from './generation-errors.js';
@@ -145,6 +146,17 @@ export async function completeChatReplyForSession(
   return {
     session: sessionAfterGeneratedExchange,
   };
+}
+
+/** Отвечать можно, только когда транскрипт заканчивается непустой репликой пользователя. */
+export function getAnswerableUserMessage(chatId: string, session: ChatSessionDto): ChatMessageDto {
+  const lastMessage = session.messages.at(-1);
+
+  if (!lastMessage || lastMessage.role !== 'user' || lastMessage.content.trim().length === 0) {
+    throw new NothingToAnswerError(chatId);
+  }
+
+  return lastMessage;
 }
 
 export function getContinuableAssistantMessage(chatId: string, session: ChatSessionDto): ChatMessageDto {

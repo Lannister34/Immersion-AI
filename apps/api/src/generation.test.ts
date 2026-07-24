@@ -1324,6 +1324,85 @@ describe('generation routes', () => {
     await app.close();
   });
 
+  it('answers the last user message without appending a new one', async () => {
+    const provider = mockProviderSuccess('Ответ на уже сохранённое сообщение.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    await appendChatMessages(chat.id, [
+      {
+        role: 'user',
+        content: 'Вопрос без ответа.',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: {
+        chatId: chat.id,
+        mode: 'answer',
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    const startPayload = StartChatReplyGenerationJobResponseSchema.parse(response.json());
+    await waitForGenerationJobStatus(app, startPayload.job.id, 'completed');
+
+    const sessionPayload = GetChatSessionResponseSchema.parse(
+      (await app.inject({ method: 'GET', url: `/api/chats/${chat.id}` })).json(),
+    );
+    expect(sessionPayload.messages.map((message) => message.content)).toEqual([
+      'Вопрос без ответа.',
+      'Ответ на уже сохранённое сообщение.',
+    ]);
+    expect(provider).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it('refuses to answer when the last message is not a non-empty user message', async () => {
+    const provider = mockProviderSuccess('Should not be called.');
+    const app = buildApiApp();
+
+    const emptyChat = await createChat(app);
+    const emptyChatResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: {
+        chatId: emptyChat.id,
+        mode: 'answer',
+      },
+    });
+
+    expect(emptyChatResponse.statusCode).toBe(409);
+    expect(emptyChatResponse.json()).toMatchObject({ code: 'nothing_to_answer' });
+
+    const chat = await createChat(app);
+    await appendChatMessages(chat.id, [
+      {
+        role: 'assistant',
+        content: 'Последним пишет персонаж.',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: {
+        chatId: chat.id,
+        mode: 'answer',
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ code: 'nothing_to_answer' });
+    expect(provider).toHaveLength(0);
+
+    await app.close();
+  });
+
   it('refuses to continue when the last message is not a non-empty assistant reply', async () => {
     const provider = mockProviderSuccess('Should not be called.');
     const app = buildApiApp();

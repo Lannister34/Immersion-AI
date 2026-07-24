@@ -53,6 +53,17 @@ export function replaceOptimisticMessageContent(
   };
 }
 
+export function removeOptimisticMessageAtIndex(session: ChatSessionDto, messageIndex: number): ChatSessionDto {
+  if (messageIndex < 1 || messageIndex > session.messages.length) {
+    return session;
+  }
+
+  return {
+    ...session,
+    messages: [...session.messages.slice(0, messageIndex - 1), ...session.messages.slice(messageIndex)],
+  };
+}
+
 export function truncateOptimisticMessagesFromIndex(session: ChatSessionDto, fromIndex: number): ChatSessionDto {
   const keep = Math.max(0, fromIndex - 1);
   if (keep >= session.messages.length) {

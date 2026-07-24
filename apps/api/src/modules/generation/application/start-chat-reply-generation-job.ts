@@ -13,6 +13,7 @@ import {
   appendUserMessageForChatReply,
   completeChatReplyContinuationForSession,
   completeChatReplyForSession,
+  getAnswerableUserMessage,
   getContinuableAssistantMessage,
 } from './chat-reply-generation.js';
 import type { GenerationJobRegistry } from './generation-job-registry.js';
@@ -74,6 +75,31 @@ export async function startChatReplyGenerationJob(
     return startContinueChatReplyJob(command, session, dependencies.generationJobRegistry, {
       ...(dependencies.chatCompletionClient ? { chatCompletionClient: dependencies.chatCompletionClient } : {}),
       now,
+    });
+  }
+
+  if (command.mode === 'answer') {
+    // Отвечаем на уже сохранённое сообщение пользователя: транскрипт не меняем.
+    getAnswerableUserMessage(command.chatId, session);
+
+    const answerJob = dependencies.generationJobRegistry.createChatReplyJob({
+      chatId: command.chatId,
+      command,
+    });
+
+    dependencies.generationJobRegistry.runChatReplyJob(answerJob.id, async ({ signal }) => {
+      const response = await completeChatReplyForSession(command, session, {
+        ...(dependencies.chatCompletionClient ? { chatCompletionClient: dependencies.chatCompletionClient } : {}),
+        now,
+        signal,
+      });
+
+      return response.session;
+    });
+
+    return StartChatReplyGenerationJobResponseSchema.parse({
+      job: answerJob,
+      session,
     });
   }
 

@@ -91,13 +91,32 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const generateFirstMessageMutation = useGenerateFirstMessage(chatId);
 
   const transcriptRef = useRef<HTMLDivElement | null>(null);
+  // Прилипание к низу: пока пользователь у последнего сообщения, лента следует
+  // за новыми сообщениями и растущим ответом; если он ушёл читать выше — нет.
+  const stickToBottomRef = useRef(true);
   const transcriptMessageCount = chatSessionQuery.data?.messages.length;
-  useEffect(() => {
-    if (transcriptMessageCount === undefined) {
+  // Любое из значений меняет высоту ленты: новое сообщение, растущий ответ, индикатор печати.
+  const transcriptSignature = [
+    transcriptMessageCount ?? -1,
+    chatSessionQuery.data?.messages.at(-1)?.content.length ?? 0,
+    chatReplyGeneration.activeJob ? 1 : 0,
+  ].join(':');
+
+  const handleTranscriptScroll = () => {
+    const element = transcriptRef.current;
+    if (!element) {
       return;
     }
-    transcriptRef.current?.scrollTo({ top: transcriptRef.current.scrollHeight, behavior: 'smooth' });
-  }, [transcriptMessageCount]);
+    stickToBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+  };
+
+  useEffect(() => {
+    const element = transcriptRef.current;
+    if (transcriptSignature.startsWith('-1:') || !stickToBottomRef.current || !element) {
+      return;
+    }
+    element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
+  }, [transcriptSignature]);
 
   if (chatSessionQuery.isLoading) {
     return (
@@ -185,6 +204,14 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
     !blockReason &&
     lastTranscriptMessage?.role === 'assistant' &&
     lastTranscriptMessage.content.trim().length > 0;
+  // Транскрипт заканчивается репликой пользователя — модель может ответить без нового сообщения.
+  const canAnswer =
+    !isStreaming &&
+    !chatReplyGeneration.isPending &&
+    !generateFirstMessageMutation.isPending &&
+    !blockReason &&
+    lastTranscriptMessage?.role === 'user' &&
+    lastTranscriptMessage.content.trim().length > 0;
 
   const onSubmit = async (event?: FormEvent) => {
     event?.preventDefault();
@@ -202,6 +229,15 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
     if (!canContinue) return;
     try {
       await chatReplyGeneration.continueLast();
+    } catch {
+      // Ошибка показывается через generationErrorMessage.
+    }
+  };
+
+  const onAnswer = async () => {
+    if (!canAnswer) return;
+    try {
+      await chatReplyGeneration.answerLast();
     } catch {
       // Ошибка показывается через generationErrorMessage.
     }
@@ -440,7 +476,11 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
               </div>
             ) : null}
           </div>
-          <div ref={transcriptRef} style={{ overflow: 'auto', padding: '18px 22px', background: 'var(--bg)' }}>
+          <div
+            onScroll={handleTranscriptScroll}
+            ref={transcriptRef}
+            style={{ overflow: 'auto', padding: '18px 22px', background: 'var(--bg)' }}
+          >
             <div
               style={{
                 display: 'flex',
@@ -528,11 +568,13 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
               ) : null}
               <Composer
                 blockReason={blockReason}
+                canAnswer={canAnswer}
                 canContinue={canContinue}
                 canSend={canSend}
                 isStreaming={isStreaming}
                 onCancel={chatReplyGeneration.cancel}
                 onChange={(event) => setDraftMessage(event.currentTarget.value)}
+                onAnswer={() => void onAnswer()}
                 onContinue={() => void onContinue()}
                 onKeyDown={onComposerKeyDown}
                 onOpenLorebooks={() => openPanelSection('lorebooks')}

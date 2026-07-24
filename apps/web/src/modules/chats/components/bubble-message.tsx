@@ -56,7 +56,6 @@ export function BubbleMessage({
 }: BubbleMessageProps) {
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const [draft, setDraft] = useState(text);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [branchDraft, setBranchDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -110,7 +109,7 @@ export function BubbleMessage({
     }
   };
 
-  const handleConfirmDelete = async () => {
+  const handleDelete = async () => {
     setBusy(true);
     setActionError(null);
     try {
@@ -119,7 +118,6 @@ export function BubbleMessage({
       setActionError(getApiErrorMessage(error, 'Не удалось удалить сообщение.'));
     } finally {
       setBusy(false);
-      setConfirmDelete(false);
     }
   };
 
@@ -154,7 +152,7 @@ export function BubbleMessage({
     }
   };
 
-  const isActionsPinned = mode === 'edit' || confirmDelete || branchDraft !== null;
+  const isActionsPinned = mode === 'edit' || branchDraft !== null;
 
   return (
     <div
@@ -170,7 +168,16 @@ export function BubbleMessage({
       <div className="avatar avatar--36" style={bubbleAvatarStyle(isUser, characterAvatarUrl, who)}>
         {isUser || !characterAvatarUrl ? avatarInitial(who) : null}
       </div>
-      <div style={{ maxWidth: 'min(620px, 80%)', display: 'grid', gap: 4 }}>
+      {/* В режиме правки блок фиксируем по ширине: иначе колонка сжимается
+          до собственной ширины textarea и бабл становится уже текста. */}
+      <div
+        style={{
+          maxWidth: 'min(620px, 80%)',
+          width: mode === 'edit' ? 'min(620px, 80%)' : undefined,
+          display: 'grid',
+          gap: 4,
+        }}
+      >
         <div
           className="row gap-8"
           style={{
@@ -197,7 +204,8 @@ export function BubbleMessage({
                   void handleSave();
                 }
               }}
-              style={{ minHeight: 80, background: 'transparent', border: '1px solid var(--hairline)' }}
+              rows={Math.min(18, Math.max(4, draft.split('\n').length + 1))}
+              style={{ minHeight: 120, width: '100%', background: 'transparent', border: '1px solid var(--hairline)' }}
               value={draft}
             />
             <div className="row gap-6" style={{ alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -269,34 +277,15 @@ export function BubbleMessage({
             >
               <EditIcon size={12} />
             </button>
-            {confirmDelete ? (
-              <>
-                <span className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
-                  удалить это и все следующие?
-                </span>
-                <button
-                  className="btn btn--xs btn--danger"
-                  disabled={busy}
-                  onClick={() => void handleConfirmDelete()}
-                  type="button"
-                >
-                  Да
-                </button>
-                <button className="btn btn--xs" disabled={busy} onClick={() => setConfirmDelete(false)} type="button">
-                  Нет
-                </button>
-              </>
-            ) : (
-              <button
-                className="btn btn--xs"
-                disabled={isMutating || busy}
-                onClick={() => setConfirmDelete(true)}
-                title="Удалить (и все последующие)"
-                type="button"
-              >
-                <TrashIcon size={12} />
-              </button>
-            )}
+            <button
+              className="btn btn--xs"
+              disabled={isMutating || busy}
+              onClick={() => void handleDelete()}
+              title="Удалить сообщение"
+              type="button"
+            >
+              <TrashIcon size={12} />
+            </button>
             {branchDraft !== null ? (
               <>
                 <input

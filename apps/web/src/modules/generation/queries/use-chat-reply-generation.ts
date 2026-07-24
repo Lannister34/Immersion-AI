@@ -129,6 +129,16 @@ export function useChatReplyGeneration(chatId: string) {
     onSuccess: applyStartedJob,
     onError: invalidateAfterJobStartError,
   });
+  // Ответ на уже сохранённое сообщение пользователя: новое сообщение не добавляем.
+  const answerGenerationMutation = useMutation({
+    mutationFn: () =>
+      startChatReplyGenerationJob({
+        chatId,
+        mode: 'answer',
+      }),
+    onSuccess: applyStartedJob,
+    onError: invalidateAfterJobStartError,
+  });
   const regenerateGenerationMutation = useMutation({
     mutationFn: () => regenerateChatReply({ chatId }),
     onSuccess: applyStartedJob,
@@ -137,6 +147,7 @@ export function useChatReplyGeneration(chatId: string) {
 
   return {
     activeJob: activeGenerationJob,
+    answerLast: () => answerGenerationMutation.mutateAsync(),
     cancel: () => {
       if (activeGenerationJob) {
         cancelGenerationMutation.mutate({
@@ -149,11 +160,13 @@ export function useChatReplyGeneration(chatId: string) {
       startGenerationMutation.error ??
       cancelGenerationMutation.error ??
       continueGenerationMutation.error ??
+      answerGenerationMutation.error ??
       regenerateGenerationMutation.error,
     isPending:
       startGenerationMutation.isPending ||
       cancelGenerationMutation.isPending ||
       continueGenerationMutation.isPending ||
+      answerGenerationMutation.isPending ||
       regenerateGenerationMutation.isPending ||
       Boolean(activeGenerationJob && isActiveGenerationJob(activeGenerationJob)),
     latestJob: latestGenerationJob,

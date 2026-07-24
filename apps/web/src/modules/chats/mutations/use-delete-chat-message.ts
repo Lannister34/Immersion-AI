@@ -5,7 +5,7 @@ import { chatReplyPromptPreviewQueryBaseKey } from '../../generation';
 import { deleteChatMessage } from '../api/delete-chat-message';
 import { chatListQueryKey } from '../queries/chat-list-query';
 import { chatSessionQueryKey } from '../queries/chat-session-query';
-import { truncateOptimisticMessagesFromIndex } from '../view-models/optimistic-chat-session';
+import { removeOptimisticMessageAtIndex } from '../view-models/optimistic-chat-session';
 
 interface DeleteChatMessageVariables {
   messageIndex: number;
@@ -32,7 +32,7 @@ export function useDeleteChatMessage(chatId: string, options: UseDeleteChatMessa
       if (previousSession) {
         queryClient.setQueryData<ChatSessionDto>(
           sessionKey,
-          truncateOptimisticMessagesFromIndex(previousSession, messageIndex),
+          removeOptimisticMessageAtIndex(previousSession, messageIndex),
         );
       }
 

@@ -1,12 +1,14 @@
 import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react';
 
-import { BookIcon, PlayIcon, SendIcon, SlidersIcon, StopIcon } from '../../../shared/ui/icons';
+import { BookIcon, PlayIcon, SendIcon, SlidersIcon, SparkleIcon, StopIcon } from '../../../shared/ui/icons';
 
 export interface ComposerProps {
   blockReason?: string | undefined;
+  canAnswer: boolean;
   canContinue: boolean;
   canSend: boolean;
   isStreaming: boolean;
+  onAnswer: () => void;
   onCancel: () => void;
   onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   onContinue: () => void;
@@ -19,9 +21,11 @@ export interface ComposerProps {
 
 export function Composer({
   blockReason,
+  canAnswer,
   canContinue,
   canSend,
   isStreaming,
+  onAnswer,
   onCancel,
   onChange,
   onContinue,
@@ -70,6 +74,16 @@ export function Composer({
               {canContinue ? (
                 <button className="btn" onClick={onContinue} title="Продолжить последний ответ персонажа" type="button">
                   <PlayIcon size={14} /> Продолжить
+                </button>
+              ) : null}
+              {canAnswer ? (
+                <button
+                  className="btn"
+                  onClick={onAnswer}
+                  title="Сгенерировать ответ на последнее сообщение"
+                  type="button"
+                >
+                  <SparkleIcon size={14} /> Сгенерировать ответ
                 </button>
               ) : null}
               <button className="btn btn--primary" disabled={!canSend} type="submit">

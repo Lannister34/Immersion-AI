@@ -30,6 +30,7 @@ import {
   ChatNotEmptyError,
   ChatReplyGenerationFailedError,
   ChatTranscriptEmptyError,
+  NothingToAnswerError,
   NothingToContinueError,
   ProviderGenerationError,
 } from '../../application/generation-errors.js';
@@ -65,6 +66,14 @@ const toProblem = createToProblem((error) => {
       409,
       'no_assistant_message_to_regenerate',
       'There is no assistant message to regenerate in this chat.',
+    );
+  }
+
+  if (error instanceof NothingToAnswerError) {
+    return problem(
+      409,
+      'nothing_to_answer',
+      'Отвечать не на что: последним в чате должно быть непустое сообщение пользователя.',
     );
   }
 

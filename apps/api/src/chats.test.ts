@@ -1024,13 +1024,49 @@ describe('chat routes', () => {
     const app = buildApiApp();
     const response = await app.inject({
       method: 'DELETE',
-      url: '/api/chats/truncate-route-chat/messages/3',
+      url: '/api/chats/truncate-route-chat/messages/3?mode=from-here',
     });
     const payload = ChatMessageMutationResponseSchema.parse(response.json());
 
     expect(response.statusCode).toBe(200);
     expect(payload.session.messages.map((message) => message.content)).toEqual(['keep-1', 'keep-2']);
     expect(payload.session.chat.messageCount).toBe(2);
+
+    await app.close();
+  });
+
+  it('deletes a single message by default and keeps the rest of the transcript', async () => {
+    await writeGenericChatFile('delete-one-chat', [
+      JSON.stringify({
+        chat_metadata: {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          title: 'Delete one',
+          updatedAt: '2026-01-01T00:00:04.000Z',
+        },
+        user_name: 'Тестер',
+        character_name: '',
+      }),
+      JSON.stringify({ is_user: true, mes: 'first', send_date: '2026-01-01T00:00:01.000Z' }),
+      JSON.stringify({ is_user: false, mes: 'drop-me', send_date: '2026-01-01T00:00:02.000Z' }),
+      JSON.stringify({ is_user: true, mes: 'third', send_date: '2026-01-01T00:00:03.000Z' }),
+    ]);
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/api/chats/delete-one-chat/messages/2',
+    });
+    const payload = ChatMessageMutationResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(payload.session.messages.map((message) => message.content)).toEqual(['first', 'third']);
+    expect(payload.session.chat.messageCount).toBe(2);
+
+    const reloaded = await app.inject({ method: 'GET', url: '/api/chats/delete-one-chat' });
+    expect(GetChatSessionResponseSchema.parse(reloaded.json()).messages.map((message) => message.content)).toEqual([
+      'first',
+      'third',
+    ]);
 
     await app.close();
   });

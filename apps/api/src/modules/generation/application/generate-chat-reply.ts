@@ -11,6 +11,7 @@ import {
   appendUserMessageForChatReply,
   completeChatReplyContinuationForSession,
   completeChatReplyForSession,
+  getAnswerableUserMessage,
 } from './chat-reply-generation.js';
 
 export interface GenerateChatReplyDependencies {
@@ -35,6 +36,12 @@ export async function generateChatReply(
     return ChatReplyGenerationResponseSchema.parse(
       await completeChatReplyContinuationForSession(command, session, dependencies),
     );
+  }
+
+  if (command.mode === 'answer') {
+    getAnswerableUserMessage(command.chatId, session);
+
+    return ChatReplyGenerationResponseSchema.parse(await completeChatReplyForSession(command, session, dependencies));
   }
 
   const sessionAfterUserMessage = await appendUserMessageForChatReply(command, now);

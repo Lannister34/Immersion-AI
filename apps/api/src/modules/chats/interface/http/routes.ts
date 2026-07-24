@@ -17,6 +17,7 @@ import { ChatMessageNotFoundError, ChatNotFoundError } from '../../application/a
 import { branchChat } from '../../application/branch-chat.js';
 import { createChat } from '../../application/create-chat.js';
 import { deleteChat } from '../../application/delete-chat.js';
+import { deleteChatMessage } from '../../application/delete-chat-message.js';
 import { exportChat } from '../../application/export-chat.js';
 import { getChatSession } from '../../application/get-chat-session.js';
 import { ChatFileTooLargeError, InvalidChatFileError, importChat } from '../../application/import-chat.js';
@@ -38,6 +39,11 @@ const ChatRouteParamsSchema = z.object({
 const ChatMessageRouteParamsSchema = z.object({
   chatId: ChatIdSchema,
   messageIndex: z.coerce.number().int().positive(),
+});
+
+// single — удалить одно сообщение, from-here — обрезать транскрипт с этого места.
+const DeleteChatMessageQuerySchema = z.object({
+  mode: z.enum(['single', 'from-here']).default('single'),
 });
 
 const ChatListQuerySchema = z.object({
@@ -251,15 +257,15 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
   app.delete('/:chatId/messages/:messageIndex', async (request, reply) => {
     try {
       const { chatId, messageIndex } = ChatMessageRouteParamsSchema.parse(request.params);
-      const session = await truncateChatMessages({
-        chatId,
-        fromIndex: messageIndex,
-        now: () => new Date(),
-      });
+      const { mode } = DeleteChatMessageQuerySchema.parse(request.query);
+      const session =
+        mode === 'from-here'
+          ? await truncateChatMessages({ chatId, fromIndex: messageIndex, now: () => new Date() })
+          : await deleteChatMessage({ chatId, messageIndex, now: () => new Date() });
 
       return { session };
     } catch (error) {
-      request.log.error({ err: error }, 'Failed to truncate chat messages');
+      request.log.error({ err: error }, 'Failed to delete chat messages');
       const mapped = toProblem(error);
 
       return reply.status(mapped.statusCode).send(mapped.body);
