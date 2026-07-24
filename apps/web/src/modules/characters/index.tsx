@@ -10,7 +10,17 @@ import { avatarColor, avatarInitial } from '../../shared/lib/avatar';
 import { formatRelative } from '../../shared/lib/format-relative';
 import { pluralRu } from '../../shared/lib/plural';
 import { readFileAsBase64 } from '../../shared/lib/read-file-as-base64';
-import { ChatIcon, PlusIcon, SearchIcon, SortIcon, TrashIcon, UploadIcon, XIcon } from '../../shared/ui/icons';
+import {
+  ChatIcon,
+  GridIcon,
+  ListIcon,
+  PlusIcon,
+  SearchIcon,
+  SortIcon,
+  TrashIcon,
+  UploadIcon,
+  XIcon,
+} from '../../shared/ui/icons';
 import { createChat } from '../chats/api/create-chat';
 import { chatListQueryKey } from '../chats/queries/chat-list-query';
 import { importCharacterCard } from './api/import-character-card';
@@ -27,12 +37,26 @@ function characterChatsLabel(count: number): string {
   return pluralRu(count, ['чат', 'чата', 'чатов']);
 }
 
+type CharactersViewMode = 'grid' | 'list';
+
+const VIEW_MODE_STORAGE_KEY = 'immersion.characters.view-mode';
+
+function readStoredViewMode(): CharactersViewMode {
+  return window.localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'list' ? 'list' : 'grid';
+}
+
 export function CharactersScreen() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const query = useQuery(characterListQueryOptions());
   const [search, setSearch] = useState('');
   const [sortMode, setSortMode] = useState<'updated' | 'name'>('updated');
+  const [viewMode, setViewMode] = useState<CharactersViewMode>(readStoredViewMode);
+
+  const switchViewMode = (mode: CharactersViewMode) => {
+    setViewMode(mode);
+    window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+  };
   const [isDragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const items = query.data?.items ?? [];
@@ -139,14 +163,16 @@ export function CharactersScreen() {
         <p>Поиск не дал совпадений по имени файла.</p>
       </div>
     );
-  } else {
+  } else if (viewMode === 'grid') {
     body = (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
         {filtered.map((character) => (
           <CharacterCard character={character} key={character.id} />
         ))}
       </div>
     );
+  } else {
+    body = <CharactersListTable characters={filtered} />;
   }
 
   return (
@@ -200,6 +226,28 @@ export function CharactersScreen() {
               </div>
               <div className="row gap-2 card" style={{ padding: 2 }}>
                 <button
+                  aria-pressed={viewMode === 'grid'}
+                  className="btn btn--xs"
+                  onClick={() => switchViewMode('grid')}
+                  style={{ background: viewMode === 'grid' ? 'var(--surface-2)' : 'transparent' }}
+                  title="Вид: сетка"
+                  type="button"
+                >
+                  <GridIcon size={12} />
+                </button>
+                <button
+                  aria-pressed={viewMode === 'list'}
+                  className="btn btn--xs"
+                  onClick={() => switchViewMode('list')}
+                  style={{ background: viewMode === 'list' ? 'var(--surface-2)' : 'transparent' }}
+                  title="Вид: список"
+                  type="button"
+                >
+                  <ListIcon size={12} />
+                </button>
+              </div>
+              <div className="row gap-2 card" style={{ padding: 2 }}>
+                <button
                   className="btn btn--xs"
                   onClick={() => setSortMode((mode) => (mode === 'updated' ? 'name' : 'updated'))}
                   title={sortMode === 'updated' ? 'Сортировка: по дате' : 'Сортировка: по имени'}
@@ -221,9 +269,7 @@ interface CharacterCardProps {
   character: CharacterSummaryDto;
 }
 
-function CharacterCard({ character }: CharacterCardProps) {
-  const color = avatarColor(character.name);
-  const initial = avatarInitial(character.name);
+function useCharacterActions(character: CharacterSummaryDto) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -240,21 +286,70 @@ function CharacterCard({ character }: CharacterCardProps) {
     },
   });
 
-  const handleStartChat = () => {
-    startChatMutation.mutate();
+  return {
+    confirmDelete,
+    deleteMutation,
+    handleAskDelete: () => setConfirmDelete(true),
+    handleCancelDelete: () => setConfirmDelete(false),
+    handleConfirmDelete: () => deleteMutation.mutate(),
+    handleStartChat: () => startChatMutation.mutate(),
+    startChatMutation,
   };
+}
 
-  const handleAskDelete = () => {
-    setConfirmDelete(true);
-  };
+interface CharacterDeleteControlsProps {
+  actions: ReturnType<typeof useCharacterActions>;
+  darkOverlay?: boolean;
+}
 
-  const handleConfirmDelete = () => {
-    deleteMutation.mutate();
-  };
+function CharacterDeleteControls({ actions, darkOverlay = false }: CharacterDeleteControlsProps) {
+  const overlayStyle = darkOverlay ? { background: 'oklch(0 0 0 / 0.45)' } : undefined;
 
-  const handleCancelDelete = () => {
-    setConfirmDelete(false);
-  };
+  if (actions.confirmDelete) {
+    return (
+      <>
+        <button
+          className="btn btn--xs btn--danger"
+          disabled={actions.deleteMutation.isPending}
+          onClick={actions.handleConfirmDelete}
+          title="Удалить карточку без возможности восстановления"
+          type="button"
+        >
+          {actions.deleteMutation.isPending ? '…' : 'Удалить'}
+        </button>
+        <button
+          className="btn btn--icon btn--xs"
+          disabled={actions.deleteMutation.isPending}
+          onClick={actions.handleCancelDelete}
+          style={overlayStyle}
+          title="Не удалять"
+          type="button"
+        >
+          <XIcon size={11} />
+        </button>
+      </>
+    );
+  }
+
+  return (
+    <button
+      className="btn btn--icon btn--xs"
+      onClick={actions.handleAskDelete}
+      style={overlayStyle}
+      title="Удалить карточку"
+      type="button"
+    >
+      <TrashIcon size={11} />
+    </button>
+  );
+}
+
+function CharacterCard({ character }: CharacterCardProps) {
+  const color = avatarColor(character.name);
+  const initial = avatarInitial(character.name);
+  const actions = useCharacterActions(character);
+  // Подтверждение удаления остаётся видимым независимо от hover-состояния карточки.
+  const confirmDeleteVisible = actions.confirmDelete;
 
   // Ссылка — оверлей поверх карточки, кнопки-действия подняты выше по z-index:
   // <button> внутри <a> — невалидный HTML.
@@ -277,81 +372,63 @@ function CharacterCard({ character }: CharacterCardProps) {
       />
       <div
         style={{
-          aspectRatio: '16 / 9',
+          aspectRatio: '3 / 4',
           background: character.avatarUrl
-            ? `linear-gradient(180deg, transparent 40%, oklch(0.15 0.005 270 / 0.9)), center / cover no-repeat url("${createApiUrl(character.avatarUrl)}"), ${color}`
-            : `linear-gradient(180deg, transparent 40%, oklch(0.15 0.005 270 / 0.9)), ${color}`,
+            ? `center / cover no-repeat url("${createApiUrl(character.avatarUrl)}"), ${color}`
+            : color,
           position: 'relative',
-          display: 'flex',
-          alignItems: 'flex-end',
-          padding: 14,
+          display: 'grid',
+          placeItems: 'center',
         }}
       >
-        <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 4, zIndex: 2 }}>
-          {confirmDelete ? (
-            <>
-              <button
-                className="btn btn--xs btn--danger"
-                disabled={deleteMutation.isPending}
-                onClick={handleConfirmDelete}
-                title="Удалить карточку без возможности восстановления"
-                type="button"
-              >
-                {deleteMutation.isPending ? '…' : 'Удалить'}
-              </button>
-              <button
-                className="btn btn--icon btn--xs"
-                disabled={deleteMutation.isPending}
-                onClick={handleCancelDelete}
-                style={{ background: 'oklch(0 0 0 / 0.4)' }}
-                title="Не удалять"
-                type="button"
-              >
-                <XIcon size={11} />
-              </button>
-            </>
-          ) : (
-            <button
-              className="btn btn--icon btn--xs"
-              onClick={handleAskDelete}
-              style={{ background: 'oklch(0 0 0 / 0.4)' }}
-              title="Удалить карточку"
-              type="button"
-            >
-              <TrashIcon size={11} />
-            </button>
-          )}
+        <span
+          className="pill"
+          style={{
+            position: 'absolute',
+            top: 8,
+            left: 8,
+            fontSize: 'var(--fz-2xs)',
+            background: 'oklch(0 0 0 / 0.45)',
+            color: 'oklch(1 0 0 / 0.85)',
+            zIndex: 2,
+          }}
+        >
+          {character.source.toUpperCase()}
+        </span>
+        <div
+          className={confirmDeleteVisible ? undefined : 'char-card__actions'}
+          style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4, zIndex: 2 }}
+        >
+          <CharacterDeleteControls actions={actions} darkOverlay />
         </div>
         {!character.avatarUrl ? (
-          <div
+          <span
             style={{
-              width: 48,
-              height: 48,
-              borderRadius: 12,
-              background: 'oklch(0 0 0 / 0.35)',
-              border: '1px solid oklch(1 0 0 / 0.15)',
-              display: 'grid',
-              placeItems: 'center',
-              color: 'white',
-              fontSize: 'var(--fz-lg)',
+              color: 'oklch(1 0 0 / 0.82)',
+              fontSize: 38,
               fontWeight: 600,
+              letterSpacing: 1,
+              userSelect: 'none',
             }}
           >
             {initial}
-          </div>
+          </span>
         ) : null}
       </div>
-      <div style={{ padding: 12, display: 'grid', gap: 6 }}>
-        <strong style={{ fontSize: 'var(--fz-md)' }}>{character.name}</strong>
-        <div className="muted" style={{ fontSize: 'var(--fz-xs)', fontFamily: 'var(--font-mono)' }}>
-          {character.source.toUpperCase()} · {character.id}
+      <div style={{ padding: '10px 12px', display: 'grid', gap: 4 }}>
+        <strong
+          style={{ fontSize: 'var(--fz-md)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+          title={character.id}
+        >
+          {character.name}
+        </strong>
+        <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+          {character.chatCount > 0
+            ? `${characterChatsLabel(character.chatCount)}${
+                character.lastChatAt ? ` · ${formatRelative(character.lastChatAt)}` : ''
+              }`
+            : 'Чатов пока нет'}
         </div>
-        {character.chatCount > 0 ? (
-          <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-            {characterChatsLabel(character.chatCount)}
-            {character.lastChatAt ? ` · последний ${formatRelative(character.lastChatAt)}` : null}
-          </div>
-        ) : null}
       </div>
       <div
         className="between"
@@ -362,24 +439,117 @@ function CharacterCard({ character }: CharacterCardProps) {
         </span>
         <button
           className="btn btn--xs btn--primary"
-          disabled={startChatMutation.isPending}
-          onClick={handleStartChat}
+          disabled={actions.startChatMutation.isPending}
+          onClick={actions.handleStartChat}
           style={{ position: 'relative', zIndex: 2 }}
           title="Начать новый чат с этим персонажем"
           type="button"
         >
-          <ChatIcon size={11} /> {startChatMutation.isPending ? '…' : 'Чат'}
+          <ChatIcon size={11} /> {actions.startChatMutation.isPending ? '…' : 'Чат'}
         </button>
       </div>
     </div>
   );
 }
 
+interface CharactersListTableProps {
+  characters: CharacterSummaryDto[];
+}
+
+function CharactersListTable({ characters }: CharactersListTableProps) {
+  return (
+    <section className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <table className="tbl">
+        <thead>
+          <tr>
+            <th>Персонаж</th>
+            <th>Файл</th>
+            <th>Чаты</th>
+            <th>Изменён</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {characters.map((character) => (
+            <CharacterListRow character={character} key={character.id} />
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+function CharacterListRow({ character }: CharacterCardProps) {
+  const color = avatarColor(character.name);
+  const initial = avatarInitial(character.name);
+  const actions = useCharacterActions(character);
+
+  return (
+    <tr>
+      <td>
+        <Link
+          className="row gap-8"
+          params={{ characterId: character.id }}
+          style={{ color: 'inherit', textDecoration: 'none', alignItems: 'center' }}
+          to="/characters/$characterId"
+        >
+          <span
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              flexShrink: 0,
+              background: character.avatarUrl
+                ? `center / cover no-repeat url("${createApiUrl(character.avatarUrl)}"), ${color}`
+                : color,
+              display: 'grid',
+              placeItems: 'center',
+              color: 'white',
+              fontSize: 'var(--fz-xs)',
+              fontWeight: 600,
+            }}
+          >
+            {character.avatarUrl ? null : initial}
+          </span>
+          <strong style={{ fontWeight: 600 }}>{character.name}</strong>
+        </Link>
+      </td>
+      <td className="muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
+        {character.source.toUpperCase()} · {character.id}
+      </td>
+      <td className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+        {character.chatCount > 0
+          ? `${characterChatsLabel(character.chatCount)}${
+              character.lastChatAt ? ` · ${formatRelative(character.lastChatAt)}` : ''
+            }`
+          : '—'}
+      </td>
+      <td className="muted mono tnum" style={{ fontSize: 'var(--fz-xs)' }}>
+        {formatRelative(character.updatedAt)}
+      </td>
+      <td style={{ textAlign: 'right' }}>
+        <div className="row gap-4" style={{ justifyContent: 'flex-end' }}>
+          <button
+            className="btn btn--xs btn--primary"
+            disabled={actions.startChatMutation.isPending}
+            onClick={actions.handleStartChat}
+            title="Начать новый чат с этим персонажем"
+            type="button"
+          >
+            <ChatIcon size={11} /> {actions.startChatMutation.isPending ? '…' : 'Чат'}
+          </button>
+          <CharacterDeleteControls actions={actions} />
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function CharactersGridSkeleton() {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 14 }}>
-      {[0, 1, 2].map((index) => (
-        <div className="card" key={index} style={{ aspectRatio: '4 / 3', padding: 0, background: 'var(--surface)' }} />
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
+      {[0, 1, 2, 3, 4].map((index) => (
+        <div className="card" key={index} style={{ aspectRatio: '3 / 4', padding: 0, background: 'var(--surface)' }} />
       ))}
     </div>
   );

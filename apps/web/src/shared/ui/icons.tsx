@@ -176,6 +176,25 @@ export function SortIcon(props: IconProps) {
   );
 }
 
+export function GridIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <rect height="7" rx="1" width="7" x="3" y="3" />
+      <rect height="7" rx="1" width="7" x="14" y="3" />
+      <rect height="7" rx="1" width="7" x="3" y="14" />
+      <rect height="7" rx="1" width="7" x="14" y="14" />
+    </BaseIcon>
+  );
+}
+
+export function ListIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01" />
+    </BaseIcon>
+  );
+}
+
 export function EditIcon(props: IconProps) {
   return (
     <BaseIcon {...props}>

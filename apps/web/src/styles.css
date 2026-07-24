@@ -472,6 +472,17 @@ select:disabled {
   text-decoration: none;
 }
 
+/* Действия на карточке персонажа проявляются при наведении или фокусе. */
+.char-card__actions {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.card-hover:hover .char-card__actions,
+.char-card__actions:focus-within {
+  opacity: 1;
+}
+
 .topbar__crumbs a:hover {
   color: var(--text);
   text-decoration: underline;
