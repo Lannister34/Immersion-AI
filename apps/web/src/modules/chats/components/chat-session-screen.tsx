@@ -595,6 +595,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
           characterName={session.characterName}
           chatId={chatId}
           contextStats={tokenStats}
+          effectiveSampling={promptPreviewQuery.data?.effectiveSettings.sampling}
           generationSettings={session.generationSettings}
           lorebookIds={session.lorebookIds}
           onClose={closePanel}

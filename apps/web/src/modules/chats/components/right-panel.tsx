@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import type { ChatRightPanelSection } from '../../../app/store/ui-shell';
 import { BookIcon, ChevronRightIcon, EyeIcon, SlidersIcon, UserIcon, XIcon } from '../../../shared/ui/icons';
 import type { ContextStats } from '../view-models/context-stats';
+import type { InheritedSampling } from '../view-models/sampling-overrides';
 import { CharacterSectionContent } from './character-section';
 import { ContextSectionContent } from './context-section';
 import { GenerationSettingsSection } from './generation-settings-section';
@@ -16,6 +17,7 @@ export interface RightPanelProps {
   characterName: string | null;
   chatId: string;
   contextStats?: ContextStats | undefined;
+  effectiveSampling?: InheritedSampling | undefined;
   generationSettings: ChatGenerationSettingsDto;
   lorebookIds: string[];
   onClose: () => void;
@@ -32,6 +34,7 @@ export function RightPanel({
   characterName,
   chatId,
   contextStats,
+  effectiveSampling,
   generationSettings,
   lorebookIds,
   onClose,
@@ -54,6 +57,7 @@ export function RightPanel({
         return (
           <GenerationSettingsSection
             chatId={chatId}
+            effectiveSampling={effectiveSampling}
             generationSettings={generationSettings}
             settings={settingsOverview}
           />
