@@ -88,7 +88,10 @@ export function ServerLogsCard({ status }: ServerLogsCardProps) {
   } else if (logsQuery.isError) {
     logsBody = 'Не удалось загрузить логи сервера.';
   } else {
-    logsBody = 'Логи пусты. Запустите модель, чтобы увидеть вывод llama-server.';
+    logsBody =
+      status === 'running'
+        ? 'Логи пусты: модель запущена прежней версией API, её файл логов не сохранился. Перезапустите модель, чтобы увидеть вывод.'
+        : 'Логи пусты. Запустите модель, чтобы увидеть вывод llama-server.';
   }
 
   return (

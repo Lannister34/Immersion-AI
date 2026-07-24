@@ -42,6 +42,29 @@ describe('runtime control routes', () => {
     await app.close();
   });
 
+  it('falls back to the log file when the in-memory buffer is empty', async () => {
+    // Модель могла быть запущена предыдущим процессом API — тогда живого stdout
+    // уже нет, и единственный источник вывода это файл.
+    await fs.mkdir(path.join(dataRoot, 'logs'), { recursive: true });
+    await fs.writeFile(
+      path.join(dataRoot, 'logs', 'llm-server.log'),
+      'llama_model_loader: loaded meta data\n[stderr] warming up the model\n',
+      'utf8',
+    );
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/runtime/logs',
+    });
+    const logs = RuntimeLogsResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(logs.lines).toEqual(['llama_model_loader: loaded meta data', '[stderr] warming up the model']);
+
+    await app.close();
+  });
+
   it('updates runtime config without overwriting unrelated user settings', async () => {
     await fs.writeFile(
       path.join(dataRoot, 'user-settings.json'),

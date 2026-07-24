@@ -12,6 +12,39 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..', '..');
 const PID_FILE_NAME = '.llm-server.json';
+const LOG_FILE_NAME = 'llm-server.log';
+// Хвоста в пару сотен килобайт хватает на стартовый вывод llama-server.
+const LOG_TAIL_BYTES = 256 * 1024;
+
+function resolveLogFilePath() {
+  return path.join(resolveDataRoot(), 'logs', LOG_FILE_NAME);
+}
+
+/** Последние строки файла логов: используется, когда процесс пережил рестарт API. */
+function readLogFileTail(): string[] {
+  try {
+    const logFilePath = resolveLogFilePath();
+    const { size } = fs.statSync(logFilePath);
+    const start = Math.max(0, size - LOG_TAIL_BYTES);
+    const handle = fs.openSync(logFilePath, 'r');
+
+    try {
+      const buffer = Buffer.alloc(size - start);
+      fs.readSync(handle, buffer, 0, buffer.length, start);
+
+      return buffer
+        .toString('utf8')
+        .split(/\r?\n/u)
+        .filter((line) => line.length > 0)
+        .slice(-MAX_LOG_LINES);
+    } finally {
+      fs.closeSync(handle);
+    }
+  } catch {
+    // Файла ещё нет — модель не запускали из этой версии приложения.
+    return [];
+  }
+}
 
 type RuntimeLifecycleStatus = RuntimeStatusSnapshot['status'];
 
@@ -157,6 +190,7 @@ export class LlmProcessManager {
   private childProcess: ChildProcess | null = null;
   private healthPollTimer: ReturnType<typeof setInterval> | null = null;
   private startTimeout: ReturnType<typeof setTimeout> | null = null;
+  private logStream: fs.WriteStream | null = null;
   private readonly logBuffer: string[] = [];
   private readonly state: RuntimeStatusSnapshot = {
     status: 'idle',
@@ -206,7 +240,10 @@ export class LlmProcessManager {
   }
 
   getLogs() {
-    return [...this.logBuffer];
+    // Буфер живёт в памяти API. Если процесс запускала предыдущая версия API
+    // (tsx watch перезапускается на каждой правке), читаем хвост файла — иначе
+    // логи работающей модели выглядели бы пустыми.
+    return this.logBuffer.length > 0 ? [...this.logBuffer] : readLogFileTail();
   }
 
   async start(config: LlmStartConfig) {
@@ -257,6 +294,8 @@ export class LlmProcessManager {
     if (config.threads > 0) {
       args.push('--threads', String(config.threads));
     }
+
+    this.openLogFile();
 
     const spawned = spawn(binary.executablePath, args, {
       detached: true,
@@ -390,6 +429,30 @@ export class LlmProcessManager {
     if (this.logBuffer.length > MAX_LOG_LINES) {
       this.logBuffer.shift();
     }
+
+    try {
+      this.logStream?.write(`${line}\n`);
+    } catch (error) {
+      getSharedApiLogger().warn({ err: error }, 'Failed to write llm-server log line');
+    }
+  }
+
+  private openLogFile() {
+    this.closeLogFile();
+
+    try {
+      const logFilePath = resolveLogFilePath();
+      fs.mkdirSync(path.dirname(logFilePath), { recursive: true });
+      this.logStream = fs.createWriteStream(logFilePath, { flags: 'w' });
+    } catch (error) {
+      getSharedApiLogger().warn({ err: error }, 'Failed to open llm-server log file');
+      this.logStream = null;
+    }
+  }
+
+  private closeLogFile() {
+    this.logStream?.end();
+    this.logStream = null;
   }
 
   private cleanupTimers() {
@@ -493,6 +556,7 @@ export class LlmProcessManager {
     }
 
     this.childProcess = null;
+    this.closeLogFile();
     this.setStateStatus('idle', {
       model: null,
       modelPath: null,
