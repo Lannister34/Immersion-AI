@@ -4,16 +4,8 @@ import {
   createCharacterFile,
   readCharacterDetail,
   writeCharacterFile,
-  writePngCharacterFile,
 } from '../infrastructure/file-character-repository.js';
 import { CharacterNotFoundError } from './get-character-avatar.js';
-
-export class CharacterNotEditableError extends Error {
-  constructor(characterId: string) {
-    super(`Character is not editable in this format: ${characterId}`);
-    this.name = 'CharacterNotEditableError';
-  }
-}
 
 export interface SaveCharacterInput {
   description: string;
@@ -31,13 +23,8 @@ export async function updateCharacter(id: string, input: SaveCharacterInput): Pr
   if (!existing) {
     throw new CharacterNotFoundError(id);
   }
-  if (!existing.isEditable) {
-    throw new CharacterNotEditableError(id);
-  }
-  if (existing.source === 'png') {
-    return writePngCharacterFile(id, input);
-  }
-  return writeCharacterFile(id, input);
+  // Пишем по разрешённому id: чат мог сослаться на карточку ещё по имени картинки.
+  return writeCharacterFile(existing.id, input);
 }
 
 export async function createCharacter(input: SaveCharacterInput): Promise<CharacterDetailDto> {

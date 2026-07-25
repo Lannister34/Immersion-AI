@@ -163,22 +163,30 @@ describe('character avatar upload API', () => {
     await app.close();
   });
 
-  it('rejects an avatar upload for a PNG-card character with avatar_owned_by_card', async () => {
+  it('replaces the image of a migrated legacy card like any other avatar', async () => {
     const app = buildApiApp();
     const charactersDir = path.join(temporaryDataRoot, 'characters');
     await fs.mkdir(charactersDir, { recursive: true });
-    await fs.writeFile(path.join(charactersDir, 'card-hero.png'), PNG_BYTES);
+    await fs.writeFile(
+      path.join(charactersDir, 'card-hero.png'),
+      buildPngWithCharaChunk(JSON.stringify({ name: 'Герой' })),
+    );
+    await app.inject({ method: 'GET', url: '/api/characters' });
 
     const response = await app.inject({
       method: 'PUT',
-      url: avatarUrlOf('card-hero.png'),
+      url: avatarUrlOf('card-hero.json'),
       payload: { contentBase64: JPEG_BYTES.toString('base64'), mimeType: 'image/jpeg' },
     });
-    expect(response.statusCode).toBe(409);
-    expect(response.json()).toMatchObject({ code: 'avatar_owned_by_card' });
+    expect(response.statusCode).toBe(200);
 
-    const deleteResponse = await app.inject({ method: 'DELETE', url: avatarUrlOf('card-hero.png') });
-    expect(deleteResponse.statusCode).toBe(409);
+    // Картинка карточки была её аватаром — новая заменяет её, а не ложится рядом.
+    const remaining = await fs.readdir(charactersDir);
+    expect(remaining).toContain('card-hero.jpg');
+    expect(remaining).not.toContain('card-hero.png');
+
+    const deleteResponse = await app.inject({ method: 'DELETE', url: avatarUrlOf('card-hero.json') });
+    expect(deleteResponse.statusCode).toBe(204);
 
     await app.close();
   });
@@ -242,7 +250,7 @@ describe('character avatar upload API', () => {
     await app.close();
   });
 
-  it('keeps a standalone PNG card independent from a JSON card with the same base name', async () => {
+  it('treats an image next to a JSON card as that card avatar, card chunk or not', async () => {
     const app = buildApiApp();
     const charactersDir = path.join(temporaryDataRoot, 'characters');
     await fs.mkdir(charactersDir, { recursive: true });
@@ -250,43 +258,29 @@ describe('character avatar upload API', () => {
     await fs.writeFile(path.join(charactersDir, 'X.json'), JSON.stringify({ name: 'Хозяйка' }), 'utf8');
     await fs.writeFile(path.join(charactersDir, 'X.png'), cardPng);
 
-    // Both files surface as characters; the card PNG is not consumed as the JSON card's avatar.
+    // Персонаж — только JSON; картинка рядом с ним всегда аватар, даже если внутри
+    // неё лежит своя карточка: одно имя файла — один персонаж.
     const listResponse = await app.inject({ method: 'GET', url: '/api/characters' });
     const items = CharacterListResponseSchema.parse(listResponse.json()).items;
-    expect(items.map((item) => item.id)).toEqual(expect.arrayContaining(['X.json', 'X.png']));
-    const jsonItem = items.find((item) => item.id === 'X.json');
-    expect(jsonItem?.avatarUrl).toBeNull();
+    expect(items.map((item) => item.id)).toEqual(['X.json']);
+    expect(items[0]?.name).toBe('Хозяйка');
+    expect(items[0]?.avatarUrl).toMatch(/X\.json\/avatar\?v=\d+$/);
 
-    // Uploading a PNG avatar for the JSON card must not overwrite the independent card.
-    const uploadResponse = await app.inject({
-      method: 'PUT',
-      url: avatarUrlOf('X.json'),
-      payload: { contentBase64: PNG_BYTES.toString('base64'), mimeType: 'image/png' },
-    });
-    expect(uploadResponse.statusCode).toBe(409);
-    expect(uploadResponse.json()).toMatchObject({ code: 'avatar_conflicts_with_card' });
-    await expect(fs.readFile(path.join(charactersDir, 'X.png'))).resolves.toEqual(cardPng);
-
-    // A JPEG avatar can coexist with the card PNG and must not delete it on replacement.
     const jpegUpload = await app.inject({
       method: 'PUT',
       url: avatarUrlOf('X.json'),
       payload: { contentBase64: JPEG_BYTES.toString('base64'), mimeType: 'image/jpeg' },
     });
     expect(jpegUpload.statusCode).toBe(200);
-    await expect(fs.readFile(path.join(charactersDir, 'X.png'))).resolves.toEqual(cardPng);
+    const afterUpload = await fs.readdir(charactersDir);
+    expect(afterUpload).toContain('X.jpg');
+    expect(afterUpload).not.toContain('X.png');
 
-    // Deleting the JSON character removes its JPEG avatar but leaves the PNG card intact.
     const deleteResponse = await app.inject({ method: 'DELETE', url: '/api/characters/X.json' });
     expect(deleteResponse.statusCode).toBe(204);
     const remaining = await fs.readdir(charactersDir);
-    expect(remaining).toContain('X.png');
     expect(remaining).not.toContain('X.json');
     expect(remaining).not.toContain('X.jpg');
-
-    const finalList = await app.inject({ method: 'GET', url: '/api/characters' });
-    const finalItems = CharacterListResponseSchema.parse(finalList.json()).items;
-    expect(finalItems.map((item) => item.id)).toEqual(['X.png']);
 
     await app.close();
   });

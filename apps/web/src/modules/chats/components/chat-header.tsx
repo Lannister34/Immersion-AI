@@ -1,9 +1,7 @@
 import { useState } from 'react';
-
-import { createApiUrl } from '../../../shared/api/client';
-import { avatarColor, avatarInitial } from '../../../shared/lib/avatar';
 import { formatRelative } from '../../../shared/lib/format-relative';
 import { pluralRu } from '../../../shared/lib/plural';
+import { Avatar } from '../../../shared/ui/avatar';
 import { EditIcon, SparkleIcon } from '../../../shared/ui/icons';
 import type { ContextStats } from '../view-models/context-stats';
 import { ContextMeter } from './context-meter';
@@ -60,16 +58,7 @@ export function ChatHeader({
         position: 'relative',
       }}
     >
-      <div
-        className="avatar avatar--36"
-        style={
-          avatarUrl
-            ? { background: `center / cover no-repeat url("${createApiUrl(avatarUrl)}")`, border: 0 }
-            : { background: avatarColor(characterName), border: 0, color: 'white' }
-        }
-      >
-        {avatarUrl ? null : avatarInitial(characterName)}
-      </div>
+      <Avatar name={characterName} size={36} url={avatarUrl} />
       <div style={{ flex: 1, minWidth: 0 }}>
         {draftTitle === null ? (
           <div className="row gap-6" style={{ alignItems: 'center' }}>

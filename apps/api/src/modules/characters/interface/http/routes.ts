@@ -20,13 +20,8 @@ import {
 } from '../../application/get-character-avatar.js';
 import { importCharacterCard } from '../../application/import-character-card.js';
 import { listCharacters } from '../../application/list-characters.js';
-import { CharacterNotEditableError, createCharacter, updateCharacter } from '../../application/save-character.js';
-import {
-  CharacterAvatarCardCollisionError,
-  CharacterAvatarOwnedByCardError,
-  InvalidAvatarImageError,
-  uploadCharacterAvatar,
-} from '../../application/upload-character-avatar.js';
+import { createCharacter, updateCharacter } from '../../application/save-character.js';
+import { InvalidAvatarImageError, uploadCharacterAvatar } from '../../application/upload-character-avatar.js';
 
 const CharacterRouteParamsSchema = z.object({
   characterId: CharacterIdSchema,
@@ -41,28 +36,8 @@ const toProblem = createToProblem((error) => {
     return problem(404, 'avatar_not_found', 'У персонажа нет загруженного аватара.');
   }
 
-  if (error instanceof CharacterAvatarCardCollisionError) {
-    return problem(
-      409,
-      'avatar_conflicts_with_card',
-      'Рядом лежит самостоятельная PNG-карточка с тем же именем файла — аватар не может её перезаписать.',
-    );
-  }
-
-  if (error instanceof CharacterAvatarOwnedByCardError) {
-    return problem(
-      409,
-      'avatar_owned_by_card',
-      'Аватар этого персонажа — сама PNG-карточка, отдельный файл не хранится.',
-    );
-  }
-
   if (error instanceof InvalidAvatarImageError) {
     return problem(400, 'invalid_avatar_image', error.message);
-  }
-
-  if (error instanceof CharacterNotEditableError) {
-    return problem(409, 'character_not_editable', 'This character is stored in a non-editable format (PNG card).');
   }
 
   if (error instanceof InvalidCharacterCardError) {

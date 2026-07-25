@@ -1,11 +1,10 @@
 import type { MessageFormatting } from '@immersion/contracts/settings';
 import { useQuery } from '@tanstack/react-query';
-import { type CSSProperties, useEffect, useState } from 'react';
-
-import { createApiUrl } from '../../../shared/api/client';
+import { useEffect, useState } from 'react';
 import { getApiErrorMessage } from '../../../shared/api/get-api-error-message';
-import { avatarColor, avatarInitial } from '../../../shared/lib/avatar';
+import { avatarInitial } from '../../../shared/lib/avatar';
 import { useDebouncedValue } from '../../../shared/lib/use-debounced-value';
+import { Avatar } from '../../../shared/ui/avatar';
 import { BranchIcon, CopyIcon, EditIcon, RefreshIcon, TrashIcon } from '../../../shared/ui/icons';
 import { chatReplyPromptPreviewQueryOptions } from '../../generation';
 import { toContextStats } from '../view-models/context-stats';
@@ -28,16 +27,6 @@ export interface BubbleMessageProps {
   text: string;
   time: string;
   who: string;
-}
-
-function bubbleAvatarStyle(isUser: boolean, characterAvatarUrl: string | null, who: string): CSSProperties {
-  if (isUser) {
-    return { background: 'var(--accent-soft)', color: 'var(--accent)' };
-  }
-  if (characterAvatarUrl) {
-    return { background: `center / cover no-repeat url("${createApiUrl(characterAvatarUrl)}")`, border: 0 };
-  }
-  return { background: avatarColor(who), color: 'white', border: 0 };
 }
 
 export function BubbleMessage({
@@ -169,9 +158,13 @@ export function BubbleMessage({
         flexDirection: isUser ? 'row-reverse' : 'row',
       }}
     >
-      <div className="avatar avatar--36" style={bubbleAvatarStyle(isUser, characterAvatarUrl, who)}>
-        {isUser || !characterAvatarUrl ? avatarInitial(who) : null}
-      </div>
+      {isUser ? (
+        <div className="avatar avatar--36" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+          {avatarInitial(who)}
+        </div>
+      ) : (
+        <Avatar name={who} size={36} url={characterAvatarUrl} />
+      )}
       {/* В режиме правки блок фиксируем по ширине: иначе колонка сжимается
           до собственной ширины textarea и бабл становится уже текста. */}
       <div

@@ -28,16 +28,7 @@ export async function getCharacterAvatar(characterId: string): Promise<Character
     throw new CharacterNotFoundError(characterId);
   }
 
-  if (summary.source === 'png') {
-    // PNG-card characters use the card image itself as the avatar.
-    const body = await fs.readFile(summary.filePath);
-    return {
-      body,
-      contentType: 'image/png',
-    };
-  }
-
-  const avatarFilePath = await findCharacterAvatarFilePath(characterId);
+  const avatarFilePath = await findCharacterAvatarFilePath(summary.id);
   if (!avatarFilePath) {
     throw new CharacterAvatarNotFoundError(characterId);
   }

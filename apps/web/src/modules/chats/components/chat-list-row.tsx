@@ -1,10 +1,8 @@
 import type { ChatSummaryDto } from '@immersion/contracts/chats';
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
-
-import { createApiUrl } from '../../../shared/api/client';
-import { avatarColor, avatarInitial } from '../../../shared/lib/avatar';
 import { formatRelative } from '../../../shared/lib/format-relative';
+import { Avatar } from '../../../shared/ui/avatar';
 import { TrashIcon, XIcon } from '../../../shared/ui/icons';
 import { useDeleteChat } from '../mutations/use-delete-chat';
 import { stripMessageMarkup } from '../view-models/message-content';
@@ -53,19 +51,7 @@ export function ChatListRow({ chat }: ChatListRowProps) {
         style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'pointer' }}
         to="/chat/$chatId"
       />
-      <div
-        className="avatar avatar--36"
-        style={
-          chat.characterAvatarUrl
-            ? {
-                background: `center / cover no-repeat url("${createApiUrl(chat.characterAvatarUrl)}")`,
-                border: 0,
-              }
-            : { background: avatarColor(displayName), color: 'white', border: 0 }
-        }
-      >
-        {chat.characterAvatarUrl ? null : avatarInitial(displayName)}
-      </div>
+      <Avatar name={displayName} size={36} url={chat.characterAvatarUrl} />
       <div style={{ minWidth: 0 }}>
         <strong className="truncate" style={{ display: 'block', fontSize: 'var(--fz-md)' }}>
           {displayName}

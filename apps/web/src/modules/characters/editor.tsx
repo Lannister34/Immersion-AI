@@ -144,8 +144,6 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
     setForm((current) => ({ ...current, [field]: value }));
   };
 
-  const canEdit = isNew || detail?.isEditable === true;
-
   const saveMutation = useMutation({
     mutationFn: async () => {
       const command = toCommand(form);
@@ -243,7 +241,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
   };
 
   const generationBusy = draftMutation.isPending || fieldMutation.isPending;
-  const generationDisabled = !canEdit || saveMutation.isPending || generationBusy || generationAvailability.isBlocked;
+  const generationDisabled = saveMutation.isPending || generationBusy || generationAvailability.isBlocked;
 
   const fieldSparkleAction = (field: CharacterDraftFieldName, title: string) => (
     <button
@@ -271,7 +269,6 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canEdit) return;
     const trimmed = form.name.trim();
     if (!trimmed) return;
     saveMutation.mutate();
@@ -289,18 +286,6 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
   const avatarPromptError = avatarPromptMutation.error
     ? getApiErrorMessage(avatarPromptMutation.error, 'Не удалось сгенерировать промпт для аватара.')
     : null;
-
-  let sourceNote: ReactNode = null;
-  if (detail?.source === 'png' && canEdit) {
-    sourceNote = (
-      <>
-        Карточка хранится в формате PNG SillyTavern. Сохранение перезаписывает <code>chara</code>-чанк внутри файла —
-        пиксели аватара не меняются.
-      </>
-    );
-  } else if (!canEdit && detail) {
-    sourceNote = 'Этот файл не похож на SillyTavern PNG — редактирование недоступно.';
-  }
 
   let entityActions: ReactNode = null;
   if (!isNew && confirmDelete) {
@@ -363,7 +348,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
     if (detailQuery.isLoading) {
       subtitle = 'Загружаем карточку…';
     } else if (detail) {
-      subtitle = `${detail.source.toUpperCase()} · сохранён ${formatRelative(detail.updatedAt)} · ${detail.id}`;
+      subtitle = `Сохранён ${formatRelative(detail.updatedAt)} · ${detail.id}`;
     } else {
       subtitle = 'Не удалось загрузить карточку';
     }
@@ -385,13 +370,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
             {entityActions}
             <button
               className="btn btn--primary"
-              disabled={
-                !canEdit ||
-                saveMutation.isPending ||
-                deleteMutation.isPending ||
-                !isDirty ||
-                form.name.trim().length === 0
-              }
+              disabled={saveMutation.isPending || deleteMutation.isPending || !isDirty || form.name.trim().length === 0}
               form="character-editor-form"
               type="submit"
             >
@@ -442,7 +421,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     <div className="row gap-8">
                       <input
                         className="input"
-                        disabled={!canEdit || draftMutation.isPending}
+                        disabled={draftMutation.isPending}
                         id="character-draft-concept"
                         maxLength={2000}
                         onChange={(event) => setDraftConcept(event.currentTarget.value)}
@@ -474,7 +453,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                 <Field id="character-name" label="Имя" required>
                   <input
                     className="input"
-                    disabled={!canEdit || saveMutation.isPending}
+                    disabled={saveMutation.isPending}
                     id="character-name"
                     maxLength={200}
                     onChange={(event) => setField('name', event.currentTarget.value)}
@@ -490,7 +469,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                 >
                   <textarea
                     className="textarea"
-                    disabled={!canEdit || saveMutation.isPending}
+                    disabled={saveMutation.isPending}
                     id="character-description"
                     maxLength={20_000}
                     onChange={(event) => setField('description', event.currentTarget.value)}
@@ -507,7 +486,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                 >
                   <textarea
                     className="textarea"
-                    disabled={!canEdit || saveMutation.isPending}
+                    disabled={saveMutation.isPending}
                     id="character-personality"
                     maxLength={5_000}
                     onChange={(event) => setField('personality', event.currentTarget.value)}
@@ -523,7 +502,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                   label="Примеры диалогов"
                 >
                   <TemplateTextarea
-                    disabled={!canEdit || saveMutation.isPending}
+                    disabled={saveMutation.isPending}
                     id="character-mes-example"
                     maxLength={20_000}
                     onChange={(next) => setField('exampleDialogue', next)}
@@ -535,7 +514,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                 <Field hint="Через запятую." id="character-tags" label="Теги">
                   <input
                     className="input"
-                    disabled={!canEdit || saveMutation.isPending}
+                    disabled={saveMutation.isPending}
                     id="character-tags"
                     onChange={(event) => setField('tagsText', event.currentTarget.value)}
                     placeholder="ru, slice-of-life, ремесло"
@@ -557,7 +536,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                   label="Сцена"
                 >
                   <TemplateTextarea
-                    disabled={!canEdit || saveMutation.isPending}
+                    disabled={saveMutation.isPending}
                     id="character-scenario"
                     maxLength={5_000}
                     onChange={(next) => setField('scenario', next)}
@@ -573,7 +552,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                   label="Первая фраза"
                 >
                   <TemplateTextarea
-                    disabled={!canEdit || saveMutation.isPending}
+                    disabled={saveMutation.isPending}
                     id="character-first-mes"
                     maxLength={20_000}
                     onChange={(next) => setField('firstMessage', next)}
@@ -596,7 +575,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                   label="System Prompt (опционально)"
                 >
                   <TemplateTextarea
-                    disabled={!canEdit || saveMutation.isPending}
+                    disabled={saveMutation.isPending}
                     id="character-system-prompt"
                     maxLength={20_000}
                     onChange={(next) => setField('systemPrompt', next)}
@@ -658,13 +637,6 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     ) : null}
                   </div>
                 </div>
-                {sourceNote ? (
-                  <div className="card" style={{ padding: 12 }}>
-                    <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-                      {sourceNote}
-                    </div>
-                  </div>
-                ) : null}
               </aside>
             </div>
           )}

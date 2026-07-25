@@ -3,27 +3,12 @@ import type { CharacterDetailDto, UploadCharacterAvatarCommand } from '@immersio
 import {
   findCharacterFile,
   readCharacterDetail,
-  siblingPngIsCharacterCard,
   writeCharacterAvatarFile,
 } from '../infrastructure/file-character-repository.js';
 import { detectAvatarImageFormat } from './avatar-image-format.js';
 import { CharacterNotFoundError } from './get-character-avatar.js';
 
 export const MAX_AVATAR_BYTES = 8 * 1024 * 1024;
-
-export class CharacterAvatarOwnedByCardError extends Error {
-  constructor(characterId: string) {
-    super(`Avatar of a PNG-card character is the card itself: ${characterId}`);
-    this.name = 'CharacterAvatarOwnedByCardError';
-  }
-}
-
-export class CharacterAvatarCardCollisionError extends Error {
-  constructor(characterId: string) {
-    super(`Sibling PNG of ${characterId} is an independent character card and cannot be overwritten`);
-    this.name = 'CharacterAvatarCardCollisionError';
-  }
-}
 
 export class InvalidAvatarImageError extends Error {
   constructor(message: string) {
@@ -40,9 +25,6 @@ export async function uploadCharacterAvatar(
   if (!summary) {
     throw new CharacterNotFoundError(characterId);
   }
-  if (summary.source !== 'json') {
-    throw new CharacterAvatarOwnedByCardError(characterId);
-  }
 
   const bytes = Buffer.from(command.contentBase64, 'base64');
   if (bytes.length === 0) {
@@ -57,15 +39,9 @@ export async function uploadCharacterAvatar(
     throw new InvalidAvatarImageError('Содержимое файла не совпадает с заявленным форматом изображения.');
   }
 
-  // A sibling PNG that is itself a character card is an independent character (id collision):
-  // overwriting it with an avatar would destroy that character.
-  if (format.extension === '.png' && (await siblingPngIsCharacterCard(characterId))) {
-    throw new CharacterAvatarCardCollisionError(characterId);
-  }
+  await writeCharacterAvatarFile(summary.id, bytes, format.extension);
 
-  await writeCharacterAvatarFile(characterId, bytes, format.extension);
-
-  const detail = await readCharacterDetail(characterId);
+  const detail = await readCharacterDetail(summary.id);
   if (!detail) {
     throw new CharacterNotFoundError(characterId);
   }

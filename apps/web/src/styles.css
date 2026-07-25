@@ -809,6 +809,9 @@ select:disabled {
 
 .col {
   display: grid;
+  /* Колонка не должна раздуваться под самую длинную строку внутри: без
+     minmax(0, …) её ширину задаёт max-content вложенного текста. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   min-width: 0;
 }
@@ -1073,6 +1076,9 @@ select:disabled {
 .rp__body {
   overflow: auto;
   display: grid;
+  /* Без minmax(0, …) колонка растягивается под самую длинную строку внутри
+     вкладки, и панель начинает ездить вбок вместе с текстом. */
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
 }
 

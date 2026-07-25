@@ -5,16 +5,12 @@ import { createFileIdSchema } from '../common/file-id.js';
 export const CharacterIdSchema = createFileIdSchema('Character id');
 export type CharacterId = z.infer<typeof CharacterIdSchema>;
 
-export const CharacterSourceFormatSchema = z.enum(['png', 'json']);
-export type CharacterSourceFormat = z.infer<typeof CharacterSourceFormatSchema>;
-
 export const CharacterSummaryDtoSchema = z.object({
   avatarUrl: z.string().nullable(),
   chatCount: z.number().int().min(0),
   id: CharacterIdSchema,
   lastChatAt: z.string().nullable(),
   name: z.string().min(1),
-  source: CharacterSourceFormatSchema,
   updatedAt: z.string().min(1),
 });
 export type CharacterSummaryDto = z.infer<typeof CharacterSummaryDtoSchema>;
@@ -31,11 +27,9 @@ export const CharacterDetailDtoSchema = z.object({
   exampleDialogue: z.string(),
   firstMessage: z.string(),
   id: CharacterIdSchema,
-  isEditable: z.boolean(),
   name: z.string().min(1),
   personality: z.string(),
   scenario: z.string(),
-  source: CharacterSourceFormatSchema,
   systemPrompt: z.string(),
   tags: z.array(z.string()),
   updatedAt: z.string().min(1),

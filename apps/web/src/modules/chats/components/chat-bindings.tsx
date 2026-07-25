@@ -1,9 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-
-import { createApiUrl } from '../../../shared/api/client';
-import { avatarColor, avatarInitial } from '../../../shared/lib/avatar';
 import { pluralRu } from '../../../shared/lib/plural';
+import { Avatar } from '../../../shared/ui/avatar';
 import { BookIcon, TheaterIcon, UserIcon } from '../../../shared/ui/icons';
 import { characterDetailQueryOptions } from '../../characters/queries/character-detail-query';
 import { lorebookListQueryOptions } from '../../lorebooks/queries/lorebook-list-query';
@@ -75,30 +73,7 @@ export function ChatBindings({
       <BindingRow
         icon={
           characterName ? (
-            <span
-              className="avatar"
-              style={
-                characterAvatarUrl
-                  ? {
-                      background: `center / cover no-repeat url("${createApiUrl(characterAvatarUrl)}")`,
-                      border: 0,
-                      flex: 'none',
-                      height: 26,
-                      width: 26,
-                    }
-                  : {
-                      background: avatarColor(characterName),
-                      border: 0,
-                      color: 'white',
-                      flex: 'none',
-                      fontSize: 'var(--fz-xs)',
-                      height: 26,
-                      width: 26,
-                    }
-              }
-            >
-              {characterAvatarUrl ? null : avatarInitial(characterName)}
-            </span>
+            <Avatar name={characterName} size={26} url={characterAvatarUrl} />
           ) : (
             <span className="rp-binding__icon">
               <UserIcon size={13} />

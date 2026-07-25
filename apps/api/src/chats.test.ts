@@ -548,7 +548,7 @@ describe('chat routes', () => {
     expect(payload.chat.characterId).toBe('Aria.json');
     expect(payload.chat.characterName).toBe('Ария');
     expect(payload.chat.title).toBe('Чат с Ария');
-    expect(payload.chat.characterAvatarUrl).toBeNull();
+    expect(payload.chat.characterAvatarUrl).toBe('/api/characters/Aria.json/avatar');
     expect(payload.chat.messageCount).toBe(1);
 
     const sessionResponse = await app.inject({ method: 'GET', url: `/api/chats/${payload.chat.id}` });
@@ -687,22 +687,21 @@ describe('chat routes', () => {
     await app.close();
   });
 
-  it('exposes a PNG character avatar URL on the chat summary', async () => {
+  it('keeps the avatar URL of a chat bound before the move to JSON cards', async () => {
     const charactersDir = path.join(temporaryDataRoot, 'characters');
     await fs.mkdir(charactersDir, { recursive: true });
-    await fs.writeFile(path.join(charactersDir, 'Arina.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    await fs.writeFile(path.join(charactersDir, 'Arina.json'), JSON.stringify({ name: 'Арина' }), 'utf8');
 
     const app = buildApiApp();
     const response = await app.inject({
       method: 'POST',
       url: '/api/chats',
-      payload: { characterId: 'Arina.png', title: 'Чат с Ариной' },
+      payload: { characterId: 'Arina.json', title: 'Чат с Ариной' },
     });
     const payload = CreateChatResponseSchema.parse(response.json());
 
     expect(response.statusCode).toBe(201);
-    expect(payload.chat.characterId).toBe('Arina.png');
-    expect(payload.chat.characterAvatarUrl).toBe('/api/characters/Arina.png/avatar');
+    expect(payload.chat.characterAvatarUrl).toBe('/api/characters/Arina.json/avatar');
     expect(payload.chat.title).toBe('Чат с Ариной');
     expect(payload.chat.messageCount).toBe(0);
 

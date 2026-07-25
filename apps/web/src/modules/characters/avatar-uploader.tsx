@@ -123,12 +123,12 @@ export function CharacterAvatarUploader({ characterId, detail }: CharacterAvatar
     );
   }
 
-  if (!detail || detail.source === 'png') {
+  if (!detail) {
     return (
       <>
         <AvatarBox backgroundUrl={avatarSrc} />
         <div className="muted" style={{ fontSize: 'var(--fz-2xs)', marginTop: 8 }}>
-          {detail ? 'Аватар — это сама PNG-карточка, отдельный файл не загружается.' : 'Загружаем карточку…'}
+          Загружаем карточку…
         </div>
       </>
     );

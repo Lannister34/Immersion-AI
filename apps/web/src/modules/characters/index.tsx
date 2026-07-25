@@ -381,20 +381,6 @@ function CharacterCard({ character }: CharacterCardProps) {
           placeItems: 'center',
         }}
       >
-        <span
-          className="pill"
-          style={{
-            position: 'absolute',
-            top: 8,
-            left: 8,
-            fontSize: 'var(--fz-2xs)',
-            background: 'oklch(0 0 0 / 0.45)',
-            color: 'oklch(1 0 0 / 0.85)',
-            zIndex: 2,
-          }}
-        >
-          {character.source.toUpperCase()}
-        </span>
         <div
           className={confirmDeleteVisible ? undefined : 'char-card__actions'}
           style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4, zIndex: 2 }}
@@ -522,9 +508,6 @@ function CharacterListRow({ character }: CharacterCardProps) {
             {character.avatarUrl ? null : initial}
           </span>
           <strong style={{ fontWeight: 600 }}>{character.name}</strong>
-          <span className="muted mono" style={{ fontSize: 'var(--fz-2xs)' }} title={character.id}>
-            {character.source.toUpperCase()}
-          </span>
         </Link>
       </td>
       <td style={{ fontSize: 'var(--fz-xs)' }}>
