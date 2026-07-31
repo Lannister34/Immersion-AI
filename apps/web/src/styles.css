@@ -99,6 +99,11 @@ input,
 textarea,
 select {
   font: inherit;
+  /* letter-spacing поля не наследуют: у textarea остаётся normal, и подложка
+     подсветки {{user}}/{{char}} расходится с текстом тем сильнее, чем длиннее
+     строка. */
+  letter-spacing: inherit;
+  word-spacing: inherit;
 }
 
 button:disabled,

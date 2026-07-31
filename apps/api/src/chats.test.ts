@@ -641,11 +641,12 @@ describe('chat routes', () => {
 
     const sessionResponse = await app.inject({ method: 'GET', url: `/api/chats/${payload.chat.id}` });
     const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
-    // Приветствие сценария вставляется как есть: плейсхолдеры остаются, как и у карточки.
+    // Приветствие ложится в чат обычным сообщением, поэтому плейсхолдеры в нём
+    // раскрываются сразу — иначе {{user}} уехал бы и на экран, и в модель.
     expect(sessionPayload.messages).toHaveLength(1);
     expect(sessionPayload.messages[0]).toMatchObject({
       role: 'assistant',
-      content: '*{{char}} расстилает плед.* Ты всё-таки {{user}}, да?',
+      content: '*Ария расстилает плед.* Ты всё-таки Тестер, да?',
     });
 
     await app.close();
