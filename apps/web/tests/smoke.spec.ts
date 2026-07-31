@@ -201,3 +201,34 @@ test('overrides a model parameter and chat instructions from the settings panel'
   await page.getByRole('button', { name: 'Контекст', exact: true }).click();
   await expect(page.locator('#chat-additional-instructions')).toHaveValue('Отвечай коротко.');
 });
+
+test('creates a character together with the avatar picked before the first save', async ({ page }) => {
+  await page.goto('/characters/new');
+
+  await page.locator('#character-name').fill('Смоук аватар');
+  await page.locator('input[type="file"]').setInputFiles({
+    buffer: Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('pixels')]),
+    mimeType: 'image/png',
+    name: 'avatar.png',
+  });
+  await expect(page.getByText('Аватар загрузится вместе с карточкой.')).toBeVisible();
+
+  const uploadedAvatar = page.waitForResponse(
+    (response) => response.url().includes('/avatar') && response.request().method() === 'PUT',
+  );
+  await page.getByRole('button', { name: 'Создать' }).click();
+  expect((await uploadedAvatar).status()).toBe(200);
+
+  await expect(page).toHaveURL(/\/characters$/);
+  const cardLink = page.getByRole('link', { name: 'Открыть карточку: Смоук аватар' });
+  await expect(cardLink).toBeVisible();
+
+  // Прибираем за собой: смоук-фикстура переживает весь прогон целиком.
+  await cardLink.click();
+  await expect(page).toHaveURL(/\/characters\/.+/);
+  await expect(page.locator('#character-name')).toHaveValue('Смоук аватар');
+  await page.getByRole('button', { name: 'Удалить', exact: true }).click();
+  await page.getByRole('button', { name: 'Да, удалить' }).click();
+  await expect(page).toHaveURL(/\/characters$/);
+  await expect(cardLink).toBeHidden();
+});

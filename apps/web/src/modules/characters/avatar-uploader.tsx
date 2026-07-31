@@ -1,6 +1,6 @@
 import { CharacterAvatarMimeTypeSchema, type CharacterDetailDto } from '@immersion/contracts/characters';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type ChangeEvent, type DragEvent, useRef, useState } from 'react';
+import { type ChangeEvent, type DragEvent, useEffect, useRef, useState } from 'react';
 
 import { createApiUrl } from '../../shared/api/client';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
@@ -15,30 +15,34 @@ const MAX_AVATAR_BYTES = 8 * 1024 * 1024;
 interface CharacterAvatarUploaderProps {
   characterId: string | null;
   detail: CharacterDetailDto | null;
+  /** Файл, выбранный до того, как карточка появилась на сервере. */
+  pendingFile: File | null;
+  onPendingFileChange: (file: File | null) => void;
 }
 
-interface AvatarBoxProps {
-  backgroundUrl: string | null;
-}
-
-function AvatarBox({ backgroundUrl }: AvatarBoxProps) {
-  return (
-    <div
-      style={{
-        aspectRatio: '1 / 1',
-        borderRadius: 12,
-        background: backgroundUrl ? `center / cover no-repeat url("${backgroundUrl}")` : 'var(--surface-2)',
-        border: '1px solid var(--hairline)',
-      }}
-    />
-  );
-}
-
-export function CharacterAvatarUploader({ characterId, detail }: CharacterAvatarUploaderProps) {
+export function CharacterAvatarUploader({
+  characterId,
+  detail,
+  onPendingFileChange,
+  pendingFile,
+}: CharacterAvatarUploaderProps) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragActive, setDragActive] = useState(false);
   const [pickError, setPickError] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  // Предпросмотр несохранённого файла живёт в blob-URL: его нужно отпустить,
+  // иначе выбранные подряд картинки останутся висеть в памяти вкладки.
+  useEffect(() => {
+    if (!pendingFile) {
+      setPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(pendingFile);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [pendingFile]);
 
   const invalidateCharacter = async () => {
     if (characterId) {
@@ -69,6 +73,7 @@ export function CharacterAvatarUploader({ characterId, detail }: CharacterAvatar
     onSuccess: invalidateCharacter,
   });
 
+  const isUnsaved = characterId === null;
   const busy = uploadMutation.isPending || deleteMutation.isPending;
 
   const submitFile = (file: File) => {
@@ -79,6 +84,11 @@ export function CharacterAvatarUploader({ characterId, detail }: CharacterAvatar
     }
     if (file.size > MAX_AVATAR_BYTES) {
       setPickError('Файл больше 8 МБ.');
+      return;
+    }
+    // Пока карточки нет, отправлять некуда: держим файл до сохранения.
+    if (isUnsaved) {
+      onPendingFileChange(file);
       return;
     }
     uploadMutation.mutate(file);
@@ -110,29 +120,8 @@ export function CharacterAvatarUploader({ characterId, detail }: CharacterAvatar
   };
 
   // avatarUrl уже содержит серверную версию (?v=mtime), отдельный кэш-бастинг не нужен.
-  const avatarSrc = detail?.avatarUrl ? createApiUrl(detail.avatarUrl) : null;
-
-  if (!characterId) {
-    return (
-      <>
-        <AvatarBox backgroundUrl={null} />
-        <div className="muted" style={{ fontSize: 'var(--fz-2xs)', marginTop: 8 }}>
-          Сначала сохраните карточку — затем можно будет загрузить аватар.
-        </div>
-      </>
-    );
-  }
-
-  if (!detail) {
-    return (
-      <>
-        <AvatarBox backgroundUrl={avatarSrc} />
-        <div className="muted" style={{ fontSize: 'var(--fz-2xs)', marginTop: 8 }}>
-          Загружаем карточку…
-        </div>
-      </>
-    );
-  }
+  const savedAvatarSrc = detail?.avatarUrl ? createApiUrl(detail.avatarUrl) : null;
+  const avatarSrc = isUnsaved ? previewUrl : savedAvatarSrc;
 
   const uploadError = uploadMutation.error
     ? getApiErrorMessage(uploadMutation.error, 'Не удалось загрузить аватар.')
@@ -177,9 +166,21 @@ export function CharacterAvatarUploader({ characterId, detail }: CharacterAvatar
         type="file"
       />
       <div className="muted" style={{ fontSize: 'var(--fz-2xs)', marginTop: 8 }}>
-        Нажмите на квадрат или перетащите файл — PNG, JPEG или WebP до 8 МБ.
+        {isUnsaved && pendingFile
+          ? 'Аватар загрузится вместе с карточкой.'
+          : 'Нажмите на квадрат или перетащите файл — PNG, JPEG или WebP до 8 МБ.'}
       </div>
-      {detail.avatarUrl ? (
+      {isUnsaved && pendingFile ? (
+        <button
+          className="btn btn--xs"
+          onClick={() => onPendingFileChange(null)}
+          style={{ marginTop: 8 }}
+          type="button"
+        >
+          <TrashIcon size={12} /> Убрать
+        </button>
+      ) : null}
+      {!isUnsaved && detail?.avatarUrl ? (
         <button
           className="btn btn--xs"
           disabled={busy}

@@ -1,4 +1,8 @@
-import type { CharacterDetailDto, SaveCharacterCommand } from '@immersion/contracts/characters';
+import {
+  CharacterAvatarMimeTypeSchema,
+  type CharacterDetailDto,
+  type SaveCharacterCommand,
+} from '@immersion/contracts/characters';
 import type { CharacterDraftFieldName, CharacterDraftFields } from '@immersion/contracts/generation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
@@ -7,6 +11,7 @@ import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } 
 import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { formatRelative } from '../../shared/lib/format-relative';
+import { readFileAsBase64 } from '../../shared/lib/read-file-as-base64';
 import { Field } from '../../shared/ui/field';
 import { ChatIcon, CopyIcon, SparkleIcon, TrashIcon } from '../../shared/ui/icons';
 import { TemplateTextarea } from '../../shared/ui/template-textarea';
@@ -18,6 +23,7 @@ import {
   generateCharacterField,
   useGenerationAvailability,
 } from '../generation';
+import { uploadCharacterAvatar } from './api/character-avatar';
 import { createCharacter, updateCharacter } from './api/save-character';
 import { CharacterAvatarUploader } from './avatar-uploader';
 import { useDeleteCharacter } from './mutations/use-delete-character';
@@ -127,7 +133,11 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [draftConcept, setDraftConcept] = useState('');
   const [avatarCopyState, setAvatarCopyState] = useState<AvatarCopyState>('idle');
+  const [pendingAvatar, setPendingAvatar] = useState<File | null>(null);
   const appliedInitialStateRef = useRef(initialState);
+  // Если карточка уже создалась, а аватар не долетел, повторное сохранение
+  // должно дописать её, а не создать вторую.
+  const createdIdRef = useRef<string | null>(null);
 
   // Сбрасываем форму на серверное состояние только пока пользователь её не редактировал.
   useEffect(() => {
@@ -147,10 +157,19 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
   const saveMutation = useMutation({
     mutationFn: async () => {
       const command = toCommand(form);
-      if (isNew) {
-        return createCharacter(command);
+      const savedId = isNew ? createdIdRef.current : characterId;
+      const saved = savedId ? await updateCharacter(savedId, command) : await createCharacter(command);
+      createdIdRef.current = saved.character.id;
+
+      if (!pendingAvatar) {
+        return saved;
       }
-      return updateCharacter(characterId, command);
+
+      const mimeType = CharacterAvatarMimeTypeSchema.parse(pendingAvatar.type);
+      const contentBase64 = await readFileAsBase64(pendingAvatar);
+      const withAvatar = await uploadCharacterAvatar(saved.character.id, { contentBase64, mimeType });
+      setPendingAvatar(null);
+      return withAvatar;
     },
     onSuccess: async (response) => {
       queryClient.setQueryData(characterDetailQueryKey(response.character.id), response);
@@ -599,7 +618,12 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                   <div className="muted" style={{ fontSize: 'var(--fz-xs)', marginBottom: 8 }}>
                     Аватар
                   </div>
-                  <CharacterAvatarUploader characterId={characterId} detail={detail} />
+                  <CharacterAvatarUploader
+                    characterId={characterId}
+                    detail={detail}
+                    onPendingFileChange={setPendingAvatar}
+                    pendingFile={pendingAvatar}
+                  />
                   <div className="col gap-8" style={{ marginTop: 10 }}>
                     <button
                       className="btn btn--xs"
