@@ -1,18 +1,5 @@
 import { spawnSync } from 'node:child_process';
 
-const REWRITE_PREFIXES = ['apps/', 'packages/'];
-const REWRITE_FILES = new Set([
-  '.github/workflows/ci.yml',
-  '.gitignore',
-  '.husky/pre-commit',
-  '.husky/pre-push',
-  'package.json',
-  'pnpm-lock.yaml',
-  'pnpm-workspace.yaml',
-  'tsconfig.base.json',
-  'tsconfig.rewrite.json',
-]);
-
 function quoteWindowsArg(arg) {
   if (!arg.length) {
     return '""';
@@ -36,7 +23,7 @@ function resolveCommand(command, args) {
   };
 }
 
-function run(command, args, options = {}) {
+function run(command, args) {
   const resolved = resolveCommand(command, args);
   const result = spawnSync(resolved.command, resolved.args, {
     stdio: 'inherit',
@@ -45,7 +32,6 @@ function run(command, args, options = {}) {
       ...process.env,
       HUSKY: '0',
     },
-    ...options,
   });
 
   if (result.error) {
@@ -57,77 +43,7 @@ function run(command, args, options = {}) {
   }
 }
 
-function capture(command, args) {
-  const result = spawnSync(command, args, {
-    encoding: 'utf8',
-    shell: false,
-  });
-
-  if (result.status !== 0) {
-    return null;
-  }
-
-  return result.stdout.trim();
-}
-
-function resolveBaseRef() {
-  const currentBranch = capture('git', ['branch', '--show-current']);
-  const originDev = capture('git', ['rev-parse', '--verify', 'origin/dev']);
-
-  if (originDev && currentBranch && currentBranch !== 'dev') {
-    return 'origin/dev';
-  }
-
-  const upstream = capture('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']);
-  if (upstream) {
-    return upstream;
-  }
-
-  if (originDev) {
-    return 'origin/dev';
-  }
-
-  return null;
-}
-
-function getChangedFiles() {
-  const baseRef = resolveBaseRef();
-  const diffArgs = baseRef ? ['diff', '--name-only', `${baseRef}...HEAD`] : ['diff', '--cached', '--name-only'];
-  const stdout = capture('git', diffArgs);
-
-  if (!stdout) {
-    return [];
-  }
-
-  return stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-function touchesRewrite(changedFiles) {
-  return changedFiles.some((filePath) => {
-    if (REWRITE_FILES.has(filePath)) {
-      return true;
-    }
-
-    if (filePath.startsWith('scripts/')) {
-      return true;
-    }
-
-    return REWRITE_PREFIXES.some((prefix) => filePath.startsWith(prefix));
-  });
-}
-
-const changedFiles = getChangedFiles();
-
-console.log('[pre-push] Running legacy baseline verification...');
-run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'check']);
-
-if (!touchesRewrite(changedFiles)) {
-  console.log('[pre-push] No rewrite paths changed; skipping clean rewrite preflight.');
-  process.exit(0);
-}
-
-console.log('[pre-push] Rewrite paths changed; running clean checkout rewrite preflight...');
-run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'rewrite:ci:clean']);
+// Проверяем в чистом чекауте, а не в текущем рабочем дереве: незакоммиченные
+// файлы и уже установленные зависимости легко скрывают то, что упадёт в CI.
+console.log('[pre-push] Running CI in a clean checkout...');
+run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'ci:clean']);

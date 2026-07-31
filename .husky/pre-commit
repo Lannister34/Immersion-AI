@@ -1,1 +1,1 @@
-npx biome check --staged --no-errors-on-unmatched ./client/src ./server/src ./apps ./packages
+npx biome check --staged --no-errors-on-unmatched ./apps ./packages

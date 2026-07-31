@@ -62,24 +62,24 @@ function runQuiet(command, args, options = {}) {
   });
 }
 
-const tempDir = mkdtempSync(path.join(os.tmpdir(), 'immersion-rewrite-ci-'));
+const tempDir = mkdtempSync(path.join(os.tmpdir(), 'immersion-ci-'));
 let worktreeAdded = false;
 
 try {
-  console.log(`[rewrite-ci-clean] Creating clean worktree at ${tempDir}`);
+  console.log(`[ci-clean] Creating clean worktree at ${tempDir}`);
   run('git', ['worktree', 'add', '--detach', tempDir, 'HEAD']);
   worktreeAdded = true;
 
   const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
-  console.log('[rewrite-ci-clean] Installing dependencies from lockfile in clean checkout...');
+  console.log('[ci-clean] Installing dependencies from lockfile in clean checkout...');
   run('corepack', ['pnpm', 'install', '--frozen-lockfile'], { cwd: tempDir });
 
-  console.log('[rewrite-ci-clean] Running rewrite CI in clean checkout...');
-  run(npm, ['run', 'rewrite:ci'], { cwd: tempDir });
+  console.log('[ci-clean] Running CI in clean checkout...');
+  run(npm, ['run', 'ci'], { cwd: tempDir });
 } finally {
   if (worktreeAdded) {
-  console.log('[rewrite-ci-clean] Removing temporary worktree...');
+  console.log('[ci-clean] Removing temporary worktree...');
     const removal = runQuiet('git', ['worktree', 'remove', tempDir, '--force']);
     if (removal.status !== 0) {
       rmSync(tempDir, { force: true, recursive: true });

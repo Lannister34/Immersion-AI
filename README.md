@@ -12,22 +12,25 @@ All data is stored locally. No cloud dependencies, no telemetry.
 - **AI Generation** — generate characters, lorebooks, scenarios, chat titles, and more using your LLM
 - **Flexible Configuration** — per-chat sampler settings, system prompts, generation presets
 - **Built-in llama-server** — start/stop, model selection, GPU layers, context size
-- **External API** — connect to a running KoboldCpp instance
+- **External API** — connect to any OpenAI-compatible server (LM Studio, KoboldCpp, llama-server)
 
 ## Requirements
 
-- [Node.js](https://nodejs.org/) 18+
+- [Node.js](https://nodejs.org/) 24+ (Corepack ships with it and provides pnpm)
 
 ## Getting Started
 
 ```
 git clone https://github.com/Lannister34/immersion-ai.git
 cd immersion-ai
+corepack pnpm install
+npm run dev:api
+npm run dev:web
 ```
 
-**Windows:** run `start.bat`
+The web client runs at http://localhost:4788 and talks to the API at http://localhost:4787.
 
-The app will install dependencies, build the client, and open http://localhost:4777
+**Windows:** run `start.bat` — it installs dependencies and opens the app for you.
 
 ## TODO
 
@@ -55,22 +58,25 @@ LLM-фронтенд для ролевых чатов и творческого 
 - **AI-генерация** — генерация персонажей, лорбуков, сценариев, заголовков чатов и другого с помощью LLM
 - **Гибкая настройка** — параметры сэмплера для каждого чата, системные промпты, пресеты генерации
 - **Встроенный llama-server** — запуск/остановка, выбор модели, GPU-слои, размер контекста
-- **Внешний API** — подключение к запущенному KoboldCpp
+- **Внешний API** — подключение к любому OpenAI-совместимому серверу (LM Studio, KoboldCpp, llama-server)
 
 ## Требования
 
-- [Node.js](https://nodejs.org/) версии 18+
+- [Node.js](https://nodejs.org/) версии 24+ (pnpm поставляется с ним через Corepack)
 
 ## Запуск
 
 ```
 git clone https://github.com/Lannister34/immersion-ai.git
 cd immersion-ai
+corepack pnpm install
+npm run dev:api
+npm run dev:web
 ```
 
-**Windows:** запустите `start.bat`
+Клиент открывается на http://localhost:4788 и работает с API на http://localhost:4787.
 
-Приложение установит зависимости, соберёт клиент и откроет http://localhost:4777
+**Windows:** запустите `start.bat` — он поставит зависимости и откроет приложение.
 
 ## TODO
 
