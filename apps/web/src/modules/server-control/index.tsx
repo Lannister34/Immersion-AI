@@ -13,6 +13,7 @@ import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { pluralRu } from '../../shared/lib/plural';
 import { CpuIcon, PlayIcon, PowerIcon, SearchIcon, SlidersIcon } from '../../shared/ui/icons';
+import { describeVisionSupport, generationReadinessQueryOptions } from '../generation';
 import { saveProviderSettings } from './api/save-provider-settings';
 import { startRuntime } from './api/start-runtime';
 import { stopRuntime } from './api/stop-runtime';
@@ -111,6 +112,7 @@ export function ServerControlScreen() {
   const [modeChangeError, setModeChangeError] = useState<string | null>(null);
 
   const snapshot = providerSettingsQuery.data;
+  const generationReadinessQuery = useQuery(generationReadinessQueryOptions());
   const overview = runtimeOverviewQuery.data;
   const status = overview?.serverStatus.status ?? 'idle';
   const activeMode: ProviderMode = snapshot?.mode ?? 'builtin';
@@ -145,6 +147,7 @@ export function ServerControlScreen() {
     return model.name.toLowerCase().includes(search.trim().toLowerCase());
   });
   const activeModelName = overview?.serverStatus.model ?? null;
+  const vision = describeVisionSupport(generationReadinessQuery.data?.visionSupport);
 
   let runtimeSubtitle = 'Загружаем настройки…';
   if (snapshot) {
@@ -237,6 +240,11 @@ export function ServerControlScreen() {
                   <div className="row gap-12">
                     <strong style={{ fontSize: 'var(--fz-xl)' }}>{activeModelName ?? 'Модель не выбрана'}</strong>
                     <span className={RUNTIME_STATUS_PILL[status]}>{RUNTIME_STATUS_LABELS[status]}</span>
+                    {status === 'running' ? (
+                      <span className={vision.tone === 'ok' ? 'pill pill--ok' : 'pill'} title={vision.hint}>
+                        {vision.label}
+                      </span>
+                    ) : null}
                   </div>
                   <div className="row gap-16 muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
                     <span>port {overview.serverConfig.port}</span>

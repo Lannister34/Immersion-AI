@@ -5,8 +5,12 @@ import {
 } from '@immersion/contracts/generation';
 import type { ProviderSettingsSnapshot } from '@immersion/contracts/providers';
 import type { RuntimeOverviewResponse } from '@immersion/contracts/runtime';
-import { normalizeGenerationProviderBaseUrl } from '../../providers/application/generation-provider.js';
+import {
+  normalizeGenerationProviderBaseUrl,
+  resolveGenerationProviderEndpoint,
+} from '../../providers/application/generation-provider.js';
 import { getProviderSettings } from '../../providers/application/get-provider-settings.js';
+import { getProviderVisionProbe } from '../../providers/infrastructure/provider-vision-probe.js';
 import { getRuntimeOverview } from '../../runtime/application/get-runtime-overview.js';
 
 function toRuntimeSummary(runtime: RuntimeOverviewResponse) {
@@ -24,6 +28,7 @@ function ready(settings: ProviderSettingsSnapshot): GenerationReadinessResponse 
     mode: settings.mode,
     runtime: null,
     status: 'ready',
+    visionSupport: 'unknown',
   });
 }
 
@@ -38,6 +43,8 @@ function blocked(
     mode: settings.mode,
     runtime: runtime ? toRuntimeSummary(runtime) : null,
     status: 'blocked',
+    // Пока генерация заблокирована, спрашивать модель о картинках не у кого.
+    visionSupport: 'unknown',
   });
 }
 
@@ -58,6 +65,7 @@ async function getBuiltinReadiness(settings: ProviderSettingsSnapshot): Promise<
       mode: settings.mode,
       runtime: toRuntimeSummary(runtime),
       status: 'ready',
+      visionSupport: 'unknown',
     });
   }
 
@@ -156,8 +164,32 @@ function getExternalReadiness(settings: ProviderSettingsSnapshot): GenerationRea
   return ready(settings);
 }
 
+/**
+ * Поддержку изображений спрашиваем у самого сервера и только когда генерация
+ * уже готова: у остановленного рантайма спрашивать нечего, а ответ кэшируется
+ * в пробе — на частые опросы готовности это не ложится.
+ */
+async function withVisionSupport(readiness: GenerationReadinessResponse): Promise<GenerationReadinessResponse> {
+  if (readiness.status !== 'ready') {
+    return readiness;
+  }
+
+  try {
+    const endpoint = await resolveGenerationProviderEndpoint();
+    const visionSupport = await getProviderVisionProbe().getVisionSupport({
+      baseUrl: endpoint.baseUrl,
+      model: endpoint.model,
+    });
+
+    return { ...readiness, visionSupport };
+  } catch {
+    return readiness;
+  }
+}
+
 export async function getGenerationReadiness(): Promise<GenerationReadinessResponse> {
   const settings = await getProviderSettings();
+  const readiness = settings.mode === 'builtin' ? await getBuiltinReadiness(settings) : getExternalReadiness(settings);
 
-  return settings.mode === 'builtin' ? await getBuiltinReadiness(settings) : getExternalReadiness(settings);
+  return withVisionSupport(readiness);
 }

@@ -1,0 +1,99 @@
+import { describe, expect, it } from 'vitest';
+
+import { ProviderVisionProbe, resolveProviderOrigin } from './infrastructure/provider-vision-probe.js';
+
+function buildProbe(responses: Record<string, unknown>, calls: string[] = []) {
+  return new ProviderVisionProbe({
+    fetchJson: async (url) => {
+      calls.push(url);
+      if (!(url in responses)) {
+        throw new Error(`No route: ${url}`);
+      }
+      return responses[url];
+    },
+  });
+}
+
+const TARGET = { baseUrl: 'http://127.0.0.1:5001', model: 'Qwen3-VL' };
+
+describe('resolveProviderOrigin', () => {
+  it('drops the OpenAI /v1 suffix so service endpoints resolve at the root', () => {
+    expect(resolveProviderOrigin('http://localhost:1234/v1')).toBe('http://localhost:1234');
+    expect(resolveProviderOrigin('http://localhost:1234/v1/')).toBe('http://localhost:1234');
+    expect(resolveProviderOrigin('http://127.0.0.1:5001')).toBe('http://127.0.0.1:5001');
+  });
+});
+
+describe('ProviderVisionProbe', () => {
+  it('reads vision from the llama.cpp props endpoint', async () => {
+    const probe = buildProbe({
+      'http://127.0.0.1:5001/props': { modalities: { audio: false, vision: true } },
+    });
+
+    await expect(probe.getVisionSupport(TARGET)).resolves.toBe('supported');
+  });
+
+  it('reports a text-only llama.cpp model as unsupported', async () => {
+    const probe = buildProbe({
+      'http://127.0.0.1:5001/props': { modalities: { audio: false, vision: false } },
+    });
+
+    await expect(probe.getVisionSupport(TARGET)).resolves.toBe('unsupported');
+  });
+
+  it('falls back to the LM Studio model catalog when props says nothing', async () => {
+    const probe = buildProbe({
+      'http://127.0.0.1:5001/props': { model_path: 'whatever.gguf' },
+      'http://127.0.0.1:5001/api/v1/models': {
+        models: [
+          { capabilities: { vision: false }, key: 'other-model', type: 'llm' },
+          { capabilities: { trained_for_tool_use: true, vision: true }, key: 'Qwen3-VL', type: 'llm' },
+        ],
+      },
+    });
+
+    await expect(probe.getVisionSupport(TARGET)).resolves.toBe('supported');
+  });
+
+  it('understands the older LM Studio vlm model type', async () => {
+    const probe = buildProbe({
+      'http://127.0.0.1:5001/api/v0/models': { data: [{ id: 'Qwen3-VL', type: 'vlm' }] },
+    });
+
+    await expect(probe.getVisionSupport(TARGET)).resolves.toBe('supported');
+  });
+
+  it('stays unknown for a server that answers nothing familiar', async () => {
+    const probe = buildProbe({});
+
+    await expect(probe.getVisionSupport(TARGET)).resolves.toBe('unknown');
+  });
+
+  it('stays unknown when the catalog has no entry for the configured model', async () => {
+    const probe = buildProbe({
+      'http://127.0.0.1:5001/api/v1/models': { models: [{ capabilities: { vision: true }, key: 'another' }] },
+    });
+
+    await expect(probe.getVisionSupport(TARGET)).resolves.toBe('unknown');
+  });
+
+  it('caches a known answer instead of probing on every readiness poll', async () => {
+    const calls: string[] = [];
+    const probe = buildProbe({ 'http://127.0.0.1:5001/props': { modalities: { vision: true } } }, calls);
+
+    await probe.getVisionSupport(TARGET);
+    await probe.getVisionSupport(TARGET);
+
+    expect(calls).toEqual(['http://127.0.0.1:5001/props']);
+  });
+
+  it('probes again for another model on the same endpoint', async () => {
+    const calls: string[] = [];
+    const probe = buildProbe({ 'http://127.0.0.1:5001/props': { modalities: { vision: true } } }, calls);
+
+    await probe.getVisionSupport(TARGET);
+    await probe.getVisionSupport({ ...TARGET, model: 'another-model' });
+
+    expect(calls).toHaveLength(2);
+  });
+});
