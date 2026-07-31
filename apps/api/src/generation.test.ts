@@ -510,6 +510,116 @@ describe('generation routes', () => {
     await app.close();
   });
 
+  it('reports approximate token counting in preview when no tokenize-capable provider is available', async () => {
+    const providerRequests = mockProviderSuccess('Preview must not call provider.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: {
+        chatId: chat.id,
+        draftUserMessage: 'Считай токены эвристикой.',
+      },
+    });
+    const payload = ChatReplyPromptPreviewResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(payload.diagnostics.tokenCountMethod).toBe('approximate');
+    // External providers are never tokenized: no provider traffic at all.
+    expect(providerRequests).toHaveLength(0);
+
+    await app.close();
+  });
+
+  it('reports exact token counting in preview via the llama-server tokenize endpoint', async () => {
+    await writeProviderSettings({
+      backendMode: 'builtin',
+    });
+    await writeDetachedRuntimeState(path.join(temporaryDataRoot, 'models', 'sandbox.gguf'), 6011);
+    const tokenizeRequests: string[] = [];
+
+    globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : input.toString();
+      tokenizeRequests.push(url);
+
+      if (url === 'http://127.0.0.1:6011/tokenize') {
+        const body = typeof init?.body === 'string' ? (JSON.parse(init.body) as { content?: string }) : {};
+        const tokenCount = Math.ceil((body.content ?? '').length / 3);
+
+        return new Response(JSON.stringify({ tokens: Array.from({ length: tokenCount }, (_, index) => index) }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        });
+      }
+
+      return new Response('not found', { status: 404 });
+    }) as typeof fetch;
+
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: {
+        chatId: chat.id,
+        draftUserMessage: 'Считай токены точно через llama-server.',
+      },
+    });
+    const payload = ChatReplyPromptPreviewResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(payload.diagnostics.tokenCountMethod).toBe('exact');
+    expect(tokenizeRequests.every((url) => url.startsWith('http://127.0.0.1:6011/'))).toBe(true);
+    expect(tokenizeRequests.some((url) => url.endsWith('/tokenize'))).toBe(true);
+    expect(tokenizeRequests.some((url) => url.includes('/chat/completions'))).toBe(false);
+
+    await app.close();
+  });
+
+  it('reports exact token counting in preview via the KoboldCpp tokencount endpoint', async () => {
+    await writeProviderSettings({
+      backendMode: 'builtin',
+    });
+    await writeDetachedRuntimeState(path.join(temporaryDataRoot, 'models', 'sandbox.gguf'), 6012);
+    const tokenizeRequests: string[] = [];
+
+    globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : input.toString();
+      tokenizeRequests.push(url);
+
+      if (url === 'http://127.0.0.1:6012/api/extra/tokencount') {
+        const body = typeof init?.body === 'string' ? (JSON.parse(init.body) as { prompt?: string }) : {};
+
+        return new Response(JSON.stringify({ value: Math.ceil((body.prompt ?? '').length / 3) }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        });
+      }
+
+      return new Response('not found', { status: 404 });
+    }) as typeof fetch;
+
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: {
+        chatId: chat.id,
+        draftUserMessage: 'Считай токены точно через KoboldCpp.',
+      },
+    });
+    const payload = ChatReplyPromptPreviewResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(payload.diagnostics.tokenCountMethod).toBe('exact');
+    expect(tokenizeRequests.some((url) => url.endsWith('/api/extra/tokencount'))).toBe(true);
+    expect(tokenizeRequests.some((url) => url.includes('/chat/completions'))).toBe(false);
+
+    await app.close();
+  });
+
   it('calls the active provider and persists the user message with the assistant reply', async () => {
     const providerRequests = mockProviderSuccess('Assistant reply from provider.');
     const app = buildApiApp();
@@ -621,6 +731,213 @@ describe('generation routes', () => {
     const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
 
     expect(sessionPayload.messages).toEqual([]);
+
+    await app.close();
+  });
+
+  it('previews the prompt with character description, personality and per-card scenario for a character chat', async () => {
+    const charactersDir = path.join(temporaryDataRoot, 'characters');
+    await fs.mkdir(charactersDir, { recursive: true });
+    await fs.writeFile(
+      path.join(charactersDir, 'Aria.json'),
+      JSON.stringify({
+        name: 'Ария',
+        description: 'Молодая скульпторша из Петербурга.',
+        personality: 'Тихая, но острая на язык.',
+        scenario: 'В мастерской вечером, в стенах пахнет глиной.',
+        first_message: 'Привет, ты впервые в студии?',
+      }),
+      'utf8',
+    );
+
+    const app = buildApiApp();
+    const createChatResponse = await app.inject({
+      method: 'POST',
+      url: '/api/chats',
+      payload: { characterId: 'Aria.json' },
+    });
+    const createdChat = CreateChatResponseSchema.parse(createChatResponse.json()).chat;
+
+    const previewResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: { chatId: createdChat.id, draftUserMessage: 'Расскажи о себе.' },
+    });
+    const preview = ChatReplyPromptPreviewResponseSchema.parse(previewResponse.json());
+    const systemMessage = preview.request.messages.find((message) => message.role === 'system');
+
+    expect(previewResponse.statusCode).toBe(200);
+    expect(preview.diagnostics.systemPromptIncluded).toBe(true);
+    expect(systemMessage).toBeDefined();
+    expect(systemMessage?.content).toContain('Ария');
+    expect(systemMessage?.content).toContain('Молодая скульпторша из Петербурга.');
+    expect(systemMessage?.content).toContain('Тихая, но острая на язык.');
+    expect(systemMessage?.content).toContain('В мастерской вечером, в стенах пахнет глиной.');
+    // Seed first_message also lands in the transcript
+    expect(
+      preview.request.messages.some(
+        (m) => m.role === 'assistant' && m.content.includes('Привет, ты впервые в студии?'),
+      ),
+    ).toBe(true);
+
+    await app.close();
+  });
+
+  it('injects scenario content into the prompt for a scenario-bound chat', async () => {
+    const scenariosDir = path.join(temporaryDataRoot, 'scenarios');
+    await fs.mkdir(scenariosDir, { recursive: true });
+    await fs.writeFile(
+      path.join(scenariosDir, 'Ice training.json'),
+      JSON.stringify({
+        name: 'Ice training',
+        content: 'A figure skater practises quads under the watchful coach Daniil Markovich.',
+        concept: 'Pressure on the rink.',
+      }),
+      'utf8',
+    );
+
+    const app = buildApiApp();
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/chats',
+      payload: { scenarioId: 'Ice training.json' },
+    });
+    const chatPayload = CreateChatResponseSchema.parse(createResponse.json());
+    expect(createResponse.statusCode).toBe(201);
+    expect(chatPayload.chat.scenarioId).toBe('Ice training.json');
+    expect(chatPayload.chat.scenarioName).toBe('Ice training');
+    expect(chatPayload.chat.title).toBe('Ice training');
+
+    const previewResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: { chatId: chatPayload.chat.id, draftUserMessage: 'Start.' },
+    });
+    const preview = ChatReplyPromptPreviewResponseSchema.parse(previewResponse.json());
+    const systemMessage = preview.request.messages.find((m) => m.role === 'system');
+    expect(systemMessage?.content).toContain('figure skater practises quads');
+
+    await app.close();
+  });
+
+  it('injects matching lorebook entries into the prompt when keys are mentioned', async () => {
+    const worldsDir = path.join(temporaryDataRoot, 'worlds');
+    await fs.mkdir(worldsDir, { recursive: true });
+    await fs.writeFile(
+      path.join(worldsDir, 'Studio.json'),
+      JSON.stringify({
+        name: 'Студия «Меандр»',
+        entries: [
+          { keys: ['Меандр'], content: 'Студия керамики в Петербурге.', enabled: true, priority: 5 },
+          { keys: ['обжиг'], content: 'Процесс обжига занимает 12 часов.', enabled: true, priority: 1 },
+          { keys: ['неупомянуто'], content: 'Не должно сработать.', enabled: true, priority: 0 },
+        ],
+      }),
+      'utf8',
+    );
+
+    const app = buildApiApp();
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/chats',
+      payload: { lorebookIds: ['Studio.json'], title: 'lorebook chat' },
+    });
+    const chatPayload = CreateChatResponseSchema.parse(createResponse.json());
+    expect(createResponse.statusCode).toBe(201);
+
+    const previewResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: {
+        chatId: chatPayload.chat.id,
+        draftUserMessage: 'Расскажи про Меандр.',
+      },
+    });
+    const preview = ChatReplyPromptPreviewResponseSchema.parse(previewResponse.json());
+    const systemMessage = preview.request.messages.find((m) => m.role === 'system');
+    expect(systemMessage?.content).toContain('World context');
+    expect(systemMessage?.content).toContain('Студия керамики в Петербурге.');
+    expect(systemMessage?.content).not.toContain('Процесс обжига занимает 12 часов.');
+    expect(systemMessage?.content).not.toContain('Не должно сработать.');
+
+    await app.close();
+  });
+
+  it('keeps the generic helper prompt for chats without a character', async () => {
+    const app = buildApiApp();
+    const chat = await createChat(app);
+
+    const previewResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: { chatId: chat.id, draftUserMessage: 'Plain question.' },
+    });
+    const preview = ChatReplyPromptPreviewResponseSchema.parse(previewResponse.json());
+
+    expect(previewResponse.statusCode).toBe(200);
+    expect(preview.diagnostics.systemPromptIncluded).toBe(false);
+    expect(preview.diagnostics.systemMessageCount).toBe(0);
+
+    await app.close();
+  });
+
+  it('previews the prompt with an edited transcript message via messageOverrides', async () => {
+    mockProviderSuccess('Setup reply.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+
+    const firstReplyResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply',
+      payload: {
+        chatId: chat.id,
+        message: 'Original prompt.',
+      },
+    });
+    expect(firstReplyResponse.statusCode).toBe(200);
+
+    const previewResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: {
+        chatId: chat.id,
+        messageOverrides: [{ messageIndex: 1, content: 'Edited prompt with extra context.' }],
+      },
+    });
+    const preview = ChatReplyPromptPreviewResponseSchema.parse(previewResponse.json());
+    const userTurnContents = preview.request.messages
+      .filter((message) => message.role === 'user')
+      .map((message) => message.content);
+
+    expect(previewResponse.statusCode).toBe(200);
+    expect(userTurnContents).toContain('Edited prompt with extra context.');
+    expect(userTurnContents).not.toContain('Original prompt.');
+
+    const sessionResponse = await app.inject({
+      method: 'GET',
+      url: `/api/chats/${chat.id}`,
+    });
+    const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
+    expect(sessionPayload.messages[0]?.content).toBe('Original prompt.');
+
+    await app.close();
+  });
+
+  it('returns 404 when previewing with an out-of-range messageOverride index', async () => {
+    const app = buildApiApp();
+    const chat = await createChat(app);
+
+    const previewResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: {
+        chatId: chat.id,
+        messageOverrides: [{ messageIndex: 9, content: 'no such message' }],
+      },
+    });
+
+    expect(previewResponse.statusCode).toBe(404);
+    expect(previewResponse.json()).toMatchObject({ code: 'chat_message_not_found' });
 
     await app.close();
   });
@@ -857,6 +1174,362 @@ describe('generation routes', () => {
     await app.close();
   });
 
+  it('regenerates the last assistant reply by dropping it and producing a new one from the same user turn', async () => {
+    const firstProvider = mockProviderSuccess('First reply.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+
+    const firstResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply',
+      payload: {
+        chatId: chat.id,
+        message: 'Tell me a joke.',
+      },
+    });
+    expect(firstResponse.statusCode).toBe(200);
+    expect(firstProvider).toHaveLength(1);
+
+    const secondProvider = mockProviderSuccess('Regenerated reply.');
+    const regenerateResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs/regenerate',
+      payload: {
+        chatId: chat.id,
+      },
+    });
+    const regeneratePayload = StartChatReplyGenerationJobResponseSchema.parse(regenerateResponse.json());
+
+    expect(regenerateResponse.statusCode).toBe(202);
+    expect(regeneratePayload.job).toMatchObject({
+      chatId: chat.id,
+      kind: 'chat_reply',
+    });
+    expect(getMessagesByRole(regeneratePayload.session.messages)).toEqual([
+      { role: 'user', content: 'Tell me a joke.' },
+    ]);
+
+    await waitForGenerationJobStatus(app, regeneratePayload.job.id, 'completed');
+
+    const sessionResponse = await app.inject({
+      method: 'GET',
+      url: `/api/chats/${chat.id}`,
+    });
+    const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
+
+    expect(getMessagesByRole(sessionPayload.messages)).toEqual([
+      { role: 'user', content: 'Tell me a joke.' },
+      { role: 'assistant', content: 'Regenerated reply.' },
+    ]);
+    expect(secondProvider).toHaveLength(1);
+    const regenRequestBody = getProviderRequestBody(secondProvider[0]);
+    const userTurns =
+      regenRequestBody.messages?.filter(
+        (message) => message.role === 'user' && message.content === 'Tell me a joke.',
+      ) ?? [];
+    expect(userTurns).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it('refuses to regenerate when the last message is not an assistant reply', async () => {
+    const app = buildApiApp();
+    const chat = await createChat(app);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs/regenerate',
+      payload: {
+        chatId: chat.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      code: 'no_assistant_message_to_regenerate',
+    });
+
+    await app.close();
+  });
+
+  it('continues the last assistant reply by appending to the same message', async () => {
+    const provider = mockProviderSuccess('Это и делает её прочной.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    await appendChatMessages(chat.id, [
+      {
+        role: 'user',
+        content: 'Расскажи про обжиг керамики.',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        role: 'assistant',
+        content: 'Обжиг превращает глину в керамику при высокой температуре, и',
+        createdAt: '2026-01-01T00:00:01.000Z',
+      },
+    ]);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: {
+        chatId: chat.id,
+        mode: 'continue',
+      },
+    });
+    const payload = StartChatReplyGenerationJobResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(202);
+    expect(payload.job).toMatchObject({
+      chatId: chat.id,
+      kind: 'chat_reply',
+    });
+    // Старт continue-job не добавляет новых сообщений.
+    expect(payload.session.messages).toHaveLength(2);
+
+    await waitForGenerationJobStatus(app, payload.job.id, 'completed');
+
+    const sessionResponse = await app.inject({
+      method: 'GET',
+      url: `/api/chats/${chat.id}`,
+    });
+    const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
+
+    expect(getMessagesByRole(sessionPayload.messages)).toEqual([
+      { role: 'user', content: 'Расскажи про обжиг керамики.' },
+      {
+        role: 'assistant',
+        content: 'Обжиг превращает глину в керамику при высокой температуре, и Это и делает её прочной.',
+      },
+    ]);
+
+    expect(provider).toHaveLength(1);
+    const requestBody = getProviderRequestBody(provider[0]);
+    const promptMessages = requestBody.messages ?? [];
+    // Транскрипт уходит в промпт как есть, включая продолжаемый ответ.
+    expect(
+      promptMessages.some(
+        (message) =>
+          message.role === 'assistant' &&
+          message.content === 'Обжиг превращает глину в керамику при высокой температуре, и',
+      ),
+    ).toBe(true);
+    const trailingInstruction = promptMessages.at(-1);
+    expect(trailingInstruction?.role).toBe('user');
+    expect(trailingInstruction?.content).toContain('Continue your previous reply');
+    expect(trailingInstruction?.content).toContain('Do not repeat');
+    // Fixture profile responseLanguage is 'ru'.
+    expect(trailingInstruction?.content).toContain('Write the continuation in Russian.');
+
+    await app.close();
+  });
+
+  it('answers the last user message without appending a new one', async () => {
+    const provider = mockProviderSuccess('Ответ на уже сохранённое сообщение.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    await appendChatMessages(chat.id, [
+      {
+        role: 'user',
+        content: 'Вопрос без ответа.',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: {
+        chatId: chat.id,
+        mode: 'answer',
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    const startPayload = StartChatReplyGenerationJobResponseSchema.parse(response.json());
+    await waitForGenerationJobStatus(app, startPayload.job.id, 'completed');
+
+    const sessionPayload = GetChatSessionResponseSchema.parse(
+      (await app.inject({ method: 'GET', url: `/api/chats/${chat.id}` })).json(),
+    );
+    expect(sessionPayload.messages.map((message) => message.content)).toEqual([
+      'Вопрос без ответа.',
+      'Ответ на уже сохранённое сообщение.',
+    ]);
+    expect(provider).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it('refuses to answer when the last message is not a non-empty user message', async () => {
+    const provider = mockProviderSuccess('Should not be called.');
+    const app = buildApiApp();
+
+    const emptyChat = await createChat(app);
+    const emptyChatResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: {
+        chatId: emptyChat.id,
+        mode: 'answer',
+      },
+    });
+
+    expect(emptyChatResponse.statusCode).toBe(409);
+    expect(emptyChatResponse.json()).toMatchObject({ code: 'nothing_to_answer' });
+
+    const chat = await createChat(app);
+    await appendChatMessages(chat.id, [
+      {
+        role: 'assistant',
+        content: 'Последним пишет персонаж.',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: {
+        chatId: chat.id,
+        mode: 'answer',
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ code: 'nothing_to_answer' });
+    expect(provider).toHaveLength(0);
+
+    await app.close();
+  });
+
+  it('refuses to continue when the last message is not a non-empty assistant reply', async () => {
+    const provider = mockProviderSuccess('Should not be called.');
+    const app = buildApiApp();
+
+    const emptyChat = await createChat(app);
+    const emptyChatResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: {
+        chatId: emptyChat.id,
+        mode: 'continue',
+      },
+    });
+
+    expect(emptyChatResponse.statusCode).toBe(409);
+    expect(emptyChatResponse.json()).toMatchObject({ code: 'nothing_to_continue' });
+
+    const chat = await createChat(app);
+    await appendChatMessages(chat.id, [
+      {
+        role: 'user',
+        content: 'Последним пишет пользователь.',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: {
+        chatId: chat.id,
+        mode: 'continue',
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ code: 'nothing_to_continue' });
+    expect(provider).toHaveLength(0);
+
+    const sessionResponse = await app.inject({
+      method: 'GET',
+      url: `/api/chats/${chat.id}`,
+    });
+    const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
+    expect(sessionPayload.messages).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it('fails the continue job without touching the transcript when the chat changes mid-generation', async () => {
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    await appendChatMessages(chat.id, [
+      {
+        role: 'user',
+        content: 'Расскажи про обжиг керамики.',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        role: 'assistant',
+        content: 'Обжиг превращает глину в керамику при высокой температуре, и',
+        createdAt: '2026-01-01T00:00:01.000Z',
+      },
+    ]);
+
+    // Пока провайдер отвечает, пользователь успевает дописать своё сообщение.
+    globalThis.fetch = vi.fn(async () => {
+      await appendChatMessages(chat.id, [
+        {
+          role: 'user',
+          content: 'Я успел написать раньше продолжения.',
+          createdAt: '2026-01-01T00:00:02.000Z',
+        },
+      ]);
+
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'потерянное продолжение.' } }] }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      });
+    }) as typeof fetch;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: {
+        chatId: chat.id,
+        mode: 'continue',
+      },
+    });
+    const payload = StartChatReplyGenerationJobResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(202);
+
+    const failedJob = await waitForGenerationJobStatus(app, payload.job.id, 'failed');
+    expect(failedJob.error).toMatchObject({ code: 'chat_changed_during_generation' });
+
+    const sessionResponse = await app.inject({
+      method: 'GET',
+      url: `/api/chats/${chat.id}`,
+    });
+    const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
+
+    expect(getMessagesByRole(sessionPayload.messages)).toEqual([
+      { role: 'user', content: 'Расскажи про обжиг керамики.' },
+      { role: 'assistant', content: 'Обжиг превращает глину в керамику при высокой температуре, и' },
+      { role: 'user', content: 'Я успел написать раньше продолжения.' },
+    ]);
+
+    await app.close();
+  });
+
+  it('returns 404 when regenerating a missing chat', async () => {
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs/regenerate',
+      payload: {
+        chatId: 'never-existed',
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'chat_not_found' });
+
+    await app.close();
+  });
+
   it('falls back to the active sampler preset when the provider model has no binding', async () => {
     await writeExternalProviderSettings('http://127.0.0.1:6006', 'unbound-model');
     const providerRequests = mockProviderSuccess('Assistant reply from unbound provider.');
@@ -893,6 +1566,7 @@ describe('generation routes', () => {
     const chat = await createChat(app);
 
     await updateChatGenerationSettings(app, chat.id, {
+      additionalInstructions: null,
       samplerPresetId: 'default',
       systemPrompt: 'Custom system prompt for this chat.',
       sampling: {
@@ -941,6 +1615,7 @@ describe('generation routes', () => {
     const chat = await createChat(app);
 
     await updateChatGenerationSettings(app, chat.id, {
+      additionalInstructions: null,
       samplerPresetId: null,
       systemPrompt: 'Custom system prompt for {{user}}.',
       sampling: EMPTY_CHAT_SAMPLING_OVERRIDES,
@@ -998,6 +1673,7 @@ describe('generation routes', () => {
       },
     ]);
     await updateChatGenerationSettings(app, chat.id, {
+      additionalInstructions: null,
       samplerPresetId: null,
       systemPrompt: null,
       sampling: {
@@ -1087,6 +1763,7 @@ describe('generation routes', () => {
     const chat = await createChat(app);
 
     await updateChatGenerationSettings(app, chat.id, {
+      additionalInstructions: null,
       samplerPresetId: 'smoke-model-preset',
       systemPrompt: null,
       sampling: EMPTY_CHAT_SAMPLING_OVERRIDES,
@@ -1145,6 +1822,7 @@ describe('generation routes', () => {
     const chat = await createChat(app);
 
     await updateChatGenerationSettings(app, chat.id, {
+      additionalInstructions: null,
       samplerPresetId: 'smoke-model-preset',
       systemPrompt: null,
       sampling: EMPTY_CHAT_SAMPLING_OVERRIDES,
@@ -1211,12 +1889,15 @@ describe('generation routes', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(providerRequests).toHaveLength(1);
-    expect(providerRequests[0]).toMatchObject({
+    // Builtin mode may additionally probe the runtime tokenize endpoint;
+    // the completion call itself must stay a single request.
+    const completionRequests = providerRequests.filter((request) => request.url.includes('/chat/completions'));
+    expect(completionRequests).toHaveLength(1);
+    expect(completionRequests[0]).toMatchObject({
       authorization: null,
       url: 'http://127.0.0.1:6006/v1/chat/completions',
     });
-    expect(providerRequests[0]?.body).toMatchObject({
+    expect(completionRequests[0]?.body).toMatchObject({
       ...MODEL_BOUND_SMOKE_SAMPLING,
       model: 'nested/secondary.gguf',
       stream: false,
@@ -1231,6 +1912,7 @@ describe('generation routes', () => {
     const chat = await createChat(app);
 
     await updateChatGenerationSettings(app, chat.id, {
+      additionalInstructions: null,
       samplerPresetId: null,
       systemPrompt: 'Preserve this setting on provider failure.',
       sampling: EMPTY_CHAT_SAMPLING_OVERRIDES,

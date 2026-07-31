@@ -1,0 +1,239 @@
+import { createHash } from 'node:crypto';
+
+import {
+  countTokensHeuristic,
+  type TokenCounter,
+  type TokenCountResult,
+} from '../../prompting/application/token-counter.js';
+import { getProviderSettings } from '../../providers/index.js';
+import { getRunningRuntimeEndpoint } from '../../runtime/index.js';
+
+const TOKENIZE_TIMEOUT_MS = 2000;
+const ABSENT_RETRY_MS = 60_000;
+const MAX_CACHED_COUNTS = 4096;
+
+type TokenizeEndpointKind = 'kobold' | 'llama';
+
+interface TokenizeCapability {
+  kind: TokenizeEndpointKind | 'absent';
+  /** For 'absent' — when a re-probe is allowed; irrelevant otherwise. */
+  retryAtMs: number;
+}
+
+export interface TokenizeTarget {
+  baseUrl: string;
+  /** Идентичность модели входит в ключ кэша: смена модели на том же порту меняет токенизатор. */
+  model: string | null;
+}
+
+export interface ProviderTokenCounterDependencies {
+  now?: () => number;
+  /** Tokenize-capable local server target, or null to force the heuristic. */
+  resolveTokenizeTarget?: () => Promise<TokenizeTarget | null>;
+}
+
+/**
+ * Only the built-in local runtime is tokenized: external providers are
+ * OpenAI-compatible black boxes, so they always use the heuristic.
+ */
+async function resolveBuiltinRuntimeTarget(): Promise<TokenizeTarget | null> {
+  try {
+    const settings = await getProviderSettings();
+
+    if (settings.mode !== 'builtin') {
+      return null;
+    }
+
+    const endpoint = await getRunningRuntimeEndpoint();
+
+    if (!endpoint) {
+      return null;
+    }
+
+    return { baseUrl: endpoint.baseUrl, model: endpoint.model };
+  } catch {
+    return null;
+  }
+}
+
+function hashText(text: string): string {
+  return createHash('sha1').update(text).digest('base64');
+}
+
+async function postJson(url: string, body: Record<string, string>): Promise<Record<string, unknown> | null> {
+  const response = await fetch(url, {
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+    signal: AbortSignal.timeout(TOKENIZE_TIMEOUT_MS),
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload: unknown = await response.json();
+
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    return null;
+  }
+
+  return payload as Record<string, unknown>;
+}
+
+function parseLlamaTokenCount(payload: Record<string, unknown> | null): number | null {
+  if (!payload || !Array.isArray(payload.tokens)) {
+    return null;
+  }
+
+  return payload.tokens.length;
+}
+
+function parseKoboldTokenCount(payload: Record<string, unknown> | null): number | null {
+  if (!payload || typeof payload.value !== 'number' || !Number.isFinite(payload.value) || payload.value < 0) {
+    return null;
+  }
+
+  return Math.floor(payload.value);
+}
+
+async function requestTokenCount(baseUrl: string, kind: TokenizeEndpointKind, text: string): Promise<number | null> {
+  if (kind === 'llama') {
+    return parseLlamaTokenCount(await postJson(`${baseUrl}/tokenize`, { content: text }));
+  }
+
+  return parseKoboldTokenCount(await postJson(`${baseUrl}/api/extra/tokencount`, { prompt: text }));
+}
+
+/**
+ * Exact token counter backed by the running local LLM server. Detects the
+ * tokenize dialect once per base URL (llama-server POST /tokenize vs
+ * KoboldCpp POST /api/extra/tokencount), caches per-text counts in a bounded
+ * LRU-ish map, and silently falls back to the chars/4 heuristic on any
+ * failure so generation and preview never break.
+ */
+export class ProviderTokenCounter implements TokenCounter {
+  private readonly capabilities = new Map<string, TokenizeCapability>();
+  private readonly countCache = new Map<string, number>();
+  private readonly now: () => number;
+  private readonly resolveTokenizeTarget: () => Promise<TokenizeTarget | null>;
+
+  constructor(dependencies: ProviderTokenCounterDependencies = {}) {
+    this.now = dependencies.now ?? (() => Date.now());
+    this.resolveTokenizeTarget = dependencies.resolveTokenizeTarget ?? resolveBuiltinRuntimeTarget;
+  }
+
+  async countTokens(texts: string[]): Promise<TokenCountResult> {
+    const target = await this.resolveTokenizeTarget();
+
+    if (!target) {
+      return countTokensHeuristic(texts);
+    }
+
+    const kind = await this.resolveCapability(target.baseUrl);
+
+    if (kind === null) {
+      return countTokensHeuristic(texts);
+    }
+
+    try {
+      const counts: number[] = [];
+
+      for (const text of texts) {
+        counts.push(await this.countText(target, kind, text));
+      }
+
+      return { counts, method: 'exact' };
+    } catch {
+      this.markAbsent(target.baseUrl);
+
+      return countTokensHeuristic(texts);
+    }
+  }
+
+  private async resolveCapability(baseUrl: string): Promise<TokenizeEndpointKind | null> {
+    const cached = this.capabilities.get(baseUrl);
+
+    if (cached) {
+      if (cached.kind !== 'absent') {
+        return cached.kind;
+      }
+
+      if (this.now() < cached.retryAtMs) {
+        return null;
+      }
+    }
+
+    const detected = await this.detectCapability(baseUrl);
+
+    if (detected === null) {
+      this.markAbsent(baseUrl);
+
+      return null;
+    }
+
+    this.capabilities.set(baseUrl, { kind: detected, retryAtMs: 0 });
+
+    return detected;
+  }
+
+  private async detectCapability(baseUrl: string): Promise<TokenizeEndpointKind | null> {
+    for (const kind of ['llama', 'kobold'] as const) {
+      try {
+        if ((await requestTokenCount(baseUrl, kind, '')) !== null) {
+          return kind;
+        }
+      } catch {
+        // Endpoint refused or timed out — try the next dialect.
+      }
+    }
+
+    return null;
+  }
+
+  private markAbsent(baseUrl: string) {
+    this.capabilities.set(baseUrl, { kind: 'absent', retryAtMs: this.now() + ABSENT_RETRY_MS });
+  }
+
+  private async countText(target: TokenizeTarget, kind: TokenizeEndpointKind, text: string): Promise<number> {
+    const { baseUrl } = target;
+    const cacheKey = [baseUrl, target.model ?? '', kind, hashText(text)].join('\u0000');
+    const cachedCount = this.countCache.get(cacheKey);
+
+    if (cachedCount !== undefined) {
+      // LRU-ish refresh: re-insert so this key becomes the newest entry.
+      this.countCache.delete(cacheKey);
+      this.countCache.set(cacheKey, cachedCount);
+
+      return cachedCount;
+    }
+
+    const count = await requestTokenCount(baseUrl, kind, text);
+
+    if (count === null) {
+      throw new Error(`Tokenize request failed for ${baseUrl}`);
+    }
+
+    if (this.countCache.size >= MAX_CACHED_COUNTS) {
+      const oldestKey = this.countCache.keys().next().value;
+
+      if (oldestKey !== undefined) {
+        this.countCache.delete(oldestKey);
+      }
+    }
+
+    this.countCache.set(cacheKey, count);
+
+    return count;
+  }
+}
+
+let sharedProviderTokenCounter: ProviderTokenCounter | null = null;
+
+export function getProviderTokenCounter(): ProviderTokenCounter {
+  if (!sharedProviderTokenCounter) {
+    sharedProviderTokenCounter = new ProviderTokenCounter();
+  }
+
+  return sharedProviderTokenCounter;
+}

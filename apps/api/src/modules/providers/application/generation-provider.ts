@@ -1,8 +1,8 @@
 import { z } from 'zod';
-
-import { getRunningRuntimeEndpoint } from '../../runtime/application/get-running-runtime-base-url.js';
 import { DEFAULT_OPENAI_COMPATIBLE_MODEL } from '../domain/provider-settings.js';
+import { runtimeEndpointAdapter } from '../infrastructure/runtime-endpoint-adapter.js';
 import { getProviderSettings } from './get-provider-settings.js';
+import type { RuntimeEndpointPort } from './runtime-endpoint-port.js';
 
 export class GenerationProviderUnavailableError extends Error {
   constructor(message: string) {
@@ -47,11 +47,13 @@ export function resolveChatCompletionsUrl(endpoint: GenerationProviderEndpoint) 
   return normalized.endsWith('/v1') ? `${normalized}/chat/completions` : `${normalized}/v1/chat/completions`;
 }
 
-export async function resolveGenerationProviderEndpoint(): Promise<GenerationProviderEndpoint> {
+export async function resolveGenerationProviderEndpoint(
+  runtimeEndpointPort: RuntimeEndpointPort = runtimeEndpointAdapter,
+): Promise<GenerationProviderEndpoint> {
   const settings = await getProviderSettings();
 
   if (settings.mode === 'builtin') {
-    const runtimeEndpoint = getRunningRuntimeEndpoint();
+    const runtimeEndpoint = await runtimeEndpointPort.getRunningEndpoint();
 
     if (!runtimeEndpoint) {
       throw new GenerationProviderUnavailableError('Встроенный сервер не запущен.');

@@ -1,7 +1,9 @@
-import { readLegacyUserSettingsSource } from '../../../shared/infrastructure/legacy-settings-source.js';
+import { getProfileUserName } from '../../settings/application/get-profile-user-name.js';
 
+/**
+ * Chats delegate the default persona name to the settings module: settings owns
+ * the profile user name and its 'User' fallback.
+ */
 export function getDefaultUserName() {
-  const candidate = readLegacyUserSettingsSource().userName;
-
-  return typeof candidate === 'string' && candidate.length > 0 ? candidate : 'User';
+  return getProfileUserName();
 }

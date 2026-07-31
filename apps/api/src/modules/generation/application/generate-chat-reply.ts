@@ -7,7 +7,12 @@ import {
 import { ChatNotFoundError } from '../../chats/application/append-chat-messages.js';
 import { getChatSession } from '../../chats/application/get-chat-session.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
-import { appendUserMessageForChatReply, completeChatReplyForSession } from './chat-reply-generation.js';
+import {
+  appendUserMessageForChatReply,
+  completeChatReplyContinuationForSession,
+  completeChatReplyForSession,
+  getAnswerableUserMessage,
+} from './chat-reply-generation.js';
 
 export interface GenerateChatReplyDependencies {
   chatCompletionClient?: ChatCompletionClient;
@@ -25,6 +30,18 @@ export async function generateChatReply(
 
   if (!session) {
     throw new ChatNotFoundError(command.chatId);
+  }
+
+  if (command.mode === 'continue') {
+    return ChatReplyGenerationResponseSchema.parse(
+      await completeChatReplyContinuationForSession(command, session, dependencies),
+    );
+  }
+
+  if (command.mode === 'answer') {
+    getAnswerableUserMessage(command.chatId, session);
+
+    return ChatReplyGenerationResponseSchema.parse(await completeChatReplyForSession(command, session, dependencies));
   }
 
   const sessionAfterUserMessage = await appendUserMessageForChatReply(command, now);

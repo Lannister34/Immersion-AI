@@ -2,7 +2,7 @@ import fs from 'node:fs';
 
 import { RuntimeStartCommandSchema } from '@immersion/contracts/runtime';
 
-import { getEngineInfo, start } from '../../../lib/llm-process.js';
+import { getLlmProcessManager } from '../infrastructure/llm-process-manager.js';
 import { getRuntimeOverview } from './get-runtime-overview.js';
 
 export async function startRuntime(input: unknown) {
@@ -12,13 +12,14 @@ export async function startRuntime(input: unknown) {
     throw new Error(`Model not found: ${command.modelPath}`);
   }
 
-  const engine = getEngineInfo();
+  const manager = getLlmProcessManager();
+  const engine = manager.getEngineInfo();
 
   if (!engine.found) {
     throw new Error('llama-server не найден.');
   }
 
-  await start(command);
+  await manager.start(command);
 
   return getRuntimeOverview();
 }

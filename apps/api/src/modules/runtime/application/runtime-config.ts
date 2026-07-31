@@ -1,15 +1,20 @@
 import { type RuntimeConfigCommand, RuntimeConfigCommandSchema } from '@immersion/contracts/runtime';
 
-import { getEngineInfo, getState } from '../../../lib/llm-process.js';
+import { getLlmProcessManager } from '../infrastructure/llm-process-manager.js';
 
 export function normalizeRuntimeConfig(raw: unknown): RuntimeConfigCommand {
   const configSource = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
-  const engine = getEngineInfo();
-  const state = getState();
-  const modelsDirs =
-    Array.isArray(configSource.modelsDirs) && configSource.modelsDirs.length > 0
-      ? configSource.modelsDirs.filter((value): value is string => typeof value === 'string')
-      : [engine.defaultModelsDir];
+  const manager = getLlmProcessManager();
+  const engine = manager.getEngineInfo();
+  const state = manager.getState();
+  // Явный пустой список — валидное состояние «каталоги не заданы»;
+  // дефолт подставляем только когда в настройках вообще нет массива.
+  const modelsDirs = Array.isArray(configSource.modelsDirs)
+    ? configSource.modelsDirs
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0)
+    : [engine.defaultModelsDir];
 
   return RuntimeConfigCommandSchema.parse({
     modelsDirs,

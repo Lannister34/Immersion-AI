@@ -13,7 +13,12 @@ export const ChatSummaryDtoSchema = z.object({
   updatedAt: z.string().min(1),
   messageCount: z.number().int().nonnegative(),
   lastMessagePreview: z.string().nullable(),
+  characterId: z.string().nullable(),
+  characterAvatarUrl: z.string().nullable(),
   characterName: z.string().nullable(),
+  scenarioId: z.string().nullable(),
+  scenarioName: z.string().nullable(),
+  lorebookIds: z.array(z.string()),
 });
 export type ChatSummaryDto = z.infer<typeof ChatSummaryDtoSchema>;
 
@@ -43,8 +48,11 @@ export const ChatSamplingOverridesDtoSchema = z.object({
 export type ChatSamplingOverridesDto = z.infer<typeof ChatSamplingOverridesDtoSchema>;
 
 export const ChatGenerationSettingsDtoSchema = z.object({
+  /** Дописывается в конец собранного промпта; ручной промпт её вытесняет. */
+  additionalInstructions: z.string().max(20_000).nullable(),
   samplerPresetId: z.string().min(1).nullable(),
   sampling: ChatSamplingOverridesDtoSchema,
+  /** Ручной системный промпт: заменяет всю сборку целиком. */
   systemPrompt: z.string().max(20_000).nullable(),
 });
 export type ChatGenerationSettingsDto = z.infer<typeof ChatGenerationSettingsDtoSchema>;
@@ -52,7 +60,12 @@ export type ChatGenerationSettingsDto = z.infer<typeof ChatGenerationSettingsDto
 export const ChatSessionDtoSchema = z.object({
   chat: ChatSummaryDtoSchema,
   userName: z.string(),
+  characterId: z.string().nullable(),
   characterName: z.string().nullable(),
+  characterAvatarUrl: z.string().nullable(),
+  scenarioId: z.string().nullable(),
+  scenarioName: z.string().nullable(),
+  lorebookIds: z.array(z.string()),
   generationSettings: ChatGenerationSettingsDtoSchema,
   messages: z.array(ChatMessageDtoSchema),
 });
@@ -64,9 +77,36 @@ export const ChatListResponseSchema = z.object({
 export type ChatListResponse = z.infer<typeof ChatListResponseSchema>;
 
 export const CreateChatCommandSchema = z.object({
+  characterId: z.string().trim().min(1).max(200).optional(),
+  scenarioId: z.string().trim().min(1).max(200).optional(),
+  lorebookIds: z.array(z.string().trim().min(1).max(200)).max(20).optional(),
   title: z.string().trim().min(1).max(120).optional(),
 });
 export type CreateChatCommand = z.infer<typeof CreateChatCommandSchema>;
+
+export const UpdateChatLorebooksCommandSchema = z.object({
+  lorebookIds: z.array(z.string().trim().min(1).max(200)).max(20),
+});
+export type UpdateChatLorebooksCommand = z.infer<typeof UpdateChatLorebooksCommandSchema>;
+
+export const UpdateChatTitleCommandSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+});
+export type UpdateChatTitleCommand = z.infer<typeof UpdateChatTitleCommandSchema>;
+
+export const UpdateChatTitleResponseSchema = z.object({
+  chat: ChatSummaryDtoSchema,
+});
+export type UpdateChatTitleResponse = z.infer<typeof UpdateChatTitleResponseSchema>;
+
+export const UpdateChatBindingsCommandSchema = z.object({
+  characterId: z.string().trim().min(1).max(200).nullable().optional(),
+  scenarioId: z.string().trim().min(1).max(200).nullable().optional(),
+});
+export type UpdateChatBindingsCommand = z.infer<typeof UpdateChatBindingsCommandSchema>;
+
+export const UpdateChatBindingsResponseSchema = ChatSessionDtoSchema;
+export type UpdateChatBindingsResponse = z.infer<typeof UpdateChatBindingsResponseSchema>;
 
 export const CreateChatResponseSchema = z.object({
   chat: ChatSummaryDtoSchema,
@@ -81,3 +121,39 @@ export type UpdateChatGenerationSettingsCommand = z.infer<typeof UpdateChatGener
 
 export const UpdateChatGenerationSettingsResponseSchema = ChatSessionDtoSchema;
 export type UpdateChatGenerationSettingsResponse = z.infer<typeof UpdateChatGenerationSettingsResponseSchema>;
+
+export const UpdateChatMessageCommandSchema = z.object({
+  content: z.string().min(1).max(20_000),
+});
+export type UpdateChatMessageCommand = z.infer<typeof UpdateChatMessageCommandSchema>;
+
+export const ChatMessageMutationResponseSchema = z.object({
+  session: ChatSessionDtoSchema,
+});
+export type ChatMessageMutationResponse = z.infer<typeof ChatMessageMutationResponseSchema>;
+
+// ~10 MB decoded payload => ~14M base64 characters; the exact decoded-size
+// limit is enforced by the import use case with a dedicated 413 problem code.
+export const ImportChatCommandSchema = z.object({
+  contentBase64: z.string().min(1).max(15_000_000),
+  title: z.string().trim().min(1).max(120).optional(),
+});
+export type ImportChatCommand = z.infer<typeof ImportChatCommandSchema>;
+
+export const ImportChatResponseSchema = z.object({
+  chat: ChatSummaryDtoSchema,
+  importedMessages: z.number().int().nonnegative(),
+  skippedLines: z.number().int().nonnegative(),
+});
+export type ImportChatResponse = z.infer<typeof ImportChatResponseSchema>;
+
+export const BranchChatCommandSchema = z.object({
+  throughMessageIndex: z.number().int().positive(),
+  title: z.string().trim().min(1).max(120).optional(),
+});
+export type BranchChatCommand = z.infer<typeof BranchChatCommandSchema>;
+
+export const BranchChatResponseSchema = z.object({
+  chat: ChatSummaryDtoSchema,
+});
+export type BranchChatResponse = z.infer<typeof BranchChatResponseSchema>;

@@ -8,17 +8,25 @@ export interface ChatMessageRecord {
 }
 
 export interface ChatSummaryRecord {
+  characterId: string | null;
   characterName: string | null;
   createdAt: string;
   id: string;
   lastMessagePreview: string | null;
+  lorebookIds: string[];
   messageCount: number;
+  scenarioId: string | null;
+  scenarioName: string | null;
   title: string;
   updatedAt: string;
 }
 
 export interface ChatSessionRecord {
+  characterId: string | null;
   characterName: string | null;
+  scenarioId: string | null;
+  scenarioName: string | null;
+  lorebookIds: string[];
   chat: ChatSummaryRecord;
   generationSettings: ChatGenerationSettingsRecord;
   messages: ChatMessageRecord[];
@@ -26,8 +34,15 @@ export interface ChatSessionRecord {
 }
 
 export interface CreateGenericChatInput {
+  characterId?: string | null;
+  characterName?: string | null;
+  scenarioId?: string | null;
+  scenarioName?: string | null;
+  lorebookIds?: string[];
   createdAt: string;
+  generationSettings?: ChatGenerationSettingsRecord;
   id: string;
+  seedMessages?: AppendChatMessageInput[];
   title: string;
   userName: string;
 }
@@ -54,6 +69,7 @@ export interface ChatSamplingOverridesRecord {
 }
 
 export interface ChatGenerationSettingsRecord {
+  additionalInstructions: string | null;
   samplerPresetId: string | null;
   sampling: ChatSamplingOverridesRecord;
   systemPrompt: string | null;
@@ -76,6 +92,7 @@ export function createDefaultChatSamplingOverrides(): ChatSamplingOverridesRecor
 
 export function createDefaultChatGenerationSettings(): ChatGenerationSettingsRecord {
   return {
+    additionalInstructions: null,
     samplerPresetId: null,
     sampling: createDefaultChatSamplingOverrides(),
     systemPrompt: null,

@@ -1,30 +1,12 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { ZodError } from 'zod';
+import { createToProblem } from '../../../../shared/interface/http/problem.js';
 import { getProviderSettings } from '../../application/get-provider-settings.js';
 import { getProvidersOverview } from '../../application/get-providers-overview.js';
 import { testProviderConnection } from '../../application/test-provider-connection.js';
 import { updateProviderSettings } from '../../application/update-provider-settings.js';
 import { providerDefinitions } from '../../domain/provider-catalog.js';
 
-function toProblem(error: unknown) {
-  if (error instanceof ZodError) {
-    return {
-      statusCode: 400,
-      body: {
-        code: 'validation_error',
-        message: error.issues[0]?.message ?? 'Invalid request payload.',
-      },
-    };
-  }
-
-  return {
-    statusCode: 500,
-    body: {
-      code: 'internal_error',
-      message: error instanceof Error ? error.message : 'Unexpected error.',
-    },
-  };
-}
+const toProblem = createToProblem(undefined, { exposeInternalErrorMessage: true });
 
 export const providersRoutes: FastifyPluginAsync = async (app) => {
   app.get('/overview', async () => getProvidersOverview());
@@ -39,19 +21,21 @@ export const providersRoutes: FastifyPluginAsync = async (app) => {
     try {
       return await testProviderConnection();
     } catch (error) {
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
   app.get('/settings', async (_request, reply) => {
     try {
+      // The stored apiKey is returned on purpose: the settings form round-trips it.
+      // The API binds to 127.0.0.1 by default and CORS is limited to local web origins.
       return await getProviderSettings();
     } catch (error) {
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 
@@ -59,9 +43,9 @@ export const providersRoutes: FastifyPluginAsync = async (app) => {
     try {
       return await updateProviderSettings(request.body);
     } catch (error) {
-      const problem = toProblem(error);
+      const mapped = toProblem(error);
 
-      return reply.status(problem.statusCode).send(problem.body);
+      return reply.status(mapped.statusCode).send(mapped.body);
     }
   });
 };

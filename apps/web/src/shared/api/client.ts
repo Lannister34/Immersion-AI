@@ -97,3 +97,54 @@ export async function apiPost<TRequest, TResponse>(
 
   return parseResponse(response, responseSchema);
 }
+
+export async function apiPatch<TRequest, TResponse>(
+  path: string,
+  body: TRequest,
+  requestSchema: ZodType<TRequest>,
+  responseSchema: ZodType<TResponse>,
+) {
+  const payload = requestSchema.parse(body);
+  const response = await fetch(createApiUrl(path), {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return parseResponse(response, responseSchema);
+}
+
+export async function apiDelete<TResponse>(path: string, responseSchema: ZodType<TResponse>) {
+  const response = await fetch(createApiUrl(path), {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  return parseResponse(response, responseSchema);
+}
+
+export async function apiDeleteNoContent(path: string): Promise<void> {
+  const response = await fetch(createApiUrl(path), {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  if (response.ok) {
+    return;
+  }
+
+  const payload = await readJson(response);
+  const problem = ApiProblemSchema.safeParse(payload);
+  throw new ApiError(
+    problem.success ? problem.data.message : `HTTP ${response.status}`,
+    response.status,
+    problem.success ? problem.data.code : undefined,
+  );
+}

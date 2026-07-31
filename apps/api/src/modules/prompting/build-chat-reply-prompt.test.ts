@@ -1,5 +1,6 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
+import type { PromptCharacterSnapshot } from '@immersion/domain/prompting';
 import { describe, expect, it } from 'vitest';
 import type { ActiveSamplerPreset } from '../settings/application/active-sampler-preset.js';
 import { buildChatReplyPrompt, buildChatReplyPromptBundle } from './application/build-chat-reply-prompt.js';
@@ -10,6 +11,7 @@ const settings: SettingsOverviewResponse = {
     streamingEnabled: false,
     systemPromptTemplate: 'Global system prompt.',
     thinkingEnabled: true,
+    messageFormatting: { actionsItalic: true, quotesHighlighted: false },
     uiLanguage: 'ru',
     userName: 'Tester',
     userPersona: '',
@@ -20,6 +22,14 @@ const settings: SettingsOverviewResponse = {
     modelBindings: [],
     presets: [],
   },
+};
+
+const roleplayCharacter: PromptCharacterSnapshot = {
+  description: 'Дракон-книжник из Виндхолла.',
+  mesExample: null,
+  name: 'Эмбер',
+  personality: 'Добродушный, любопытный.',
+  systemPrompt: null,
 };
 
 const defaultSamplerPreset: ActiveSamplerPreset = {
@@ -37,11 +47,25 @@ const defaultSamplerPreset: ActiveSamplerPreset = {
   topP: 1,
 };
 
-function buildSession(messages: ChatSessionDto['messages'], systemPrompt: string | null = null): ChatSessionDto {
+function buildSession(
+  messages: ChatSessionDto['messages'],
+  systemPrompt: string | null = null,
+  additionalInstructions: string | null = null,
+): ChatSessionDto {
   return {
+    characterAvatarUrl: null,
+    characterId: null,
     characterName: null,
+    scenarioId: null,
+    scenarioName: null,
+    lorebookIds: [],
     chat: {
+      characterAvatarUrl: null,
+      characterId: null,
       characterName: null,
+      scenarioId: null,
+      scenarioName: null,
+      lorebookIds: [],
       createdAt: '2026-01-01T00:00:00.000Z',
       id: 'chat-1',
       lastMessagePreview: null,
@@ -50,6 +74,7 @@ function buildSession(messages: ChatSessionDto['messages'], systemPrompt: string
       updatedAt: '2026-01-01T00:00:00.000Z',
     },
     generationSettings: {
+      additionalInstructions,
       samplerPresetId: null,
       sampling: {
         contextTrimStrategy: null,
@@ -93,6 +118,49 @@ describe('buildChatReplyPrompt', () => {
       content: 'Chat-level system prompt for Tester.',
     });
     expect(prompt[0]?.content).not.toContain('Global system prompt.');
+  });
+
+  it('appends chat additional instructions to the end of the assembled system prompt', () => {
+    const prompt = buildChatReplyPrompt({
+      character: roleplayCharacter,
+      characterScenarioContent: 'Ночь, метель, постоялый двор.',
+      lorebookSections: ['Виндхолл — город на скале.'],
+      samplerPreset: defaultSamplerPreset,
+      session: buildSession(
+        [{ content: 'Привет.', createdAt: '2026-01-01T00:00:00.000Z', id: 'm1', role: 'user' }],
+        null,
+        'Отвечай короче обычного.',
+      ),
+      settings,
+    });
+    const systemContent = prompt[0]?.content ?? '';
+
+    expect(prompt[0]?.role).toBe('system');
+    expect(systemContent).toContain('Виндхолл — город на скале.');
+    expect(systemContent.trimEnd().endsWith('Отвечай короче обычного.')).toBe(true);
+  });
+
+  it('lets a manual chat prompt replace the whole assembled system message', () => {
+    const prompt = buildChatReplyPrompt({
+      character: roleplayCharacter,
+      characterScenarioContent: 'Ночь, метель, постоялый двор.',
+      lorebookSections: ['Виндхолл — город на скале.'],
+      samplerPreset: defaultSamplerPreset,
+      session: buildSession(
+        [{ content: 'Привет.', createdAt: '2026-01-01T00:00:00.000Z', id: 'm1', role: 'user' }],
+        'Только этот текст уходит в модель.',
+        'Эти инструкции применяться не должны.',
+      ),
+      settings: {
+        ...settings,
+        profile: { ...settings.profile, responseLanguage: 'ru' },
+      },
+    });
+
+    expect(prompt[0]).toEqual({
+      role: 'system',
+      content: 'Только этот текст уходит в модель.',
+    });
   });
 
   it('does not add global prompt context to generic chats without an explicit chat prompt', () => {

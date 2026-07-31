@@ -10,6 +10,7 @@ const settings: SettingsOverviewResponse = {
     streamingEnabled: true,
     systemPromptTemplate: '',
     thinkingEnabled: true,
+    messageFormatting: { actionsItalic: true, quotesHighlighted: false },
     uiLanguage: 'ru',
     userName: 'Tester',
     userPersona: '',
@@ -71,6 +72,7 @@ const settings: SettingsOverviewResponse = {
 };
 
 const emptyChatSettings: ChatGenerationSettingsDto = {
+  additionalInstructions: null,
   samplerPresetId: null,
   sampling: {
     contextTrimStrategy: null,

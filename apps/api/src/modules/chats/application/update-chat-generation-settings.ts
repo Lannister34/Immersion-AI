@@ -33,6 +33,7 @@ function assertSamplerPresetExists(presetId: string | null) {
 
 function toChatGenerationSettingsRecord(command: UpdateChatGenerationSettingsCommand): ChatGenerationSettingsRecord {
   return {
+    additionalInstructions: command.additionalInstructions,
     samplerPresetId: command.samplerPresetId,
     sampling: {
       contextTrimStrategy: command.sampling.contextTrimStrategy,

@@ -1,6 +1,7 @@
 import { type SettingsOverviewResponse, SettingsOverviewResponseSchema } from '@immersion/contracts/settings';
 
 import { readLegacyUserSettingsSource } from '../../../shared/infrastructure/legacy-settings-source.js';
+import { DEFAULT_USER_NAME } from './get-profile-user-name.js';
 
 const DEFAULT_SAMPLER_PRESET = {
   contextTrimStrategy: 'trim_middle',
@@ -27,6 +28,16 @@ function getBoolean(value: unknown, fallback: boolean) {
 
 function getUiLanguage(value: unknown) {
   return value === 'en' ? 'en' : 'ru';
+}
+
+// Курсив действий включён исторически, подсветка речи — опция по желанию.
+function getMessageFormatting(value: unknown) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+
+  return {
+    actionsItalic: getBoolean(source.actionsItalic, true),
+    quotesHighlighted: getBoolean(source.quotesHighlighted, false),
+  };
 }
 
 function getResponseLanguage(value: unknown) {
@@ -132,13 +143,14 @@ export function getSettingsOverview(): SettingsOverviewResponse {
 
   return SettingsOverviewResponseSchema.parse({
     profile: {
-      userName: getString(source.userName, 'User'),
+      userName: getString(source.userName, DEFAULT_USER_NAME),
       userPersona: getString(source.userPersona),
       systemPromptTemplate: getString(source.systemPromptTemplate),
       uiLanguage: getUiLanguage(source.uiLanguage),
       responseLanguage: getResponseLanguage(source.responseLanguage),
       streamingEnabled: getBoolean(source.streamingEnabled, true),
       thinkingEnabled: getBoolean(source.thinkingEnabled, true),
+      messageFormatting: getMessageFormatting(source.messageFormatting),
     },
     sampler: {
       activePresetId,

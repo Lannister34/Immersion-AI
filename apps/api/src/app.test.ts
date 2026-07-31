@@ -118,6 +118,28 @@ describe('buildApiApp', () => {
     await app.close();
   });
 
+  it('accepts multi-megabyte character card imports instead of rejecting with 413', async () => {
+    const app = buildApiApp();
+    // ~2 MiB of base64 payload: over Fastify's 1 MiB default body limit, under ours.
+    const contentBase64 = 'QUFB'.repeat(700_000);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/characters/import',
+      payload: {
+        contentBase64,
+        fileName: 'card.png',
+      },
+    });
+
+    // Not a valid PNG card, so the domain rejects it — but the transport must not 413.
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      code: 'invalid_character_card',
+    });
+
+    await app.close();
+  });
+
   it('serves the runtime overview contract with scanned models', async () => {
     const app = buildApiApp();
     const response = await app.inject({

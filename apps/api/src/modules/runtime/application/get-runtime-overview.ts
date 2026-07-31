@@ -1,38 +1,79 @@
-import fs from 'node:fs';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import {
   type RuntimeModelSummary,
+  type RuntimeModelsDirStatus,
   type RuntimeOverviewResponse,
   RuntimeOverviewResponseSchema,
 } from '@immersion/contracts/runtime';
 
 import { resolveDataRoot } from '../../../lib/data-root.js';
-import { getEngineInfo, getState } from '../../../lib/llm-process.js';
-import { readLegacyUserSettingsSource } from '../../../shared/infrastructure/legacy-settings-source.js';
+import { getLlmServerRuntimeConfig } from '../../settings/application/get-llm-server-runtime-config.js';
+import { getLlmProcessManager } from '../infrastructure/llm-process-manager.js';
 import { normalizeRuntimeConfig } from './runtime-config.js';
 
-function scanModels(modelsDirs: string[]): RuntimeModelSummary[] {
+const MODEL_SCAN_TTL_MS = 3_000;
+
+interface RuntimeModelScanResult {
+  directories: RuntimeModelsDirStatus[];
+  models: RuntimeModelSummary[];
+}
+
+interface ModelScanCacheEntry {
+  expiresAt: number;
+  key: string;
+  scan: RuntimeModelScanResult;
+}
+
+let modelScanCache: ModelScanCacheEntry | null = null;
+
+export function invalidateRuntimeModelScanCache() {
+  modelScanCache = null;
+}
+
+// null означает недоступный каталог (отсутствует или нет прав) — скан
+// деградирует до пустого списка, а overview помечает каталог как отсутствующий.
+async function readDirectoryEntries(directory: string) {
+  try {
+    return await fs.readdir(directory, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+}
+
+async function statFileSize(filePath: string) {
+  try {
+    return (await fs.stat(filePath)).size;
+  } catch {
+    return null;
+  }
+}
+
+async function scanModels(modelsDirs: string[]): Promise<RuntimeModelScanResult> {
+  const directories: RuntimeModelsDirStatus[] = [];
   const models: RuntimeModelSummary[] = [];
   const seenPaths = new Set<string>();
 
   for (const modelsDir of modelsDirs) {
-    if (!fs.existsSync(modelsDir)) {
-      continue;
-    }
+    const entries = await readDirectoryEntries(modelsDir);
+    directories.push({ path: modelsDir, exists: entries !== null });
 
-    const entries = fs.readdirSync(modelsDir, { withFileTypes: true });
-
-    for (const entry of entries) {
+    for (const entry of entries ?? []) {
       const entryPath = path.join(modelsDir, entry.name);
 
       if (entry.isFile() && entry.name.endsWith('.gguf') && !seenPaths.has(entryPath)) {
+        const size = await statFileSize(entryPath);
+
+        if (size === null) {
+          continue;
+        }
+
         seenPaths.add(entryPath);
-        const stats = fs.statSync(entryPath);
         models.push({
           name: entry.name,
           path: entryPath,
-          size: stats.size,
+          size,
           sourceDirectory: modelsDir,
         });
       }
@@ -41,40 +82,64 @@ function scanModels(modelsDirs: string[]): RuntimeModelSummary[] {
         continue;
       }
 
-      try {
-        const nestedEntries = fs.readdirSync(entryPath, { withFileTypes: true });
+      const nestedEntries = await readDirectoryEntries(entryPath);
 
-        for (const nestedEntry of nestedEntries) {
-          if (!nestedEntry.isFile() || !nestedEntry.name.endsWith('.gguf')) {
-            continue;
-          }
-
-          const nestedPath = path.join(entryPath, nestedEntry.name);
-          if (seenPaths.has(nestedPath)) {
-            continue;
-          }
-
-          seenPaths.add(nestedPath);
-          const stats = fs.statSync(nestedPath);
-          models.push({
-            name: `${entry.name}/${nestedEntry.name}`,
-            path: nestedPath,
-            size: stats.size,
-            sourceDirectory: modelsDir,
-          });
+      for (const nestedEntry of nestedEntries ?? []) {
+        if (!nestedEntry.isFile() || !nestedEntry.name.endsWith('.gguf')) {
+          continue;
         }
-      } catch {}
+
+        const nestedPath = path.join(entryPath, nestedEntry.name);
+        if (seenPaths.has(nestedPath)) {
+          continue;
+        }
+
+        const size = await statFileSize(nestedPath);
+
+        if (size === null) {
+          continue;
+        }
+
+        seenPaths.add(nestedPath);
+        models.push({
+          name: `${entry.name}/${nestedEntry.name}`,
+          path: nestedPath,
+          size,
+          sourceDirectory: modelsDir,
+        });
+      }
     }
   }
 
-  return models.sort((left, right) => left.name.localeCompare(right.name));
+  models.sort((left, right) => left.name.localeCompare(right.name));
+
+  return { directories, models };
 }
 
-export function getRuntimeOverview(): RuntimeOverviewResponse {
-  const source = readLegacyUserSettingsSource();
-  const engine = getEngineInfo();
-  const serverStatus = getState();
-  const runtimeConfig = normalizeRuntimeConfig(source.llmServerConfig);
+async function scanModelsCached(modelsDirs: string[]): Promise<RuntimeModelScanResult> {
+  const key = modelsDirs.join('|');
+  const now = Date.now();
+
+  if (modelScanCache && modelScanCache.key === key && modelScanCache.expiresAt > now) {
+    return modelScanCache.scan;
+  }
+
+  const scan = await scanModels(modelsDirs);
+
+  modelScanCache = {
+    expiresAt: now + MODEL_SCAN_TTL_MS,
+    key,
+    scan,
+  };
+
+  return scan;
+}
+
+export async function getRuntimeOverview(): Promise<RuntimeOverviewResponse> {
+  const manager = getLlmProcessManager();
+  const engine = manager.getEngineInfo();
+  const serverStatus = manager.getState();
+  const runtimeConfig = normalizeRuntimeConfig(getLlmServerRuntimeConfig());
   const modelsDirs = runtimeConfig.modelsDirs.map((directory) => {
     if (path.isAbsolute(directory)) {
       return directory;
@@ -83,6 +148,8 @@ export function getRuntimeOverview(): RuntimeOverviewResponse {
     return path.resolve(resolveDataRoot(), directory);
   });
 
+  const scan = await scanModelsCached(modelsDirs);
+
   return RuntimeOverviewResponseSchema.parse({
     engine,
     serverStatus,
@@ -90,6 +157,7 @@ export function getRuntimeOverview(): RuntimeOverviewResponse {
       ...runtimeConfig,
       modelsDirs,
     },
-    models: scanModels(modelsDirs),
+    models: scan.models,
+    modelsDirsStatus: scan.directories,
   });
 }

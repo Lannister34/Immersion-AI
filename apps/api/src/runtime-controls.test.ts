@@ -2,7 +2,11 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { type RuntimeConfigCommand, RuntimeOverviewResponseSchema } from '@immersion/contracts/runtime';
+import {
+  type RuntimeConfigCommand,
+  RuntimeLogsResponseSchema,
+  RuntimeOverviewResponseSchema,
+} from '@immersion/contracts/runtime';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildApiApp } from './app.js';
@@ -19,6 +23,46 @@ describe('runtime control routes', () => {
   afterEach(async () => {
     delete process.env.IMMERSION_DATA_ROOT;
     await fs.rm(dataRoot, { force: true, recursive: true });
+  });
+
+  // Менеджер процесса — синглтон без публичного API для засева буфера логов,
+  // поэтому честно проверяем только пустой путь и форму контракта.
+  it('returns empty runtime logs while no server output was captured', async () => {
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/runtime/logs',
+    });
+    const logs = RuntimeLogsResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(logs.lines).toEqual([]);
+    expect(logs.status).toBe('idle');
+
+    await app.close();
+  });
+
+  it('falls back to the log file when the in-memory buffer is empty', async () => {
+    // Модель могла быть запущена предыдущим процессом API — тогда живого stdout
+    // уже нет, и единственный источник вывода это файл.
+    await fs.mkdir(path.join(dataRoot, 'logs'), { recursive: true });
+    await fs.writeFile(
+      path.join(dataRoot, 'logs', 'llm-server.log'),
+      'llama_model_loader: loaded meta data\n[stderr] warming up the model\n',
+      'utf8',
+    );
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/runtime/logs',
+    });
+    const logs = RuntimeLogsResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(logs.lines).toEqual(['llama_model_loader: loaded meta data', '[stderr] warming up the model']);
+
+    await app.close();
   });
 
   it('updates runtime config without overwriting unrelated user settings', async () => {
@@ -72,6 +116,84 @@ describe('runtime control routes', () => {
     });
     expect(stored.userName).toBe('Misha');
     expect(stored.llmServerConfig).toMatchObject(command);
+
+    await app.close();
+  });
+
+  it('scans models from updated modelsDirs and marks missing directories without failing the overview', async () => {
+    const modelsDir = path.join(dataRoot, 'gguf-models');
+    const missingDir = path.join(dataRoot, 'no-such-dir');
+    await fs.mkdir(modelsDir, { recursive: true });
+    await fs.writeFile(path.join(modelsDir, 'dummy.gguf'), 'stub');
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/runtime/config',
+      payload: {
+        // Дубликат в команде проверяет серверную дедупликацию.
+        modelsDirs: [modelsDir, missingDir, modelsDir],
+        port: 5001,
+        gpuLayers: 0,
+        contextSize: 8192,
+        flashAttention: false,
+        threads: 0,
+      },
+    });
+    const overview = RuntimeOverviewResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(overview.serverConfig.modelsDirs).toEqual([modelsDir, missingDir]);
+    expect(overview.models.map((model) => model.name)).toEqual(['dummy.gguf']);
+    expect(overview.modelsDirsStatus).toEqual([
+      { path: modelsDir, exists: true },
+      { path: missingDir, exists: false },
+    ]);
+
+    await app.close();
+  });
+
+  it('rejects blank models directory entries in the config command', async () => {
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/runtime/config',
+      payload: {
+        modelsDirs: ['   '],
+        port: 5001,
+        gpuLayers: 0,
+        contextSize: 8192,
+        flashAttention: false,
+        threads: 0,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: 'validation_error' });
+
+    await app.close();
+  });
+
+  it('accepts an empty models directory list without falling back to defaults', async () => {
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/runtime/config',
+      payload: {
+        modelsDirs: [],
+        port: 5001,
+        gpuLayers: 0,
+        contextSize: 8192,
+        flashAttention: false,
+        threads: 0,
+      },
+    });
+    const overview = RuntimeOverviewResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(overview.serverConfig.modelsDirs).toEqual([]);
+    expect(overview.models).toEqual([]);
+    expect(overview.modelsDirsStatus).toEqual([]);
 
     await app.close();
   });

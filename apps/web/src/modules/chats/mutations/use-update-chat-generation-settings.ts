@@ -4,6 +4,7 @@ import type {
 } from '@immersion/contracts/chats';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { chatReplyPromptPreviewQueryBaseKey } from '../../generation';
 import { updateChatGenerationSettings } from '../api/update-chat-generation-settings';
 import { chatListQueryKey } from '../queries/chat-list-query';
 import { chatSessionQueryKey } from '../queries/chat-session-query';
@@ -19,9 +20,11 @@ export function useUpdateChatGenerationSettings(chatId: string, options: UseUpda
     mutationFn: (command: UpdateChatGenerationSettingsCommand) => updateChatGenerationSettings(chatId, command),
     onSuccess: async (session) => {
       queryClient.setQueryData(chatSessionQueryKey(chatId), session);
-      await queryClient.invalidateQueries({
-        queryKey: chatListQueryKey,
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: chatSessionQueryKey(chatId) }),
+        queryClient.invalidateQueries({ queryKey: chatListQueryKey }),
+        queryClient.invalidateQueries({ queryKey: chatReplyPromptPreviewQueryBaseKey(chatId) }),
+      ]);
       await options.onSuccess?.(session);
     },
   });

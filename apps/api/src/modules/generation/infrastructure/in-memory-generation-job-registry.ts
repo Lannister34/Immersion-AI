@@ -20,6 +20,12 @@ interface StoredGenerationJob {
   dto: GenerationJobDto;
 }
 
+export interface InMemoryGenerationJobRegistryOptions {
+  finishedJobTtlMs?: number;
+}
+
+const DEFAULT_FINISHED_JOB_TTL_MS = 5 * 60 * 1000;
+
 function isActiveStatus(status: GenerationJobStatus) {
   return status === 'queued' || status === 'running';
 }
@@ -66,6 +72,12 @@ function toProblem(error: unknown) {
 export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
   private readonly jobs = new Map<GenerationJobId, StoredGenerationJob>();
   private readonly subscribers = new Map<GenerationJobId, Set<GenerationJobEventSubscriber>>();
+  private readonly evictionTimers = new Map<GenerationJobId, ReturnType<typeof setTimeout>>();
+  private readonly finishedJobTtlMs: number;
+
+  constructor(options: InMemoryGenerationJobRegistryOptions = {}) {
+    this.finishedJobTtlMs = options.finishedJobTtlMs ?? DEFAULT_FINISHED_JOB_TTL_MS;
+  }
 
   cancel(jobId: GenerationJobId) {
     const storedJob = this.jobs.get(jobId);
@@ -181,6 +193,24 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
     });
   }
 
+  private scheduleEviction(jobId: GenerationJobId) {
+    const existingTimer = this.evictionTimers.get(jobId);
+
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    const timer = setTimeout(() => {
+      this.evictionTimers.delete(jobId);
+      this.jobs.delete(jobId);
+      this.subscribers.delete(jobId);
+    }, this.finishedJobTtlMs);
+
+    // Do not keep the process alive just to evict finished jobs.
+    timer.unref?.();
+    this.evictionTimers.set(jobId, timer);
+  }
+
   private emit(event: GenerationJobEvent) {
     const subscribers = this.subscribers.get(event.job.id);
 
@@ -283,6 +313,10 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
     };
 
     storedJob.dto = updatedJob;
+
+    if (!isActiveStatus(updatedJob.status)) {
+      this.scheduleEviction(jobId);
+    }
 
     return cloneJob(updatedJob);
   }
