@@ -15,7 +15,10 @@ describe('resolveContainedFilePath', () => {
     expect(resolveContainedFilePath(directory, 'Анонимный чат.json')).toBe(path.join(directory, 'Анонимный чат.json'));
   });
 
+  // Набор одинаков на любой ОС: на Linux «\» и «C:» — легальные символы имени файла,
+  // и платформенная проверка пропускала бы то, что на Windows уже другой путь.
   it.each([
+    '',
     '../user-settings.json',
     '..\\user-settings.json',
     '../../user-settings.json',
@@ -25,6 +28,8 @@ describe('resolveContainedFilePath', () => {
     '.',
     '.hidden.json',
     'C:evil.json',
+    'C:\\Windows\\evil.json',
+    '/etc/passwd',
   ])('rejects traversal id %s', (fileId) => {
     expect(() => resolveContainedFilePath(directory, fileId)).toThrow(UnsafeRepositoryFileIdError);
   });
