@@ -20,6 +20,8 @@ export interface NumericSamplingField {
   key: NumericSamplingKey;
   /** Человеческое имя; технические top_p и rep_pen в интерфейс не выносим. */
   label: string;
+  /** Практичный потолок для кнопок шага; руками можно ввести и больше. */
+  max: number;
   /** Нижняя граница контракта; null — ограничения нет. */
   min: number | null;
   step: number;
@@ -31,6 +33,7 @@ export const NUMERIC_SAMPLING_FIELDS: NumericSamplingField[] = [
     integer: false,
     key: 'temperature',
     label: 'Temperature',
+    max: 2,
     min: 0,
     step: 0.05,
   },
@@ -39,6 +42,7 @@ export const NUMERIC_SAMPLING_FIELDS: NumericSamplingField[] = [
     integer: false,
     key: 'topP',
     label: 'Top P',
+    max: 1,
     min: 0,
     step: 0.01,
   },
@@ -47,6 +51,7 @@ export const NUMERIC_SAMPLING_FIELDS: NumericSamplingField[] = [
     integer: true,
     key: 'topK',
     label: 'Top K',
+    max: 200,
     min: 0,
     step: 1,
   },
@@ -55,6 +60,7 @@ export const NUMERIC_SAMPLING_FIELDS: NumericSamplingField[] = [
     integer: false,
     key: 'minP',
     label: 'Min P',
+    max: 1,
     min: 0,
     step: 0.01,
   },
@@ -63,6 +69,7 @@ export const NUMERIC_SAMPLING_FIELDS: NumericSamplingField[] = [
     integer: false,
     key: 'repeatPenalty',
     label: 'Repeat Penalty',
+    max: 2,
     min: 0,
     step: 0.01,
   },
@@ -71,6 +78,7 @@ export const NUMERIC_SAMPLING_FIELDS: NumericSamplingField[] = [
     integer: true,
     key: 'repeatPenaltyRange',
     label: 'Repeat Range',
+    max: 8192,
     min: 0,
     step: 32,
   },
@@ -79,6 +87,7 @@ export const NUMERIC_SAMPLING_FIELDS: NumericSamplingField[] = [
     integer: false,
     key: 'presencePenalty',
     label: 'Presence Penalty',
+    max: 2,
     min: null,
     step: 0.05,
   },
@@ -87,6 +96,7 @@ export const NUMERIC_SAMPLING_FIELDS: NumericSamplingField[] = [
     integer: true,
     key: 'maxTokens',
     label: 'Max Length',
+    max: 4096,
     min: 1,
     step: 16,
   },
@@ -95,6 +105,7 @@ export const NUMERIC_SAMPLING_FIELDS: NumericSamplingField[] = [
     integer: true,
     key: 'maxContextLength',
     label: 'Context',
+    max: 32_768,
     min: 1,
     step: 512,
   },
@@ -146,6 +157,32 @@ export function samplingDraftsEqual(left: SamplingOverridesDraft, right: Samplin
 
 export function countSamplingOverrides(draft: SamplingOverridesDraft): number {
   return SAMPLING_OVERRIDE_KEYS.filter((key) => draft[key].trim().length > 0).length;
+}
+
+function decimalsOf(step: number): number {
+  return String(step).split('.')[1]?.length ?? 0;
+}
+
+/**
+ * Шаг кнопкой «−»/«+»: считаем от действующего значения, а не от нуля, и
+ * подтягиваем к практичному диапазону — но только в ту сторону, куда нажали.
+ * Значение вне диапазона (например, окно контекста больше обычного) кнопка
+ * не должна утаскивать обратно.
+ */
+export function stepSamplingValue(
+  field: NumericSamplingField,
+  currentText: string,
+  direction: 1 | -1,
+  inherited: number | undefined,
+): string {
+  const parsed = Number(currentText.trim().replace(',', '.'));
+  const current = Number.isFinite(parsed) && currentText.trim().length > 0 ? parsed : (inherited ?? 0);
+  const raw = current + direction * field.step;
+  const rounded = Number(raw.toFixed(decimalsOf(field.step)));
+  const lowerBound = field.min === null ? Number.NEGATIVE_INFINITY : Math.min(field.min, current);
+  const next = direction > 0 ? Math.min(rounded, Math.max(field.max, current)) : Math.max(rounded, lowerBound);
+
+  return String(next);
 }
 
 export interface SamplingFieldViewModel {

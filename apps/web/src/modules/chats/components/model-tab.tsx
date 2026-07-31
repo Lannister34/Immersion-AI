@@ -10,6 +10,7 @@ import {
   countSamplingOverrides,
   describeContextTrimStrategy,
   type InheritedSampling,
+  stepSamplingValue,
   toSamplingFieldViewModels,
 } from '../view-models/sampling-overrides';
 import { MarkDot } from './mark-dot';
@@ -100,33 +101,65 @@ export function ModelTab({ effectiveSampling, form, modelBindingPresetId, settin
       </div>
 
       <div className="col">
-        {rows.map(({ error, field, inheritedText, isOverridden, value }) => (
-          <div className="rp-param" data-overridden={isOverridden ? 'true' : 'false'} key={field.key}>
-            <label htmlFor={`chat-sampling-${field.key}`} style={{ minWidth: 0 }}>
-              <span className="rp-param__name" style={{ display: 'block' }}>
-                {field.label}
-              </span>
-              <span className="rp-param__hint" style={{ display: 'block' }}>
-                {error ?? field.hint}
-              </span>
-            </label>
-            <input
-              className="rp-param__value"
-              id={`chat-sampling-${field.key}`}
-              inputMode="decimal"
-              onChange={(event) => {
-                const { value: next } = event.currentTarget;
-                form.setSampling(field.key, next);
-              }}
-              type="text"
-              value={value}
-            />
-            <UndoButton
-              inheritedText={inheritedText}
-              onClick={() => form.setSampling(field.key, '', { immediate: true })}
-            />
-          </div>
-        ))}
+        {rows.map(({ error, field, inheritedText, isOverridden, value }) => {
+          const step = (direction: 1 | -1) => {
+            form.setSampling(field.key, stepSamplingValue(field, value, direction, baseline?.[field.key]));
+          };
+
+          return (
+            <div className="rp-param" data-overridden={isOverridden ? 'true' : 'false'} key={field.key}>
+              <label htmlFor={`chat-sampling-${field.key}`} style={{ minWidth: 0 }}>
+                <span className="rp-param__name" style={{ display: 'block' }}>
+                  {field.label}
+                </span>
+                <span className="rp-param__hint" style={{ display: 'block' }}>
+                  {error ?? field.hint}
+                </span>
+              </label>
+              <div className="rp-param__stepper">
+                <button
+                  aria-label={`Уменьшить ${field.label} на ${field.step}`}
+                  className="rp-param__step"
+                  onClick={() => step(-1)}
+                  type="button"
+                >
+                  −
+                </button>
+                <input
+                  className="rp-param__value"
+                  id={`chat-sampling-${field.key}`}
+                  inputMode="decimal"
+                  onChange={(event) => {
+                    const { value: next } = event.currentTarget;
+                    form.setSampling(field.key, next);
+                  }}
+                  onKeyDown={(event) => {
+                    // Стрелки работают как у обычного числового поля: type="text"
+                    // выбран только ради того, чтобы убрать браузерный спиннер.
+                    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                      event.preventDefault();
+                      step(event.key === 'ArrowUp' ? 1 : -1);
+                    }
+                  }}
+                  type="text"
+                  value={value}
+                />
+                <button
+                  aria-label={`Увеличить ${field.label} на ${field.step}`}
+                  className="rp-param__step"
+                  onClick={() => step(1)}
+                  type="button"
+                >
+                  +
+                </button>
+              </div>
+              <UndoButton
+                inheritedText={inheritedText}
+                onClick={() => form.setSampling(field.key, '', { immediate: true })}
+              />
+            </div>
+          );
+        })}
         <div className="rp-param rp-param--wide" data-overridden={isTrimOverridden ? 'true' : 'false'}>
           <label htmlFor="chat-sampling-trim" style={{ minWidth: 0 }}>
             <span className="rp-param__name" style={{ display: 'block' }}>

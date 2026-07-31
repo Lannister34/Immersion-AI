@@ -5,8 +5,10 @@ import {
   countSamplingOverrides,
   createEmptySamplingDraft,
   type InheritedSampling,
+  NUMERIC_SAMPLING_FIELDS,
   parseSamplingDraft,
   samplingDraftsEqual,
+  stepSamplingValue,
   toSamplingDraft,
   toSamplingFieldViewModels,
 } from './sampling-overrides';
@@ -99,6 +101,42 @@ describe('toSamplingFieldViewModels', () => {
 
     expect(findRow(rows, 'topK').error).toBe('Только целое число');
     expect(findRow(rows, 'topP').error).toBeUndefined();
+  });
+});
+
+describe('stepSamplingValue', () => {
+  const temperature = NUMERIC_SAMPLING_FIELDS.find((field) => field.key === 'temperature');
+  const context = NUMERIC_SAMPLING_FIELDS.find((field) => field.key === 'maxContextLength');
+
+  if (!temperature || !context) {
+    throw new Error('Sampling fields are missing from the view model.');
+  }
+
+  it('steps from the value shown in the field', () => {
+    expect(stepSamplingValue(temperature, '0.7', 1, 0.8)).toBe('0.75');
+    expect(stepSamplingValue(temperature, '0.7', -1, 0.8)).toBe('0.65');
+  });
+
+  it('starts from the inherited value when the field is empty', () => {
+    expect(stepSamplingValue(temperature, '', 1, 0.8)).toBe('0.85');
+  });
+
+  it('keeps the decimals of the step instead of float noise', () => {
+    expect(stepSamplingValue(temperature, '1.15', 1, undefined)).toBe('1.2');
+  });
+
+  it('accepts a comma as the decimal separator', () => {
+    expect(stepSamplingValue(temperature, '0,7', 1, undefined)).toBe('0.75');
+  });
+
+  it('stops at the field bounds', () => {
+    expect(stepSamplingValue(temperature, '0', -1, undefined)).toBe('0');
+    expect(stepSamplingValue(temperature, '2', 1, undefined)).toBe('2');
+  });
+
+  it('does not drag a value that is already above the practical range', () => {
+    expect(stepSamplingValue(context, '65536', 1, undefined)).toBe('65536');
+    expect(stepSamplingValue(context, '65536', -1, undefined)).toBe('65024');
   });
 });
 

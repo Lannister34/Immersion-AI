@@ -1112,15 +1112,39 @@ select:disabled {
 /* Строка параметра модели: имя с подсказкой, значение, возврат к пресету. */
 .rp-param {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 66px 22px;
+  grid-template-columns: minmax(0, 1fr) auto 22px;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 9px 0;
   border-bottom: 1px solid oklch(0.3 0.006 270 / 0.35);
 }
 
+/* Значение с шагом: «−» и «+» меняют его на step поля. */
+.rp-param__stepper {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.rp-param__step {
+  width: 18px;
+  height: 22px;
+  border-radius: var(--r-xs);
+  color: var(--muted-dim);
+  font-size: var(--fz-sm);
+  line-height: 1;
+}
+
+.rp-param__step:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.rp-param[data-overridden="true"] .rp-param__step {
+  color: var(--muted);
+}
+
 .rp-param--wide {
-  grid-template-columns: minmax(0, 1fr) 148px 22px;
   border-bottom: 0;
 }
 
@@ -1141,7 +1165,7 @@ select:disabled {
 }
 
 .rp-param__value {
-  width: 100%;
+  width: 58px;
   padding: 3px 6px;
   border: 1px solid var(--hairline);
   border-radius: 5px;

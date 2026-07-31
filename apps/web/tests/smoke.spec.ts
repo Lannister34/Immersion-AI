@@ -182,6 +182,9 @@ test('overrides a model parameter and chat instructions from the settings panel'
   await savedTemperature;
   await expect(resetButton).toBeVisible();
 
+  await page.getByRole('button', { name: /Увеличить Temperature/ }).click();
+  await expect(page.locator('#chat-sampling-temperature')).toHaveValue('1.3');
+
   const clearedTemperature = page.waitForResponse(
     (response) => response.url().includes('/generation-settings') && response.request().method() === 'PUT',
   );
