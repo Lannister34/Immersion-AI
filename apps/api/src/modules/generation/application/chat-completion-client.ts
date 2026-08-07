@@ -20,6 +20,8 @@ export interface ChatCompletionRequest {
   endpoint: ChatCompletionEndpoint;
   maxTokens: number;
   messages: ChatReplyPromptMessage[];
+  /** Куски ответа по мере генерации; без колбэка запрос идёт без стриминга. */
+  onDelta?: ((delta: string) => void) | undefined;
   sampling: ChatCompletionSamplingOptions;
   signal?: AbortSignal | undefined;
 }

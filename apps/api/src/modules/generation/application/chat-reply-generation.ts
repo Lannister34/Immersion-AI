@@ -28,6 +28,8 @@ import {
 } from './generation-errors.js';
 
 export interface ChatReplyGenerationDependencies {
+  /** Куски ответа по мере генерации; без него запрос идёт без стриминга. */
+  onDelta?: ((delta: string) => void) | undefined;
   chatCompletionClient?: ChatCompletionClient;
   now?: () => Date;
   signal?: AbortSignal;
@@ -102,10 +104,14 @@ async function runChatCompletionForSession(
       tokenCounter: getProviderTokenCounter(),
       trailingUserInstruction: buildTrailingInstruction ? buildTrailingInstruction(settings) : null,
     });
+    // Стриминг включается настройкой профиля: без неё ответ приходит целиком,
+    // как раньше, и провайдеру уходит stream: false.
+    const streamingDelta = settings.profile.streamingEnabled ? dependencies.onDelta : undefined;
     const completion = await chatCompletionClient.completeChat({
       endpoint,
       maxTokens: generationPlan.providerRequest.maxTokens,
       messages: generationPlan.providerRequest.messages,
+      ...(streamingDelta ? { onDelta: streamingDelta } : {}),
       sampling: generationPlan.providerRequest.sampling,
       signal: dependencies.signal,
     });

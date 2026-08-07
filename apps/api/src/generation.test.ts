@@ -620,6 +620,53 @@ describe('generation routes', () => {
     await app.close();
   });
 
+  it('streams the reply when streaming is enabled and reports deltas to the job', async () => {
+    const chunks = ['Пер', 'вый ', 'кусок.'];
+    const requests: ProviderRequestRecord[] = [];
+
+    globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      requests.push({
+        authorization: new Headers(init?.headers).get('authorization'),
+        body: typeof init?.body === 'string' ? JSON.parse(init.body) : null,
+        url: input instanceof Request ? input.url : input.toString(),
+      });
+
+      const body = [
+        ...chunks.map((delta) => `data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`),
+        'data: [DONE]\n\n',
+      ].join('');
+
+      return new Response(body, { headers: { 'Content-Type': 'text/event-stream' }, status: 200 });
+    }) as unknown as typeof fetch;
+
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    // Стриминг живёт в фоновой задаче: синхронной ручке некуда отдавать куски.
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: { chatId: chat.id, message: 'Расскажи что-нибудь.', mode: 'reply' },
+    });
+    const payload = StartChatReplyGenerationJobResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(202);
+
+    await waitForGenerationJobStatus(app, payload.job.id, 'completed');
+
+    // Провайдер получил stream: true, а в транскрипт лёг склеенный ответ.
+    expect((requests[0]?.body as { stream: boolean }).stream).toBe(true);
+
+    const sessionResponse = await app.inject({ method: 'GET', url: `/api/chats/${chat.id}` });
+    const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
+
+    expect(getMessagesByRole(sessionPayload.messages)).toEqual([
+      { role: 'user', content: 'Расскажи что-нибудь.' },
+      { role: 'assistant', content: 'Первый кусок.' },
+    ]);
+
+    await app.close();
+  });
+
   it('sends an attached image to the provider as an OpenAI image part', async () => {
     const providerRequests = mockProviderSuccess('Вижу градиент.');
     const app = buildApiApp();

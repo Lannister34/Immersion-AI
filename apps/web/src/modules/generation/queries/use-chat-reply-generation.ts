@@ -1,6 +1,7 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 import type { ListGenerationJobsResponse, StartChatReplyGenerationJobResponse } from '@immersion/contracts/generation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { chatListQueryKey } from '../../chats/queries/chat-list-query';
 import { chatSessionQueryKey } from '../../chats/queries/chat-session-query';
 import { appendOptimisticUserMessage } from '../../chats/view-models/optimistic-chat-session';
@@ -34,11 +35,17 @@ function createOptimisticMessageId() {
 
 export function useChatReplyGeneration(chatId: string) {
   const queryClient = useQueryClient();
+  // Живой ответ держим в состоянии, а не в кэше сессии: транскрипт принадлежит
+  // backend, и дописывать в него незавершённый текст значило бы врать кэшу.
+  const [streamedReply, setStreamedReply] = useState('');
   const generationJobsQuery = useQuery(chatGenerationJobsQueryOptions(chatId));
   const latestGenerationJob = getLatestGenerationJob(generationJobsQuery.data?.items);
   const activeGenerationJob = generationJobsQuery.data?.items.find(isActiveGenerationJob);
 
-  useGenerationJobEvents(chatId, activeGenerationJob?.id);
+  useGenerationJobEvents(chatId, activeGenerationJob?.id, {
+    onReplyDelta: (delta) => setStreamedReply((current) => current + delta),
+    onReplyFinished: () => setStreamedReply(''),
+  });
 
   const applyStartedJob = async (response: StartChatReplyGenerationJobResponse) => {
     queryClient.setQueryData<ListGenerationJobsResponse>(chatGenerationJobsQueryKey(chatId), (current) => ({
@@ -149,6 +156,8 @@ export function useChatReplyGeneration(chatId: string) {
 
   return {
     activeJob: activeGenerationJob,
+    /** Текст ответа, пришедший потоком; пусто — стриминга нет или он завершён. */
+    streamedReply: activeGenerationJob ? streamedReply : '',
     answerLast: () => answerGenerationMutation.mutateAsync(),
     cancel: () => {
       if (activeGenerationJob) {

@@ -9,6 +9,8 @@ import type {
 export type GenerationJobEventSubscriber = (event: GenerationJobEvent) => void;
 
 export interface ChatReplyGenerationJobRunnerInput {
+  /** Публикует кусок ответа подписчикам задачи. */
+  publishDelta: (delta: string) => void;
   signal: AbortSignal;
 }
 

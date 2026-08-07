@@ -38,6 +38,7 @@ import { BubbleMessage } from './bubble-message';
 import { ChatHeader } from './chat-header';
 import { Composer } from './composer';
 import { RightPanel } from './right-panel';
+import { StreamingReply } from './streaming-reply';
 
 export interface ChatSessionScreenProps {
   chatId: string;
@@ -460,20 +461,15 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                 renderTranscriptMessages()
               )}
               {isStreaming ? (
-                <div
-                  className="muted"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    justifyContent: 'center',
-                    marginTop: 4,
-                    fontSize: 'var(--fz-xs)',
-                  }}
-                >
-                  <span className="dot" style={{ width: 6, height: 6, background: 'var(--accent)' }} />
-                  {characterDisplay} печатает…
-                </div>
+                <StreamingReply
+                  avatarUrl={session.characterAvatarUrl}
+                  formatting={settingsOverviewQuery.data?.profile.messageFormatting ?? DEFAULT_MESSAGE_FORMATTING}
+                  startedAt={
+                    chatReplyGeneration.activeJob?.startedAt ?? chatReplyGeneration.activeJob?.createdAt ?? null
+                  }
+                  text={chatReplyGeneration.streamedReply}
+                  who={characterDisplay}
+                />
               ) : null}
             </div>
           </div>

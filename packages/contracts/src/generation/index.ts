@@ -382,6 +382,12 @@ export type GenerationJobResponse = z.infer<typeof GenerationJobResponseSchema>;
 
 export const GenerationJobEventSchema = z.discriminatedUnion('type', [
   z.object({
+    /** Очередной кусок ответа модели; приходит только при включённом стриминге. */
+    delta: z.string(),
+    job: GenerationJobDtoSchema,
+    type: z.literal('chat.reply.delta'),
+  }),
+  z.object({
     job: GenerationJobDtoSchema,
     type: z.literal('generation.job.snapshot'),
   }),

@@ -10,6 +10,7 @@ import type {
 import { ChatReplyGenerationFailedError, ProviderGenerationError } from '../application/generation-errors.js';
 import {
   ActiveGenerationJobExistsError,
+  type ChatReplyGenerationJobRunnerInput,
   type CreateChatReplyGenerationJobInput,
   type GenerationJobEventSubscriber,
   type GenerationJobRegistry,
@@ -187,7 +188,10 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
     };
   }
 
-  runChatReplyJob(jobId: GenerationJobId, runner: (input: { signal: AbortSignal }) => Promise<ChatSessionDto>) {
+  runChatReplyJob(
+    jobId: GenerationJobId,
+    runner: (input: ChatReplyGenerationJobRunnerInput) => Promise<ChatSessionDto>,
+  ) {
     queueMicrotask(() => {
       void this.executeChatReplyJob(jobId, runner);
     });
@@ -233,7 +237,7 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
 
   private async executeChatReplyJob(
     jobId: GenerationJobId,
-    runner: (input: { signal: AbortSignal }) => Promise<ChatSessionDto>,
+    runner: (input: ChatReplyGenerationJobRunnerInput) => Promise<ChatSessionDto>,
   ) {
     const storedJob = this.jobs.get(jobId);
 
@@ -253,6 +257,15 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
 
     try {
       const session = await runner({
+        publishDelta: (delta) => {
+          const job = this.jobs.get(jobId);
+
+          // Куски досылаем только пока задача жива: после отмены подписчику
+          // нужен финальный статус, а не хвост уже ненужного ответа.
+          if (delta.length > 0 && job && isActiveStatus(job.dto.status)) {
+            this.emit({ delta, job: cloneJob(job.dto), type: 'chat.reply.delta' });
+          }
+        },
         signal: storedJob.controller.signal,
       });
       const latestJob = this.jobs.get(jobId);
