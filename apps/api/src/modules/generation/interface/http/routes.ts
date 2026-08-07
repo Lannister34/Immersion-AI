@@ -14,6 +14,7 @@ import { z } from 'zod';
 
 import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
 import { ChatMessageNotFoundError, ChatNotFoundError } from '../../../chats/application/append-chat-messages.js';
+import { ChatAttachmentNotFoundError } from '../../../chats/application/chat-attachments.js';
 import { ChatTitleConflictError } from '../../../chats/application/chat-conflicts.js';
 import { InvalidChatGenerationSettingsResolutionError } from '../../../prompting/application/resolve-chat-generation-settings.js';
 import { GenerationProviderUnavailableError } from '../../../providers/application/generation-provider.js';
@@ -55,6 +56,10 @@ const GenerationJobsQuerySchema = z.object({
 const toProblem = createToProblem((error) => {
   if (error instanceof ChatNotFoundError) {
     return problem(404, 'chat_not_found', 'Chat session not found.');
+  }
+
+  if (error instanceof ChatAttachmentNotFoundError) {
+    return problem(404, 'chat_attachment_not_found', 'Вложение не найдено — загрузите изображение заново.');
   }
 
   if (error instanceof ChatMessageNotFoundError) {

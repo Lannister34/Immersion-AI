@@ -1,6 +1,12 @@
 import { z } from 'zod';
 
-import { ChatIdSchema, ChatMessageRoleSchema, ChatSessionDtoSchema, ChatSummaryDtoSchema } from '../chats/index.js';
+import {
+  ChatAttachmentIdSchema,
+  ChatIdSchema,
+  ChatMessageRoleSchema,
+  ChatSessionDtoSchema,
+  ChatSummaryDtoSchema,
+} from '../chats/index.js';
 import { ApiProblemSchema } from '../common/index.js';
 import { ProviderModeSchema, ProviderTypeSchema } from '../providers/settings.js';
 import { RuntimeServerStatusSchema } from '../runtime/overview.js';
@@ -51,6 +57,8 @@ export const ChatReplyGenerationModeSchema = z.enum(['reply', 'continue']);
 export type ChatReplyGenerationMode = z.infer<typeof ChatReplyGenerationModeSchema>;
 
 export const StartChatReplyCommandSchema = z.object({
+  /** Ранее загруженные вложения этого чата; модель получит их вместе с текстом. */
+  attachmentIds: z.array(ChatAttachmentIdSchema).max(4).optional(),
   chatId: ChatIdSchema,
   message: z.string().trim().min(1).max(20_000),
   mode: z.literal('reply').default('reply'),

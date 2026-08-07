@@ -11,6 +11,8 @@ export type ChatReplyPromptRole = 'assistant' | 'system' | 'user';
 
 export interface ChatReplyPromptMessage {
   content: string;
+  /** data-URL картинок сообщения; пусто — обычное текстовое сообщение. */
+  images?: string[];
   role: ChatReplyPromptRole;
 }
 
@@ -43,6 +45,11 @@ export interface BuildChatReplyPromptInput {
   samplerPreset: ActiveSamplerPreset;
   session: ChatSessionDto;
   settings: SettingsOverviewResponse;
+  /**
+   * Картинки сообщений по их id. Байты живут в модуле chats, поэтому сюда
+   * приходят уже готовые data-URL — сборка промпта в чужое хранилище не ходит.
+   */
+  messageImages?: ReadonlyMap<string, string[]>;
   /**
    * Extra user-role instruction appended after the transcript (continue mode,
    * opening message). It is part of the prompt and is counted inside the
@@ -346,13 +353,18 @@ function buildUntrimmedChatReplyPrompt(input: BuildChatReplyPromptInput): Untrim
   }
 
   for (const message of input.session.messages) {
-    if (message.content.trim().length === 0) {
+    const images = input.messageImages?.get(message.id) ?? [];
+
+    // Сообщение без текста, но с картинкой — нормальный случай: пропускаем
+    // только по-настоящему пустые реплики.
+    if (message.content.trim().length === 0 && images.length === 0) {
       continue;
     }
 
     messages.push({
       role: message.role,
       content: message.content,
+      ...(images.length > 0 ? { images } : {}),
     });
   }
 

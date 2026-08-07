@@ -1,6 +1,8 @@
+import type { ChatMessageAttachmentDto } from '@immersion/contracts/chats';
 import type { MessageFormatting } from '@immersion/contracts/settings';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { createApiUrl } from '../../../shared/api/client';
 import { getApiErrorMessage } from '../../../shared/api/get-api-error-message';
 import { avatarInitial } from '../../../shared/lib/avatar';
 import { useDebouncedValue } from '../../../shared/lib/use-debounced-value';
@@ -13,6 +15,7 @@ import { renderMessageContent } from '../view-models/message-content';
 export interface BubbleMessageProps {
   branchTitleDefault: string;
   canRegenerate: boolean;
+  attachments: ChatMessageAttachmentDto[];
   characterAvatarUrl: string | null;
   chatId: string;
   formatting: MessageFormatting;
@@ -30,6 +33,7 @@ export interface BubbleMessageProps {
 }
 
 export function BubbleMessage({
+  attachments,
   branchTitleDefault,
   canRegenerate,
   characterAvatarUrl,
@@ -247,7 +251,18 @@ export function BubbleMessage({
             </div>
           </div>
         ) : (
-          <div className={isUser ? 'bubble bubble--user' : 'bubble'}>{renderMessageContent(text, formatting)}</div>
+          <div className={isUser ? 'bubble bubble--user' : 'bubble'}>
+            {attachments.length > 0 ? (
+              <div className="bubble__images">
+                {attachments.map((attachment) => (
+                  <a href={createApiUrl(attachment.url)} key={attachment.id} rel="noreferrer" target="_blank">
+                    <img alt="Вложение сообщения" className="bubble__image" src={createApiUrl(attachment.url)} />
+                  </a>
+                ))}
+              </div>
+            ) : null}
+            {renderMessageContent(text, formatting)}
+          </div>
         )}
         {mode === 'view' ? (
           <div className="row gap-4 bubble-row__actions" style={{ justifyContent: isUser ? 'flex-end' : 'flex-start' }}>

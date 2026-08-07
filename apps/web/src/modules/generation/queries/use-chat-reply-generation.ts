@@ -18,6 +18,7 @@ import { generationReadinessQueryKey } from './generation-readiness-query';
 import { useGenerationJobEvents } from './use-generation-job-events';
 
 interface StartChatReplyGenerationMutationVariables {
+  attachmentIds: string[];
   message: string;
 }
 
@@ -65,8 +66,9 @@ export function useChatReplyGeneration(chatId: string) {
   };
 
   const startGenerationMutation = useMutation({
-    mutationFn: ({ message }: StartChatReplyGenerationMutationVariables) =>
+    mutationFn: ({ attachmentIds, message }: StartChatReplyGenerationMutationVariables) =>
       startChatReplyGenerationJob({
+        ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
         chatId,
         message,
         mode: 'reply',
@@ -171,8 +173,9 @@ export function useChatReplyGeneration(chatId: string) {
       Boolean(activeGenerationJob && isActiveGenerationJob(activeGenerationJob)),
     latestJob: latestGenerationJob,
     regenerate: () => regenerateGenerationMutation.mutateAsync(),
-    start: (message: string) =>
+    start: (message: string, attachmentIds: string[] = []) =>
       startGenerationMutation.mutateAsync({
+        attachmentIds,
         message,
       }),
   };

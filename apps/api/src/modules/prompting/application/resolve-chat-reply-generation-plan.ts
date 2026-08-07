@@ -41,6 +41,8 @@ export interface ResolveChatReplyGenerationPlanInput {
   character?: PromptCharacterSnapshot | null;
   characterScenarioContent?: string | null;
   lorebookSections?: string[];
+  /** Картинки сообщений (data-URL) по id сообщения. */
+  messageImages?: ReadonlyMap<string, string[]>;
   providerModelName: string | null;
   session: ChatSessionDto;
   settings?: SettingsOverviewResponse;
@@ -87,6 +89,7 @@ export async function resolveChatReplyGenerationPlan(
       character: input.character ?? null,
       characterScenarioContent: input.characterScenarioContent ?? null,
       lorebookSections: input.lorebookSections ?? [],
+      ...(input.messageImages ? { messageImages: input.messageImages } : {}),
       samplerPreset: toPromptSamplerPreset(effectiveSettings),
       session: input.session,
       settings,

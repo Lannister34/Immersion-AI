@@ -85,6 +85,7 @@ function buildSession(messages: ChatSessionDto['messages'], systemPrompt: string
 
 function userMessage(id: string, content: string): ChatSessionDto['messages'][number] {
   return {
+    attachments: [],
     content,
     createdAt: '2026-01-01T00:00:00.000Z',
     id,
