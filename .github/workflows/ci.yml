@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
-    name: quality (${{ matrix.os }})
+  verify:
+    name: verify (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -24,39 +24,6 @@ jobs:
         os:
           - ubuntu-latest
           - windows-latest
-    env:
-      HUSKY: 0
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            client/package-lock.json
-            server/package-lock.json
-
-      - name: Install root dependencies
-        run: npm ci
-
-      - name: Install client dependencies
-        run: npm ci
-        working-directory: client
-
-      - name: Install server dependencies
-        run: npm ci
-        working-directory: server
-
-      - name: Verify
-        run: npm run check
-
-  rewrite-foundation:
-    name: rewrite foundation
-    runs-on: ubuntu-latest
     env:
       HUSKY: 0
     steps:
@@ -76,11 +43,11 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      - name: Install rewrite workspace dependencies
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Chromium
         run: pnpm --filter @immersion/web exec playwright install --with-deps chromium
 
-      - name: Verify rewrite foundation
-        run: npm run rewrite:ci
+      - name: Verify
+        run: npm run ci

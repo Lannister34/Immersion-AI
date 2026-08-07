@@ -33,12 +33,17 @@ export const GenerationReadinessRuntimeSchema = z.object({
 });
 export type GenerationReadinessRuntime = z.infer<typeof GenerationReadinessRuntimeSchema>;
 
+/** Принимает ли активная модель изображения; unknown — сервер не сообщает. */
+export const VisionSupportSchema = z.enum(['supported', 'unknown', 'unsupported']);
+export type VisionSupport = z.infer<typeof VisionSupportSchema>;
+
 export const GenerationReadinessResponseSchema = z.object({
   activeProvider: ProviderTypeSchema,
   issue: GenerationReadinessIssueSchema.nullable(),
   mode: ProviderModeSchema,
   runtime: GenerationReadinessRuntimeSchema.nullable(),
   status: GenerationReadinessStatusSchema,
+  visionSupport: VisionSupportSchema,
 });
 export type GenerationReadinessResponse = z.infer<typeof GenerationReadinessResponseSchema>;
 

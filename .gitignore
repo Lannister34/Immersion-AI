@@ -2,14 +2,10 @@
 node_modules/
 .pnpm-store/
 
-# Keep lockfiles versioned for deterministic installs and CI
-!package-lock.json
-!client/package-lock.json
-!server/package-lock.json
+# Keep the lockfile versioned for deterministic installs and CI
+!pnpm-lock.yaml
 
 # Build output
-server/dist/
-client/dist/
 apps/*/dist/
 packages/*/dist/
 apps/web/playwright-report/
@@ -31,7 +27,6 @@ models/
 .env
 secrets.json
 config.yaml
-client/cookies.txt
 
 # Editors & tools
 .vscode/
@@ -39,12 +34,14 @@ client/cookies.txt
 *.code-workspace
 .DS_Store
 
-# Dev artifacts
+# Internal docs and dev artifacts — not published
 .claude/
 .codex/
 .aider*
-CLAUDE.md
-ROADMAP.md
+/AGENTS.md
+/CLAUDE.md
+/CONTRIBUTING.md
+/ROADMAP.md
 /docs/
 
 # Logs
@@ -55,3 +52,6 @@ access.log
 # OS
 nul
 Thumbs.db
+
+# Design handoff bundles are internal working material
+/design_handoff_*/

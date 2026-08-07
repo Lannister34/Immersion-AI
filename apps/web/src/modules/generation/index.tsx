@@ -39,3 +39,4 @@ export {
   isActiveGenerationJob,
   upsertGenerationJob,
 } from './view-models/generation-job-state';
+export { describeVisionSupport, type VisionSupportViewModel } from './view-models/vision-support';

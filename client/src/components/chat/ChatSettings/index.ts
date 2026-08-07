@@ -1,1 +1,0 @@
-export { ChatSettingsPanel } from './ChatSettingsPanel';

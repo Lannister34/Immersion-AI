@@ -20,44 +20,29 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-:: Install dependencies if needed
-if not exist "server\node_modules" (
-    echo  [1/3] Installing server dependencies...
-    cd server && call npm install --silent && cd ..
-) else (
-    echo  [1/3] Server dependencies OK
+echo  [1/2] Installing dependencies...
+call corepack pnpm install --silent
+if %errorlevel% neq 0 (
+    echo  [ERROR] Install failed
+    pause
+    exit /b 1
 )
 
-if not exist "client\node_modules" (
-    echo  [2/3] Installing client dependencies...
-    cd client && call npm install --silent && cd ..
-) else (
-    echo  [2/3] Client dependencies OK
-)
-
-:: Check llama-server
 if not exist "bin\llama-server.exe" (
     echo  [!] llama-server not found.
     echo      Run setup-llama.bat to install it automatically.
     echo.
 )
 
-:: Build client
-echo  [3/3] Building client...
-cd client && call npm run build --silent && cd ..
-if %errorlevel% neq 0 (
-    echo  [ERROR] Client build failed
-    pause
-    exit /b 1
-)
-
 echo.
-echo  ✓ Ready! Opening http://localhost:4777
-echo  Press Ctrl+C to stop the server.
+echo  ✓ Ready! Opening http://localhost:4788
+echo  Press Ctrl+C to stop the app.
 echo.
 
 :: Open browser after a short delay
-start "" cmd /c "timeout /t 2 /nobreak >nul && start http://localhost:4777"
+start "" cmd /c "timeout /t 3 /nobreak >nul && start http://localhost:4788"
 
-:: Start server
-cd server && npx tsx src/index.ts
+echo  [2/2] Starting API and web...
+call npx --yes concurrently --kill-others --names api,web ^
+    "corepack pnpm --filter @immersion/api dev" ^
+    "corepack pnpm --filter @immersion/web dev"
