@@ -18,6 +18,7 @@ export function appendOptimisticUserMessage(
   const message: ChatMessageDto = {
     attachments: input.attachments ?? [],
     id: input.id,
+    reasoning: null,
     role: 'user',
     content: input.content,
     createdAt: input.createdAt,

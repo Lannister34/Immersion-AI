@@ -3,10 +3,14 @@ import { useEffect, useState } from 'react';
 
 import { Avatar } from '../../../shared/ui/avatar';
 import { renderMessageContent } from '../view-models/message-content';
+import { ReasoningBlock } from './reasoning-block';
 
 export interface StreamingReplyProps {
   avatarUrl: string | null;
   formatting: MessageFormatting;
+  /** Ход мысли, приходящий потоком. */
+  reasoning: string;
+  showReasoning: boolean;
   /** Начало генерации по данным задачи; null — время неизвестно. */
   startedAt: string | null;
   text: string;
@@ -25,7 +29,15 @@ function formatElapsed(seconds: number): string {
  * Ответ, который печатается прямо сейчас. Пока текст не пришёл, показываем
  * индикатор — при выключенном стриминге так и остаётся до конца генерации.
  */
-export function StreamingReply({ avatarUrl, formatting, startedAt, text, who }: StreamingReplyProps) {
+export function StreamingReply({
+  avatarUrl,
+  formatting,
+  reasoning,
+  showReasoning,
+  startedAt,
+  text,
+  who,
+}: StreamingReplyProps) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   useEffect(() => {
@@ -47,6 +59,7 @@ export function StreamingReply({ avatarUrl, formatting, startedAt, text, who }: 
           <span>{who} печатает…</span>
           <span className="mono tnum">{formatElapsed(elapsedSeconds)}</span>
         </div>
+        {showReasoning && reasoning.length > 0 ? <ReasoningBlock defaultOpen text={reasoning} /> : null}
         {text.length > 0 ? <div className="bubble">{renderMessageContent(text, formatting)}</div> : null}
       </div>
     </div>

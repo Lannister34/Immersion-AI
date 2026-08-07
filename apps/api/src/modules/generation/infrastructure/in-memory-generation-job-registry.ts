@@ -257,13 +257,13 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
 
     try {
       const session = await runner({
-        publishDelta: (delta) => {
+        publishDelta: (delta, channel) => {
           const job = this.jobs.get(jobId);
 
           // Куски досылаем только пока задача жива: после отмены подписчику
           // нужен финальный статус, а не хвост уже ненужного ответа.
           if (delta.length > 0 && job && isActiveStatus(job.dto.status)) {
-            this.emit({ delta, job: cloneJob(job.dto), type: 'chat.reply.delta' });
+            this.emit({ channel, delta, job: cloneJob(job.dto), type: 'chat.reply.delta' });
           }
         },
         signal: storedJob.controller.signal,

@@ -201,6 +201,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const blockReason = generationAvailability.blockReason;
   const isStreaming = Boolean(chatReplyGeneration.activeJob);
   const vision = describeVisionSupport(generationReadinessQuery.data?.visionSupport);
+  const showReasoning = settingsOverviewQuery.data?.profile.thinkingEnabled ?? true;
   const canSend =
     (draftMessage.trim().length > 0 || attachmentsDraft.attachments.length > 0) &&
     !attachmentsDraft.isUploading &&
@@ -287,6 +288,8 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
       return (
         <BubbleMessage
           attachments={message.attachments}
+          reasoning={message.reasoning}
+          showReasoning={showReasoning}
           branchTitleDefault={defaultBranchTitle}
           canRegenerate={isLastAssistant && !isMutating}
           characterAvatarUrl={session.characterAvatarUrl}
@@ -464,6 +467,8 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                 <StreamingReply
                   avatarUrl={session.characterAvatarUrl}
                   formatting={settingsOverviewQuery.data?.profile.messageFormatting ?? DEFAULT_MESSAGE_FORMATTING}
+                  reasoning={chatReplyGeneration.streamedReasoning}
+                  showReasoning={showReasoning}
                   startedAt={
                     chatReplyGeneration.activeJob?.startedAt ?? chatReplyGeneration.activeJob?.createdAt ?? null
                   }

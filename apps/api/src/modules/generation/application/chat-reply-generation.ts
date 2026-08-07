@@ -5,6 +5,7 @@ import type {
   StartChatReplyCommand,
 } from '@immersion/contracts/generation';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
+import type { ReplyChannel } from '@immersion/domain/generation';
 import { appendChatMessages } from '../../chats/application/append-chat-messages.js';
 import { readChatAttachmentDataUrl, resolveChatAttachments } from '../../chats/application/chat-attachments.js';
 import { ChatLastMessageChangedError } from '../../chats/application/chat-conflicts.js';
@@ -19,7 +20,7 @@ import {
 import { getSettingsOverview } from '../../settings/application/get-settings-overview.js';
 import { OpenAiCompatibleChatCompletionsClient } from '../infrastructure/openai-compatible-chat-completions-client.js';
 import { getProviderTokenCounter } from '../infrastructure/provider-token-counter.js';
-import type { ChatCompletionClient } from './chat-completion-client.js';
+import type { ChatCompletionClient, ChatCompletionResponse } from './chat-completion-client.js';
 import {
   ChatReplyGenerationFailedError,
   NothingToAnswerError,
@@ -29,7 +30,7 @@ import {
 
 export interface ChatReplyGenerationDependencies {
   /** Куски ответа по мере генерации; без него запрос идёт без стриминга. */
-  onDelta?: ((delta: string) => void) | undefined;
+  onDelta?: ((delta: string, channel: ReplyChannel) => void) | undefined;
   chatCompletionClient?: ChatCompletionClient;
   now?: () => Date;
   signal?: AbortSignal;
@@ -81,7 +82,7 @@ async function runChatCompletionForSession(
   session: ChatSessionDto,
   dependencies: ChatReplyGenerationDependencies,
   buildTrailingInstruction?: (settings: SettingsOverviewResponse) => string,
-): Promise<string> {
+): Promise<ChatCompletionResponse> {
   const chatCompletionClient = dependencies.chatCompletionClient ?? new OpenAiCompatibleChatCompletionsClient();
 
   try {
@@ -118,7 +119,7 @@ async function runChatCompletionForSession(
 
     throwIfAborted(dependencies.signal);
 
-    return completion.content;
+    return completion;
   } catch (error) {
     throw mapChatReplyGenerationError(error, session);
   }
@@ -182,8 +183,9 @@ export async function completeChatReplyForSession(
   const sessionAfterGeneratedExchange = await appendChatMessages(command.chatId, [
     {
       role: 'assistant',
-      content,
+      content: content.content,
       createdAt: now().toISOString(),
+      reasoning: content.reasoning,
     },
   ]);
 
@@ -220,7 +222,7 @@ export async function completeChatReplyContinuationForSession(
 ): Promise<ChatReplyGenerationResponse> {
   const now = dependencies.now ?? (() => new Date());
   const lastMessage = getContinuableAssistantMessage(command.chatId, session);
-  const continuation = await runChatCompletionForSession(
+  const continuationResponse = await runChatCompletionForSession(
     session,
     dependencies,
     (settings) =>
@@ -229,7 +231,7 @@ export async function completeChatReplyContinuationForSession(
 
   try {
     const sessionAfterContinuation = await appendAssistantMessageContinuation(command.chatId, {
-      continuation,
+      continuation: continuationResponse.content,
       expectedContentPrefix: lastMessage.content,
       expectedMessageIndex: session.messages.length,
       updatedAt: now().toISOString(),

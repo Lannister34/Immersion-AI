@@ -70,6 +70,7 @@ function withDraftUserMessage(session: ChatSessionDto, draftUserMessage: string 
       ...session.messages,
       {
         attachments: [],
+        reasoning: null,
         content: normalizedDraft,
         createdAt,
         id: `preview:${session.chat.id}`,

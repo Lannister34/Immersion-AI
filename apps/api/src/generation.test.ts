@@ -667,6 +667,33 @@ describe('generation routes', () => {
     await app.close();
   });
 
+  it('keeps the model reasoning out of the reply and stores it beside the message', async () => {
+    mockProviderSuccess('<think>Сначала прикину тон.</think>Привет! Чем помочь?');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply',
+      payload: { chatId: chat.id, message: 'Привет.' },
+    });
+    const payload = ChatReplyGenerationResponseSchema.parse(response.json());
+    const assistantMessage = payload.session.messages.at(-1);
+
+    expect(response.statusCode).toBe(200);
+    expect(assistantMessage?.content).toBe('Привет! Чем помочь?');
+    expect(assistantMessage?.reasoning).toBe('Сначала прикину тон.');
+
+    // Размышления живут в файле чата отдельным полем и в реплику не попадают.
+    const sessionResponse = await app.inject({ method: 'GET', url: `/api/chats/${chat.id}` });
+    const stored = GetChatSessionResponseSchema.parse(sessionResponse.json()).messages.at(-1);
+
+    expect(stored?.content).toBe('Привет! Чем помочь?');
+    expect(stored?.reasoning).toBe('Сначала прикину тон.');
+
+    await app.close();
+  });
+
   it('sends an attached image to the provider as an OpenAI image part', async () => {
     const providerRequests = mockProviderSuccess('Вижу градиент.');
     const app = buildApiApp();

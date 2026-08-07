@@ -12,7 +12,7 @@ import { chatGenerationJobsQueryKey } from './generation-jobs-query';
 
 export interface GenerationJobEventHandlers {
   /** Кусок ответа модели при включённом стриминге. */
-  onReplyDelta?: (delta: string) => void;
+  onReplyDelta?: (delta: string, channel: 'reasoning' | 'reply') => void;
   /** Ответ дописан или задача завершилась: живой буфер больше не нужен. */
   onReplyFinished?: () => void;
 }
@@ -58,7 +58,7 @@ export function useGenerationJobEvents(
       const event = parseGenerationJobEvent(message);
 
       if (event.type === 'chat.reply.delta') {
-        handlersRef.current.onReplyDelta?.(event.delta);
+        handlersRef.current.onReplyDelta?.(event.delta, event.channel);
       }
     };
     const handleSessionEvent = (message: MessageEvent) => {

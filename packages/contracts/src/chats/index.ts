@@ -44,6 +44,8 @@ export const ChatMessageDtoSchema = z.object({
   role: ChatMessageRoleSchema,
   content: z.string(),
   createdAt: z.string().min(1),
+  /** Ход мысли модели-рассуждателя; в промпт не возвращается. */
+  reasoning: z.string().nullable(),
 });
 export type ChatMessageDto = z.infer<typeof ChatMessageDtoSchema>;
 

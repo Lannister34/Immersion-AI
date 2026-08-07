@@ -11,12 +11,17 @@ import { BranchIcon, CopyIcon, EditIcon, RefreshIcon, TrashIcon } from '../../..
 import { chatReplyPromptPreviewQueryOptions } from '../../generation';
 import { toContextStats } from '../view-models/context-stats';
 import { renderMessageContent } from '../view-models/message-content';
+import { ReasoningBlock } from './reasoning-block';
 
 export interface BubbleMessageProps {
   branchTitleDefault: string;
   canRegenerate: boolean;
   attachments: ChatMessageAttachmentDto[];
   characterAvatarUrl: string | null;
+  /** Ход мысли модели; null — модель не рассуждала вслух. */
+  reasoning: string | null;
+  /** Показывать ли блок размышлений: настройка профиля. */
+  showReasoning: boolean;
   chatId: string;
   formatting: MessageFormatting;
   isMutating: boolean;
@@ -34,6 +39,8 @@ export interface BubbleMessageProps {
 
 export function BubbleMessage({
   attachments,
+  reasoning,
+  showReasoning,
   branchTitleDefault,
   canRegenerate,
   characterAvatarUrl,
@@ -251,18 +258,21 @@ export function BubbleMessage({
             </div>
           </div>
         ) : (
-          <div className={isUser ? 'bubble bubble--user' : 'bubble'}>
-            {attachments.length > 0 ? (
-              <div className="bubble__images">
-                {attachments.map((attachment) => (
-                  <a href={createApiUrl(attachment.url)} key={attachment.id} rel="noreferrer" target="_blank">
-                    <img alt="Вложение сообщения" className="bubble__image" src={createApiUrl(attachment.url)} />
-                  </a>
-                ))}
-              </div>
-            ) : null}
-            {renderMessageContent(text, formatting)}
-          </div>
+          <>
+            {showReasoning && reasoning ? <ReasoningBlock text={reasoning} /> : null}
+            <div className={isUser ? 'bubble bubble--user' : 'bubble'}>
+              {attachments.length > 0 ? (
+                <div className="bubble__images">
+                  {attachments.map((attachment) => (
+                    <a href={createApiUrl(attachment.url)} key={attachment.id} rel="noreferrer" target="_blank">
+                      <img alt="Вложение сообщения" className="bubble__image" src={createApiUrl(attachment.url)} />
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+              {renderMessageContent(text, formatting)}
+            </div>
+          </>
         )}
         {mode === 'view' ? (
           <div className="row gap-4 bubble-row__actions" style={{ justifyContent: isUser ? 'flex-end' : 'flex-start' }}>

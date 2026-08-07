@@ -1,3 +1,4 @@
+import { createReplySplitter, type ReplyChannel, type ReplyChunk, splitReply } from '@immersion/domain/generation';
 import { z } from 'zod';
 
 import { resolveChatCompletionsUrl } from '../../providers/application/generation-provider.js';
@@ -15,6 +16,9 @@ const OpenAiCompatibleStreamChunkSchema = z.object({
         delta: z
           .object({
             content: z.string().nullable().optional(),
+            // DeepSeek и совместимые отдают ход мысли отдельным полем.
+            reasoning: z.string().nullable().optional(),
+            reasoning_content: z.string().nullable().optional(),
           })
           .optional(),
       }),
@@ -28,6 +32,8 @@ const OpenAiCompatibleChatCompletionResponseSchema = z.object({
       z.object({
         message: z.object({
           content: z.string().nullable().optional(),
+          reasoning: z.string().nullable().optional(),
+          reasoning_content: z.string().nullable().optional(),
         }),
       }),
     )
@@ -76,7 +82,10 @@ function isAbortError(error: unknown) {
  * `[DONE]`. Куски отдаём наружу по мере поступления и одновременно копим —
  * в транскрипт всё равно ложится целый ответ.
  */
-async function readStreamedContent(response: Response, onDelta: (delta: string) => void): Promise<string> {
+async function readStreamedContent(
+  response: Response,
+  onDelta: (delta: string, channel: ReplyChannel) => void,
+): Promise<ChatCompletionResponse> {
   const body = response.body;
 
   if (!body) {
@@ -85,8 +94,16 @@ async function readStreamedContent(response: Response, onDelta: (delta: string) 
 
   const decoder = new TextDecoder();
   const reader = body.getReader();
+  const splitter = createReplySplitter();
+  const collected: Record<ReplyChannel, string> = { reasoning: '', reply: '' };
   let buffer = '';
-  let content = '';
+
+  const emit = (chunks: ReplyChunk[]) => {
+    for (const chunk of chunks) {
+      collected[chunk.channel] += chunk.text;
+      onDelta(chunk.text, chunk.channel);
+    }
+  };
 
   const handleLine = (line: string) => {
     const trimmed = line.trim();
@@ -107,11 +124,19 @@ async function readStreamedContent(response: Response, onDelta: (delta: string) 
       return;
     }
 
-    const delta = parsed.data.choices[0]?.delta?.content ?? '';
+    const delta = parsed.data.choices[0]?.delta;
+    // Отдельное поле размышлений в теги не заворачивается: отдаём его каналом
+    // напрямую, минуя разделитель.
+    const reasoningDelta = delta?.reasoning_content ?? delta?.reasoning ?? '';
 
-    if (delta.length > 0) {
-      content += delta;
-      onDelta(delta);
+    if (reasoningDelta.length > 0) {
+      emit([{ channel: 'reasoning', text: reasoningDelta }]);
+    }
+
+    const contentDelta = delta?.content ?? '';
+
+    if (contentDelta.length > 0) {
+      emit(splitter.push(contentDelta));
     }
   };
 
@@ -135,7 +160,9 @@ async function readStreamedContent(response: Response, onDelta: (delta: string) 
     handleLine(buffer);
   }
 
-  return content;
+  emit(splitter.flush());
+
+  return { content: collected.reply.trim(), reasoning: collected.reasoning.trim() };
 }
 
 export class OpenAiCompatibleChatCompletionsClient implements ChatCompletionClient {
@@ -183,10 +210,10 @@ export class OpenAiCompatibleChatCompletionsClient implements ChatCompletionClie
     const isEventStream = (response.headers.get('content-type') ?? '').includes('text/event-stream');
 
     if (streaming && isEventStream && request.onDelta) {
-      let streamedContent: string;
+      let streamed: ChatCompletionResponse;
 
       try {
-        streamedContent = await readStreamedContent(response, request.onDelta);
+        streamed = await readStreamedContent(response, request.onDelta);
       } catch (error) {
         if (request.signal?.aborted || isAbortError(error)) {
           throw error;
@@ -197,13 +224,11 @@ export class OpenAiCompatibleChatCompletionsClient implements ChatCompletionClie
         );
       }
 
-      const content = streamedContent.trim();
-
-      if (!content) {
+      if (!streamed.content) {
         throw new ProviderGenerationError('Provider returned an empty reply.');
       }
 
-      return { content };
+      return streamed;
     }
 
     const responseText = await response.text();
@@ -219,14 +244,20 @@ export class OpenAiCompatibleChatCompletionsClient implements ChatCompletionClie
       );
     }
 
-    const content = payload.choices[0]?.message.content?.trim();
+    const message = payload.choices[0]?.message;
+    const split = splitReply(message?.content ?? '');
+    const reasoning = [message?.reasoning_content ?? message?.reasoning ?? '', split.reasoning]
+      .filter((part) => part.trim().length > 0)
+      .join('\n\n')
+      .trim();
 
-    if (!content) {
+    if (!split.content) {
       throw new ProviderGenerationError('Provider returned an empty reply.');
     }
 
     return {
-      content,
+      content: split.content,
+      reasoning,
     };
   }
 }
