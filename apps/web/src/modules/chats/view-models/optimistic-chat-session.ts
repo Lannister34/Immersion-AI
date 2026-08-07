@@ -5,6 +5,7 @@ import type { ChatMessageDto, ChatSessionDto } from '@immersion/contracts/chats'
 // инвалидацией session- и list-запросов после ответа сервера.
 
 export interface OptimisticUserMessageInput {
+  attachments?: ChatMessageDto['attachments'];
   content: string;
   createdAt: string;
   id: string;
@@ -15,6 +16,7 @@ export function appendOptimisticUserMessage(
   input: OptimisticUserMessageInput,
 ): ChatSessionDto {
   const message: ChatMessageDto = {
+    attachments: input.attachments ?? [],
     id: input.id,
     role: 'user',
     content: input.content,

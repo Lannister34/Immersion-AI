@@ -5,6 +5,7 @@ import {
   GetChatSessionResponseSchema,
 } from '@immersion/contracts/chats';
 
+import { toChatMessageAttachmentDto } from './chat-attachments.js';
 import type { ChatGenerationSettingsRecord, ChatSessionRecord, ChatSummaryRecord } from './chat-records.js';
 import { getDefaultUserName } from './default-user-name.js';
 
@@ -66,7 +67,10 @@ export function toChatSessionResponse(session: ChatSessionRecord): GetChatSessio
     lorebookIds: [...session.lorebookIds],
     chat: summaryDto,
     generationSettings: toChatGenerationSettingsDto(session.generationSettings),
-    messages: session.messages,
+    messages: session.messages.map((message) => ({
+      ...message,
+      attachments: message.attachments.map((attachment) => toChatMessageAttachmentDto(session.chat.id, attachment)),
+    })),
     userName: session.userName ?? getDefaultUserName(),
   });
 }

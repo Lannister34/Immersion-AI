@@ -1,5 +1,6 @@
 import {
   BranchChatCommandSchema,
+  ChatAttachmentIdSchema,
   ChatIdSchema,
   CreateChatCommandSchema,
   ImportChatCommandSchema,
@@ -15,6 +16,12 @@ import { CharacterNotFoundError } from '../../../characters/index.js';
 import { ScenarioNotFoundError } from '../../../scenarios/index.js';
 import { ChatMessageNotFoundError, ChatNotFoundError } from '../../application/append-chat-messages.js';
 import { branchChat } from '../../application/branch-chat.js';
+import {
+  ChatAttachmentNotFoundError,
+  getChatAttachment,
+  InvalidChatAttachmentError,
+  uploadChatAttachment,
+} from '../../application/chat-attachments.js';
 import { createChat } from '../../application/create-chat.js';
 import { deleteChat } from '../../application/delete-chat.js';
 import { deleteChatMessage } from '../../application/delete-chat-message.js';
@@ -33,6 +40,11 @@ import { updateChatMessage } from '../../application/update-chat-message.js';
 import { updateChatTitle } from '../../application/update-chat-title.js';
 
 const ChatRouteParamsSchema = z.object({
+  chatId: ChatIdSchema,
+});
+
+const ChatAttachmentRouteParamsSchema = z.object({
+  attachmentId: ChatAttachmentIdSchema,
   chatId: ChatIdSchema,
 });
 
@@ -69,6 +81,14 @@ const toProblem = createToProblem((error) => {
 
   if (error instanceof InvalidChatGenerationSettingsError) {
     return problem(400, 'invalid_chat_generation_settings', error.message);
+  }
+
+  if (error instanceof ChatAttachmentNotFoundError) {
+    return problem(404, 'chat_attachment_not_found', 'Вложение не найдено.');
+  }
+
+  if (error instanceof InvalidChatAttachmentError) {
+    return problem(400, 'invalid_chat_attachment', error.message);
   }
 
   if (error instanceof InvalidChatFileError) {
@@ -157,6 +177,37 @@ export const chatsRoutes: FastifyPluginAsync = async (app) => {
       return exported.body;
     } catch (error) {
       request.log.error({ err: error }, 'Failed to export chat');
+      const mapped = toProblem(error);
+
+      return reply.status(mapped.statusCode).send(mapped.body);
+    }
+  });
+
+  app.post('/:chatId/attachments', async (request, reply) => {
+    try {
+      const { chatId } = ChatRouteParamsSchema.parse(request.params);
+      const uploaded = await uploadChatAttachment(chatId, request.body);
+
+      return reply.status(201).send(uploaded);
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to upload chat attachment');
+      const mapped = toProblem(error);
+
+      return reply.status(mapped.statusCode).send(mapped.body);
+    }
+  });
+
+  app.get('/:chatId/attachments/:attachmentId', async (request, reply) => {
+    try {
+      const { attachmentId, chatId } = ChatAttachmentRouteParamsSchema.parse(request.params);
+      const attachment = await getChatAttachment(chatId, attachmentId);
+
+      reply.header('Content-Type', attachment.contentType);
+      reply.header('Cache-Control', 'private, max-age=31536000, immutable');
+
+      return reply.send(attachment.body);
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to load chat attachment');
       const mapped = toProblem(error);
 
       return reply.status(mapped.statusCode).send(mapped.body);

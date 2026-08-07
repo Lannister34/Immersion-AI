@@ -102,6 +102,7 @@ describe('buildChatReplyPrompt', () => {
       session: buildSession(
         [
           {
+            attachments: [],
             content: 'Hello.',
             createdAt: '2026-01-01T00:00:00.000Z',
             id: 'm1',
@@ -127,7 +128,7 @@ describe('buildChatReplyPrompt', () => {
       lorebookSections: ['Виндхолл — город на скале.'],
       samplerPreset: defaultSamplerPreset,
       session: buildSession(
-        [{ content: 'Привет.', createdAt: '2026-01-01T00:00:00.000Z', id: 'm1', role: 'user' }],
+        [{ attachments: [], content: 'Привет.', createdAt: '2026-01-01T00:00:00.000Z', id: 'm1', role: 'user' }],
         null,
         'Отвечай короче обычного.',
       ),
@@ -147,7 +148,7 @@ describe('buildChatReplyPrompt', () => {
       lorebookSections: ['Виндхолл — город на скале.'],
       samplerPreset: defaultSamplerPreset,
       session: buildSession(
-        [{ content: 'Привет.', createdAt: '2026-01-01T00:00:00.000Z', id: 'm1', role: 'user' }],
+        [{ attachments: [], content: 'Привет.', createdAt: '2026-01-01T00:00:00.000Z', id: 'm1', role: 'user' }],
         'Только этот текст уходит в модель.',
         'Эти инструкции применяться не должны.',
       ),
@@ -168,6 +169,7 @@ describe('buildChatReplyPrompt', () => {
       samplerPreset: defaultSamplerPreset,
       session: buildSession([
         {
+          attachments: [],
           content: 'Привет.',
           createdAt: '2026-01-01T00:00:00.000Z',
           id: 'm1',
@@ -203,12 +205,14 @@ describe('buildChatReplyPrompt', () => {
       },
       session: buildSession([
         {
+          attachments: [],
           content: 'old message that should be trimmed',
           createdAt: '2026-01-01T00:00:00.000Z',
           id: 'm1',
           role: 'user',
         },
         {
+          attachments: [],
           content: 'latest message stays even if it is large',
           createdAt: '2026-01-01T00:00:01.000Z',
           id: 'm2',
@@ -232,18 +236,21 @@ describe('buildChatReplyPrompt', () => {
       },
       session: buildSession([
         {
+          attachments: [],
           content: 'FIRST edge',
           createdAt: '2026-01-01T00:00:00.000Z',
           id: 'm1',
           role: 'user',
         },
         {
+          attachments: [],
           content: 'MIDDLE '.repeat(20),
           createdAt: '2026-01-01T00:00:01.000Z',
           id: 'm2',
           role: 'assistant',
         },
         {
+          attachments: [],
           content: 'LATEST edge',
           createdAt: '2026-01-01T00:00:02.000Z',
           id: 'm3',
@@ -269,12 +276,14 @@ describe('buildChatReplyPrompt', () => {
       },
       session: buildSession([
         {
+          attachments: [],
           content: 'old '.repeat(80),
           createdAt: '2026-01-01T00:00:00.000Z',
           id: 'm1',
           role: 'user',
         },
         {
+          attachments: [],
           content: 'latest message stays',
           createdAt: '2026-01-01T00:00:01.000Z',
           id: 'm2',

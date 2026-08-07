@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { createFileIdSchema } from '../common/file-id.js';
+
 export const ChatIdSchema = z.string().regex(/^[A-Za-z0-9_-]+$/);
 export type ChatId = z.infer<typeof ChatIdSchema>;
 
@@ -22,13 +24,40 @@ export const ChatSummaryDtoSchema = z.object({
 });
 export type ChatSummaryDto = z.infer<typeof ChatSummaryDtoSchema>;
 
+export const ChatAttachmentIdSchema = createFileIdSchema('Chat attachment id');
+export type ChatAttachmentId = z.infer<typeof ChatAttachmentIdSchema>;
+
+export const ChatAttachmentMimeTypeSchema = z.enum(['image/png', 'image/jpeg', 'image/webp']);
+export type ChatAttachmentMimeType = z.infer<typeof ChatAttachmentMimeTypeSchema>;
+
+/** Картинка, приложенная к сообщению; файл лежит рядом с чатом. */
+export const ChatMessageAttachmentDtoSchema = z.object({
+  id: ChatAttachmentIdSchema,
+  mimeType: ChatAttachmentMimeTypeSchema,
+  url: z.string().min(1),
+});
+export type ChatMessageAttachmentDto = z.infer<typeof ChatMessageAttachmentDtoSchema>;
+
 export const ChatMessageDtoSchema = z.object({
+  attachments: z.array(ChatMessageAttachmentDtoSchema),
   id: z.string().min(1),
   role: ChatMessageRoleSchema,
   content: z.string(),
   createdAt: z.string().min(1),
 });
 export type ChatMessageDto = z.infer<typeof ChatMessageDtoSchema>;
+
+// 8 MiB decoded ≈ 11.2M base64 characters; точный размер проверяет use case.
+export const UploadChatAttachmentCommandSchema = z.object({
+  contentBase64: z.string().min(1).max(11_500_000),
+  mimeType: ChatAttachmentMimeTypeSchema,
+});
+export type UploadChatAttachmentCommand = z.infer<typeof UploadChatAttachmentCommandSchema>;
+
+export const UploadChatAttachmentResponseSchema = z.object({
+  attachment: ChatMessageAttachmentDtoSchema,
+});
+export type UploadChatAttachmentResponse = z.infer<typeof UploadChatAttachmentResponseSchema>;
 
 export const ChatContextTrimStrategySchema = z.enum(['trim_middle', 'trim_start']);
 export type ChatContextTrimStrategy = z.infer<typeof ChatContextTrimStrategySchema>;

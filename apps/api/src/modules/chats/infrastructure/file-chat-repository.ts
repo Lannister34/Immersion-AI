@@ -4,6 +4,7 @@ import path from 'node:path';
 import { ChatGenerationSettingsDtoSchema } from '@immersion/contracts/chats';
 
 import { writeFileAtomically } from '../../../lib/atomic-file.js';
+import { resolveContainedFilePath } from '../../../lib/contained-path.js';
 import { resolveDataRoot } from '../../../lib/data-root.js';
 import {
   ChatLastMessageChangedError,
@@ -14,6 +15,7 @@ import type { ChatFileStatRecord, ChatSummaryWithSearchText } from '../applicati
 import type {
   AppendChatMessageInput,
   ChatGenerationSettingsRecord,
+  ChatMessageAttachmentRecord,
   ChatMessageRecord,
   ChatMessageRoleRecord,
   ChatSessionRecord,
@@ -75,6 +77,11 @@ interface StoredChatGenerationSettings {
   system_prompt?: unknown;
 }
 
+interface StoredChatAttachment {
+  file?: unknown;
+  mime?: unknown;
+}
+
 interface StoredChatLine {
   extra?: unknown;
   is_user?: boolean;
@@ -108,6 +115,37 @@ function resolveChatsDirectory() {
 
 function resolveChatFilePath(chatId: string) {
   return path.join(resolveChatsDirectory(), `${chatId}.jsonl`);
+}
+
+/** Вложения лежат в папке рядом с файлом чата и уходят вместе с ним. */
+function resolveChatAttachmentsDirectory(chatId: string) {
+  return path.join(resolveChatsDirectory(), `${chatId}.files`);
+}
+
+function resolveChatAttachmentPath(chatId: string, attachmentId: string) {
+  return resolveContainedFilePath(resolveChatAttachmentsDirectory(chatId), attachmentId);
+}
+
+export async function writeChatAttachmentFile(chatId: string, attachmentId: string, bytes: Buffer): Promise<void> {
+  const directory = resolveChatAttachmentsDirectory(chatId);
+  await fs.mkdir(directory, { recursive: true });
+  await writeFileAtomically(resolveChatAttachmentPath(chatId, attachmentId), bytes);
+}
+
+export async function readChatAttachmentFile(chatId: string, attachmentId: string): Promise<Buffer | null> {
+  try {
+    return await fs.readFile(resolveChatAttachmentPath(chatId, attachmentId));
+  } catch (error) {
+    const candidate = error as NodeJS.ErrnoException;
+    if (candidate.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export async function deleteChatAttachmentFiles(chatId: string): Promise<void> {
+  await fs.rm(resolveChatAttachmentsDirectory(chatId), { force: true, recursive: true });
 }
 
 async function withChatWriteQueue<T>(chatId: string, operation: () => Promise<T>): Promise<T> {
@@ -270,6 +308,34 @@ function parseStoredChatLine(line: string, filePath: string, lineNumber: number)
   } satisfies StoredChatLine;
 }
 
+function getStoredAttachments(line: StoredChatLine): ChatMessageAttachmentRecord[] {
+  const extra = line.extra;
+  if (!extra || typeof extra !== 'object' || Array.isArray(extra)) {
+    return [];
+  }
+
+  const stored = (extra as Record<string, unknown>).attachments;
+  if (!Array.isArray(stored)) {
+    return [];
+  }
+
+  return stored.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      return [];
+    }
+
+    const attachment = entry as StoredChatAttachment;
+    const file = getNullableString(attachment.file);
+    const mime = getNullableString(attachment.mime);
+
+    if (!file || (mime !== 'image/png' && mime !== 'image/jpeg' && mime !== 'image/webp')) {
+      return [];
+    }
+
+    return [{ id: file, mimeType: mime } satisfies ChatMessageAttachmentRecord];
+  });
+}
+
 function getMessageRole(line: StoredChatLine): ChatMessageRoleRecord {
   if (line.extra && typeof line.extra === 'object' && !Array.isArray(line.extra)) {
     const extraSource = line.extra as Record<string, unknown>;
@@ -282,6 +348,11 @@ function getMessageRole(line: StoredChatLine): ChatMessageRoleRecord {
 }
 
 function createStoredChatLine(message: AppendChatMessageInput): StoredChatLine {
+  const attachments = (message.attachments ?? []).map((attachment) => ({
+    file: attachment.id,
+    mime: attachment.mimeType,
+  }));
+
   if (message.role === 'system') {
     return {
       extra: {
@@ -294,6 +365,7 @@ function createStoredChatLine(message: AppendChatMessageInput): StoredChatLine {
   }
 
   return {
+    ...(attachments.length > 0 ? { extra: { attachments } } : {}),
     is_user: message.role === 'user',
     mes: message.content,
     send_date: message.createdAt,
@@ -470,6 +542,7 @@ async function readChatFile(chatId: string): Promise<ChatSessionRecord | null> {
 
     return [
       {
+        attachments: getStoredAttachments(storedLine),
         id: `${chatId}:${index + 1}`,
         role: getMessageRole(storedLine),
         content: storedLine.mes ?? '',
@@ -656,6 +729,8 @@ export class FileChatRepository implements ChatRepository {
       const filePath = resolveChatFilePath(chatId);
       try {
         await fs.unlink(filePath);
+        // Вложения принадлежат чату: без него они уже никому не нужны.
+        await deleteChatAttachmentFiles(chatId);
         return true;
       } catch (error) {
         const candidate = error as NodeJS.ErrnoException;

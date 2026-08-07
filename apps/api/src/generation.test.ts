@@ -620,6 +620,46 @@ describe('generation routes', () => {
     await app.close();
   });
 
+  it('sends an attached image to the provider as an OpenAI image part', async () => {
+    const providerRequests = mockProviderSuccess('Вижу градиент.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    const png = Buffer.from(
+      '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c63000100000500010d0a2db40000000049454e44ae426082',
+      'hex',
+    );
+    const uploadResponse = await app.inject({
+      method: 'POST',
+      url: `/api/chats/${chat.id}/attachments`,
+      payload: { contentBase64: png.toString('base64'), mimeType: 'image/png' },
+    });
+    const attachmentId = (uploadResponse.json() as { attachment: { id: string } }).attachment.id;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply',
+      payload: { attachmentIds: [attachmentId], chatId: chat.id, message: 'Что на картинке?' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(providerRequests).toHaveLength(1);
+
+    const messages = (providerRequests[0]?.body as { messages: unknown[] }).messages;
+    const userMessage = messages.find(
+      (message): message is { content: unknown[]; role: string } =>
+        typeof message === 'object' && message !== null && (message as { role?: string }).role === 'user',
+    );
+
+    // Текст и картинка уходят частями одного сообщения: так их принимает
+    // OpenAI-совместимый API, включая llama.cpp и LM Studio.
+    expect(userMessage?.content).toEqual([
+      { text: 'Что на картинке?', type: 'text' },
+      { image_url: { url: `data:image/png;base64,${png.toString('base64')}` }, type: 'image_url' },
+    ]);
+
+    await app.close();
+  });
+
   it('calls the active provider and persists the user message with the assistant reply', async () => {
     const providerRequests = mockProviderSuccess('Assistant reply from provider.');
     const app = buildApiApp();

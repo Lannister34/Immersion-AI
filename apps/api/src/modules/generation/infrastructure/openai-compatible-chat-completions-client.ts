@@ -20,6 +20,25 @@ const OpenAiCompatibleChatCompletionResponseSchema = z.object({
     .min(1),
 });
 
+/**
+ * OpenAI-совместимый формат картинок: вместо строки в content уходит массив
+ * частей. Для текстовых сообщений оставляем строку — так же, как раньше, и
+ * серверы без мультимодальности ничего нового не видят.
+ */
+function buildMessagePayload(message: ChatCompletionRequest['messages'][number]) {
+  if (!message.images || message.images.length === 0) {
+    return { content: message.content, role: message.role };
+  }
+
+  return {
+    content: [
+      ...(message.content.trim().length > 0 ? [{ text: message.content, type: 'text' as const }] : []),
+      ...message.images.map((url) => ({ image_url: { url }, type: 'image_url' as const })),
+    ],
+    role: message.role,
+  };
+}
+
 function buildHeaders(apiKey: string | null) {
   return {
     ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
@@ -48,7 +67,7 @@ export class OpenAiCompatibleChatCompletionsClient implements ChatCompletionClie
         headers: buildHeaders(request.endpoint.apiKey),
         body: JSON.stringify({
           model: request.endpoint.model,
-          messages: request.messages,
+          messages: request.messages.map(buildMessagePayload),
           max_tokens: request.maxTokens,
           min_p: request.sampling.minP,
           presence_penalty: request.sampling.presencePenalty,

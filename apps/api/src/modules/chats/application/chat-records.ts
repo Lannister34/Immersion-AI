@@ -1,6 +1,15 @@
 export type ChatMessageRoleRecord = 'assistant' | 'system' | 'user';
 
+export type ChatAttachmentMimeTypeRecord = 'image/jpeg' | 'image/png' | 'image/webp';
+
+/** Файл вложения лежит рядом с чатом; id — имя файла в его папке. */
+export interface ChatMessageAttachmentRecord {
+  id: string;
+  mimeType: ChatAttachmentMimeTypeRecord;
+}
+
 export interface ChatMessageRecord {
+  attachments: ChatMessageAttachmentRecord[];
   content: string;
   createdAt: string;
   id: string;
@@ -48,6 +57,7 @@ export interface CreateGenericChatInput {
 }
 
 export interface AppendChatMessageInput {
+  attachments?: ChatMessageAttachmentRecord[];
   content: string;
   createdAt: string;
   role: ChatMessageRoleRecord;

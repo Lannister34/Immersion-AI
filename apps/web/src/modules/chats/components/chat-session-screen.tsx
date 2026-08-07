@@ -17,6 +17,7 @@ import { useDebouncedValue } from '../../../shared/lib/use-debounced-value';
 import { DownloadIcon, SparkleIcon, TrashIcon } from '../../../shared/ui/icons';
 import {
   chatReplyPromptPreviewQueryOptions,
+  describeVisionSupport,
   generationReadinessQueryOptions,
   toGenerationAvailabilityViewModel,
   useChatReplyGeneration,
@@ -25,6 +26,7 @@ import {
 } from '../../generation';
 import { settingsOverviewQueryOptions } from '../../settings';
 import { useBranchChat } from '../mutations/use-branch-chat';
+import { useChatAttachments } from '../mutations/use-chat-attachments';
 import { useDeleteChat } from '../mutations/use-delete-chat';
 import { useDeleteChatMessage } from '../mutations/use-delete-chat-message';
 import { useUpdateChatMessage } from '../mutations/use-update-chat-message';
@@ -61,6 +63,7 @@ function describeGenerateTitleError(error: unknown): string | null {
 
 export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const [draftMessage, setDraftMessage] = useState('');
+  const attachmentsDraft = useChatAttachments(chatId);
   const debouncedDraftMessage = useDebouncedValue(draftMessage, 400);
   const panelTab = useUiShellStore((state) => state.chatRightPanelTab);
   const setPanelTab = useUiShellStore((state) => state.setChatRightPanelTab);
@@ -196,8 +199,10 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
 
   const blockReason = generationAvailability.blockReason;
   const isStreaming = Boolean(chatReplyGeneration.activeJob);
+  const vision = describeVisionSupport(generationReadinessQuery.data?.visionSupport);
   const canSend =
-    draftMessage.trim().length > 0 &&
+    (draftMessage.trim().length > 0 || attachmentsDraft.attachments.length > 0) &&
+    !attachmentsDraft.isUploading &&
     !chatReplyGeneration.isPending &&
     !generateFirstMessageMutation.isPending &&
     !blockReason;
@@ -222,9 +227,11 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
     event?.preventDefault();
     if (!canSend) return;
     const message = draftMessage;
+    const attachmentIds = attachmentsDraft.attachments.map((attachment) => attachment.id);
     setDraftMessage('');
+    attachmentsDraft.clear();
     try {
-      await chatReplyGeneration.start(message);
+      await chatReplyGeneration.start(message, attachmentIds);
     } catch {
       setDraftMessage(message);
     }
@@ -278,6 +285,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
         isStreaming;
       return (
         <BubbleMessage
+          attachments={message.attachments}
           branchTitleDefault={defaultBranchTitle}
           canRegenerate={isLastAssistant && !isMutating}
           characterAvatarUrl={session.characterAvatarUrl}
@@ -493,7 +501,14 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                 </div>
               ) : null}
               <Composer
+                attachments={attachmentsDraft.attachments}
+                attachmentsError={attachmentsDraft.error}
+                attachmentsHint={vision.hint}
                 blockReason={blockReason}
+                canAttachImages={vision.allowsImages && !blockReason}
+                isUploadingAttachment={attachmentsDraft.isUploading}
+                onAttachFiles={attachmentsDraft.attach}
+                onRemoveAttachment={attachmentsDraft.remove}
                 canAnswer={canAnswer}
                 canContinue={canContinue}
                 canSend={canSend}

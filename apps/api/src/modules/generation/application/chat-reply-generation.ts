@@ -6,6 +6,7 @@ import type {
 } from '@immersion/contracts/generation';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
 import { appendChatMessages } from '../../chats/application/append-chat-messages.js';
+import { readChatAttachmentDataUrl, resolveChatAttachments } from '../../chats/application/chat-attachments.js';
 import { ChatLastMessageChangedError } from '../../chats/application/chat-conflicts.js';
 import { appendAssistantMessageContinuation } from '../../chats/application/continue-last-assistant-message.js';
 import { loadChatPromptContext } from '../../prompting/application/load-chat-prompt-context.js';
@@ -87,12 +88,14 @@ async function runChatCompletionForSession(
     const endpoint = await resolveGenerationProviderEndpoint();
     const settings = getSettingsOverview();
     const characterContext = await loadChatPromptContext(session);
+    const messageImages = await loadMessageImages(session);
     // The trailing instruction goes through the plan so it is counted inside
     // the context budget instead of overflowing an already-full prompt.
     const generationPlan = await resolveChatReplyGenerationPlan({
       character: characterContext.character,
       characterScenarioContent: characterContext.characterScenarioContent,
       lorebookSections: characterContext.lorebookSections,
+      messageImages,
       providerModelName: endpoint.model,
       session,
       settings,
@@ -115,12 +118,47 @@ async function runChatCompletionForSession(
   }
 }
 
+/**
+ * Картинки сообщений читаем один раз на генерацию: провайдер принимает их
+ * как data-URL, а держать base64 в транскрипте незачем.
+ */
+async function loadMessageImages(session: ChatSessionDto): Promise<ReadonlyMap<string, string[]>> {
+  const images = new Map<string, string[]>();
+
+  for (const message of session.messages) {
+    if (message.attachments.length === 0) {
+      continue;
+    }
+
+    const dataUrls: string[] = [];
+
+    for (const attachment of message.attachments) {
+      const dataUrl = await readChatAttachmentDataUrl(session.chat.id, attachment.id);
+
+      if (dataUrl) {
+        dataUrls.push(dataUrl);
+      }
+    }
+
+    if (dataUrls.length > 0) {
+      images.set(message.id, dataUrls);
+    }
+  }
+
+  return images;
+}
+
 export async function appendUserMessageForChatReply(
   command: StartChatReplyCommand,
   now: () => Date,
 ): Promise<ChatSessionDto> {
+  // Вложения проверяем до записи: id приходит от клиента и мог указывать
+  // на файл, которого в этом чате нет.
+  const attachments = await resolveChatAttachments(command.chatId, command.attachmentIds ?? []);
+
   return appendChatMessages(command.chatId, [
     {
+      attachments,
       role: 'user',
       content: command.message,
       createdAt: now().toISOString(),
