@@ -10,6 +10,7 @@ import {
   resolveGenerationProviderEndpoint,
 } from '../../providers/application/generation-provider.js';
 import { getProviderSettings } from '../../providers/application/get-provider-settings.js';
+import { getProviderDefaultModel, isProviderApiKeyRequired } from '../../providers/domain/provider-catalog.js';
 import { getProviderVisionProbe } from '../../providers/infrastructure/provider-vision-probe.js';
 import { getRuntimeOverview } from '../../runtime/application/get-runtime-overview.js';
 
@@ -135,6 +136,7 @@ async function getBuiltinReadiness(settings: ProviderSettingsSnapshot): Promise<
 }
 
 function getExternalReadiness(settings: ProviderSettingsSnapshot): GenerationReadinessResponse {
+  const config = settings.providerConfigs[settings.activeProvider];
   const providerUrl = getConfiguredExternalUrl(settings);
 
   if (!providerUrl) {
@@ -161,6 +163,28 @@ function getExternalReadiness(settings: ProviderSettingsSnapshot): GenerationRea
     );
   }
 
+  if (isProviderApiKeyRequired(settings.activeProvider) && !config?.apiKey?.trim()) {
+    return blocked(
+      settings,
+      {
+        code: 'external_provider_api_key_missing',
+        message: 'API-ключ провайдера не задан. Укажите его на странице API.',
+      },
+      null,
+    );
+  }
+
+  if (!config?.model?.trim() && !getProviderDefaultModel(settings.activeProvider)) {
+    return blocked(
+      settings,
+      {
+        code: 'external_provider_model_missing',
+        message: 'Модель провайдера не выбрана. Выберите её на странице API.',
+      },
+      null,
+    );
+  }
+
   return ready(settings);
 }
 
@@ -179,6 +203,8 @@ async function withVisionSupport(readiness: GenerationReadinessResponse): Promis
     const visionSupport = await getProviderVisionProbe().getVisionSupport({
       baseUrl: endpoint.baseUrl,
       model: endpoint.model,
+      // У встроенного сервера провайдера нет: там спрашиваем сам движок.
+      provider: readiness.mode === 'builtin' ? null : readiness.activeProvider,
     });
 
     return { ...readiness, visionSupport };

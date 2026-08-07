@@ -1,5 +1,6 @@
 import type {
   ProviderConfig,
+  ProviderDefinition,
   ProviderMode,
   ProviderSettingsSnapshot,
   ProviderType,
@@ -14,6 +15,7 @@ import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { pluralRu } from '../../shared/lib/plural';
 import { CpuIcon, PlayIcon, PowerIcon, SearchIcon, SlidersIcon } from '../../shared/ui/icons';
 import { describeVisionSupport, generationReadinessQueryOptions } from '../generation';
+import { probeProviderModels } from './api/probe-provider-models';
 import { saveProviderSettings } from './api/save-provider-settings';
 import { startRuntime } from './api/start-runtime';
 import { stopRuntime } from './api/stop-runtime';
@@ -402,11 +404,22 @@ interface ProviderFormState {
   model: string;
 }
 
-function configToFormState(config: ProviderConfig | undefined): ProviderFormState {
+function getFieldDefault(definition: ProviderDefinition | undefined, key: string): string {
+  return definition?.fields.find((field) => field.key === key)?.defaultValue ?? '';
+}
+
+/**
+ * Пустой конфиг заполняем значениями каталога: у облачных провайдеров адрес
+ * известен заранее, и заставлять набирать его руками незачем.
+ */
+function configToFormState(
+  config: ProviderConfig | undefined,
+  definition: ProviderDefinition | undefined,
+): ProviderFormState {
   return {
-    url: config?.url ?? '',
+    url: config?.url ?? getFieldDefault(definition, 'url'),
     apiKey: config?.apiKey ?? '',
-    model: config?.model ?? '',
+    model: config?.model ?? getFieldDefault(definition, 'model'),
   };
 }
 
@@ -431,13 +444,26 @@ interface ExternalProviderFormProps {
 
 function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFormProps) {
   const [selectedProvider, setSelectedProvider] = useState<ProviderType>(snapshot?.activeProvider ?? 'custom');
+  const definition = snapshot?.providerDefinitions.find((entry) => entry.type === selectedProvider);
   const baseline = useMemo(
-    () => configToFormState(snapshot?.providerConfigs[selectedProvider]),
-    [selectedProvider, snapshot?.providerConfigs],
+    () => configToFormState(snapshot?.providerConfigs[selectedProvider], definition),
+    [definition, selectedProvider, snapshot?.providerConfigs],
   );
   const [form, setForm] = useState<ProviderFormState>(baseline);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Каталог моделей спрашиваем по тому, что набрано в форме: ждать сохранения
+  // ключа ради списка моделей — лишний шаг.
+  const modelsMutation = useMutation({
+    mutationFn: probeProviderModels,
+    onSuccess: (response) => {
+      if (response.status === 'error') {
+        setErrorMessage(response.issue?.message ?? 'Не удалось получить список моделей.');
+      }
+    },
+  });
+  const availableModels = modelsMutation.data?.status === 'ok' ? modelsMutation.data.models : [];
+  const resetModels = modelsMutation.reset;
   const appliedBaselineRef = useRef(baseline);
   const appliedProviderRef = useRef(selectedProvider);
 
@@ -451,7 +477,11 @@ function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFo
     setForm((current) => (providerChanged || formsEqual(current, previousBaseline) ? baseline : current));
     setSavedAt(null);
     setErrorMessage(null);
-  }, [baseline, selectedProvider]);
+
+    if (providerChanged) {
+      resetModels();
+    }
+  }, [baseline, resetModels, selectedProvider]);
 
   if (!snapshot) {
     return (
@@ -484,9 +514,8 @@ function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFo
     }
   };
 
-  const definition = snapshot.providerDefinitions.find((entry) => entry.type === selectedProvider);
-  const hasApiKeyField = definition?.fields.some((field) => field.key === 'apiKey') ?? false;
-  const hasModelField = definition?.fields.some((field) => field.key === 'model') ?? false;
+  const apiKeyField = definition?.fields.find((field) => field.key === 'apiKey');
+  const modelField = definition?.fields.find((field) => field.key === 'model');
 
   return (
     <section className="card" style={{ padding: 18, display: 'grid', gap: 14 }}>
@@ -527,7 +556,7 @@ function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFo
             value={form.url}
           />
         </div>
-        {hasApiKeyField ? (
+        {apiKeyField ? (
           <div className="field">
             <label htmlFor="provider-api-key">API-ключ</label>
             <input
@@ -538,25 +567,54 @@ function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFo
                 const { value } = event.currentTarget;
                 setForm((current) => ({ ...current, apiKey: value }));
               }}
-              placeholder="опционально"
+              placeholder={apiKeyField.placeholder ?? 'опционально'}
               type="password"
               value={form.apiKey}
             />
           </div>
         ) : null}
-        {hasModelField ? (
+        {modelField ? (
           <div className="field">
             <label htmlFor="provider-model">Модель</label>
-            <input
-              className="input"
-              id="provider-model"
-              onChange={(event) => {
-                const { value } = event.currentTarget;
-                setForm((current) => ({ ...current, model: value }));
-              }}
-              placeholder="опционально, например: local-model"
-              value={form.model}
-            />
+            <div className="row gap-8">
+              <input
+                className="input"
+                id="provider-model"
+                list="provider-models"
+                onChange={(event) => {
+                  const { value } = event.currentTarget;
+                  setForm((current) => ({ ...current, model: value }));
+                }}
+                placeholder={modelField.placeholder ?? 'опционально'}
+                style={{ flex: 1 }}
+                value={form.model}
+              />
+              <button
+                className="btn btn--ghost-bordered"
+                disabled={form.url.trim().length === 0 || modelsMutation.isPending}
+                onClick={() => {
+                  setErrorMessage(null);
+                  modelsMutation.mutate({
+                    provider: selectedProvider,
+                    url: form.url.trim(),
+                    ...(form.apiKey.trim() ? { apiKey: form.apiKey.trim() } : {}),
+                  });
+                }}
+                type="button"
+              >
+                {modelsMutation.isPending ? 'Запрашиваем…' : 'Список моделей'}
+              </button>
+            </div>
+            <datalist id="provider-models">
+              {availableModels.map((model) => (
+                <option key={model.id} value={model.id} />
+              ))}
+            </datalist>
+            {availableModels.length > 0 ? (
+              <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+                Провайдер вернул {availableModels.length} моделей — они подсказываются в поле.
+              </span>
+            ) : null}
           </div>
         ) : null}
         {errorMessage ? (

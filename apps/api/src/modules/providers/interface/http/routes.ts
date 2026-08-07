@@ -1,8 +1,9 @@
+import { ProviderModelsProbeCommandSchema } from '@immersion/contracts/providers';
 import type { FastifyPluginAsync } from 'fastify';
 import { createToProblem } from '../../../../shared/interface/http/problem.js';
 import { getProviderSettings } from '../../application/get-provider-settings.js';
 import { getProvidersOverview } from '../../application/get-providers-overview.js';
-import { testProviderConnection } from '../../application/test-provider-connection.js';
+import { probeProviderModels, testProviderConnection } from '../../application/test-provider-connection.js';
 import { updateProviderSettings } from '../../application/update-provider-settings.js';
 import { providerDefinitions } from '../../domain/provider-catalog.js';
 
@@ -20,6 +21,16 @@ export const providersRoutes: FastifyPluginAsync = async (app) => {
   app.get('/connection', async (_request, reply) => {
     try {
       return await testProviderConnection();
+    } catch (error) {
+      const mapped = toProblem(error);
+
+      return reply.status(mapped.statusCode).send(mapped.body);
+    }
+  });
+
+  app.post('/models', async (request, reply) => {
+    try {
+      return await probeProviderModels(ProviderModelsProbeCommandSchema.parse(request.body));
     } catch (error) {
       const mapped = toProblem(error);
 

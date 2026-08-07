@@ -4,7 +4,7 @@ import {
   GenerateScenarioDraftResponseSchema,
 } from '@immersion/contracts/generation';
 
-import { OpenAiCompatibleChatCompletionsClient } from '../infrastructure/openai-compatible-chat-completions-client.js';
+import { createChatCompletionClient } from '../infrastructure/chat-completion-client-factory.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import {
   buildGenderHint,
@@ -96,7 +96,7 @@ export async function generateScenarioDraft(
   dependencies: GenerateScenarioDraftDependencies = {},
 ): Promise<GenerateScenarioDraftResponse> {
   const command = GenerateScenarioDraftCommandSchema.parse(input);
-  const chatCompletionClient = dependencies.chatCompletionClient ?? new OpenAiCompatibleChatCompletionsClient();
+  const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
   const context = await resolveDraftGenerationContext();
   const completion = await chatCompletionClient.completeChat({
     endpoint: context.endpoint,

@@ -1,9 +1,12 @@
+import type { ProviderApiKind } from '@immersion/contracts/providers';
 import type { ReplyChannel } from '@immersion/domain/generation';
 
 import type { ChatReplyPromptMessage } from '../../prompting/application/build-chat-reply-prompt.js';
 
 export interface ChatCompletionEndpoint {
   apiKey: string | null;
+  /** Диалект API провайдера: по нему выбирается клиент запроса. */
+  apiKind: ProviderApiKind;
   baseUrl: string;
   model: string;
 }

@@ -1,4 +1,6 @@
+import type { ProviderApiKind } from '@immersion/contracts/providers';
 import { z } from 'zod';
+import { getProviderApiKind, getProviderDefaultModel, isProviderApiKeyRequired } from '../domain/provider-catalog.js';
 import { DEFAULT_OPENAI_COMPATIBLE_MODEL } from '../domain/provider-settings.js';
 import { runtimeEndpointAdapter } from '../infrastructure/runtime-endpoint-adapter.js';
 import { getProviderSettings } from './get-provider-settings.js';
@@ -13,6 +15,8 @@ export class GenerationProviderUnavailableError extends Error {
 
 export interface GenerationProviderEndpoint {
   apiKey: string | null;
+  /** Диалект API: от него зависит и путь, и формат запроса. */
+  apiKind: ProviderApiKind;
   baseUrl: string;
   model: string;
 }
@@ -41,10 +45,19 @@ export function normalizeGenerationProviderBaseUrl(value: string) {
   }
 }
 
-export function resolveChatCompletionsUrl(endpoint: GenerationProviderEndpoint) {
-  const normalized = normalizeGenerationProviderBaseUrl(endpoint.baseUrl);
+/** Базовый URL уже может заканчиваться на /v1 — второй раз его не добавляем. */
+function resolveVersionedUrl(baseUrl: string, path: string) {
+  const normalized = normalizeGenerationProviderBaseUrl(baseUrl);
 
-  return normalized.endsWith('/v1') ? `${normalized}/chat/completions` : `${normalized}/v1/chat/completions`;
+  return normalized.endsWith('/v1') ? `${normalized}/${path}` : `${normalized}/v1/${path}`;
+}
+
+export function resolveChatCompletionsUrl(endpoint: GenerationProviderEndpoint) {
+  return resolveVersionedUrl(endpoint.baseUrl, 'chat/completions');
+}
+
+export function resolveAnthropicMessagesUrl(endpoint: GenerationProviderEndpoint) {
+  return resolveVersionedUrl(endpoint.baseUrl, 'messages');
 }
 
 export async function resolveGenerationProviderEndpoint(
@@ -61,6 +74,7 @@ export async function resolveGenerationProviderEndpoint(
 
     return {
       apiKey: null,
+      apiKind: 'openai-compatible',
       baseUrl: runtimeEndpoint.baseUrl,
       model: runtimeEndpoint.model?.trim() || DEFAULT_OPENAI_COMPATIBLE_MODEL,
     };
@@ -75,9 +89,25 @@ export async function resolveGenerationProviderEndpoint(
     })
     .parse(config);
 
+  const provider = settings.activeProvider;
+  const apiKey = parsedConfig.apiKey?.trim() || null;
+  // У облачных провайдеров нет ни модели по умолчанию, ни анонимного доступа:
+  // молча подставлять «local-model» или уходить без ключа — это гарантированная
+  // ошибка провайдера вместо понятного сообщения.
+  const model = parsedConfig.model?.trim() || getProviderDefaultModel(provider);
+
+  if (isProviderApiKeyRequired(provider) && !apiKey) {
+    throw new GenerationProviderUnavailableError('API-ключ провайдера не задан. Укажите его на странице API.');
+  }
+
+  if (!model) {
+    throw new GenerationProviderUnavailableError('Модель провайдера не выбрана. Выберите её на странице API.');
+  }
+
   return {
-    apiKey: parsedConfig.apiKey ?? null,
+    apiKey,
+    apiKind: getProviderApiKind(provider),
     baseUrl: parsedConfig.url,
-    model: parsedConfig.model?.trim() || DEFAULT_OPENAI_COMPATIBLE_MODEL,
+    model,
   };
 }

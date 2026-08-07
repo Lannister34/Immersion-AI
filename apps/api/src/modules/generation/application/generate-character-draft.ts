@@ -5,7 +5,7 @@ import {
   GenerateCharacterDraftResponseSchema,
 } from '@immersion/contracts/generation';
 
-import { OpenAiCompatibleChatCompletionsClient } from '../infrastructure/openai-compatible-chat-completions-client.js';
+import { createChatCompletionClient } from '../infrastructure/chat-completion-client-factory.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import {
   type DraftGenerationContext,
@@ -131,7 +131,7 @@ export async function generateCharacterDraft(
   dependencies: GenerateCharacterDraftDependencies = {},
 ): Promise<GenerateCharacterDraftResponse> {
   const command = GenerateCharacterDraftCommandSchema.parse(input);
-  const chatCompletionClient = dependencies.chatCompletionClient ?? new OpenAiCompatibleChatCompletionsClient();
+  const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
   const context: DraftGenerationContext = await resolveDraftGenerationContext();
   const completion = await chatCompletionClient.completeChat({
     endpoint: context.endpoint,

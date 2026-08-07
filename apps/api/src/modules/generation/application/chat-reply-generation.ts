@@ -18,7 +18,7 @@ import {
   resolveGenerationProviderEndpoint,
 } from '../../providers/application/generation-provider.js';
 import { getSettingsOverview } from '../../settings/application/get-settings-overview.js';
-import { OpenAiCompatibleChatCompletionsClient } from '../infrastructure/openai-compatible-chat-completions-client.js';
+import { createChatCompletionClient } from '../infrastructure/chat-completion-client-factory.js';
 import { getProviderTokenCounter } from '../infrastructure/provider-token-counter.js';
 import type { ChatCompletionClient, ChatCompletionResponse } from './chat-completion-client.js';
 import {
@@ -83,7 +83,7 @@ async function runChatCompletionForSession(
   dependencies: ChatReplyGenerationDependencies,
   buildTrailingInstruction?: (settings: SettingsOverviewResponse) => string,
 ): Promise<ChatCompletionResponse> {
-  const chatCompletionClient = dependencies.chatCompletionClient ?? new OpenAiCompatibleChatCompletionsClient();
+  const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
 
   try {
     throwIfAborted(dependencies.signal);

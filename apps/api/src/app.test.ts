@@ -112,7 +112,13 @@ describe('buildApiApp', () => {
     expect(response.statusCode).toBe(200);
     expect(overview.activeProvider).toBe('custom');
     expect(overview.backendMode).toBe('external');
-    expect(overview.providerConfigs).toHaveLength(2);
+    // Каталог отдаёт конфиг на каждого известного провайдера, включая облачные.
+    expect(overview.providerConfigs.map((config) => config.provider).sort()).toEqual([
+      'anthropic',
+      'custom',
+      'koboldcpp',
+      'openai',
+    ]);
 
     await app.close();
   });

@@ -8,6 +8,7 @@ import type {
   ChatCompletionResponse,
 } from '../application/chat-completion-client.js';
 import { ProviderGenerationError } from '../application/generation-errors.js';
+import { buildRequestSignal, isAbortError, readProviderErrorText } from './provider-http.js';
 
 const OpenAiCompatibleStreamChunkSchema = z.object({
   choices: z
@@ -65,16 +66,6 @@ function buildHeaders(apiKey: string | null) {
     Accept: 'application/json',
     'Content-Type': 'application/json',
   };
-}
-
-function buildRequestSignal(signal: AbortSignal | undefined) {
-  const timeoutSignal = AbortSignal.timeout(10 * 60 * 1000);
-
-  return signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
-}
-
-function isAbortError(error: unknown) {
-  return typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError';
 }
 
 /**
@@ -165,6 +156,43 @@ async function readStreamedContent(
   return { content: collected.reply.trim(), reasoning: collected.reasoning.trim() };
 }
 
+/** Модели-рассуждатели OpenAI берут только значения сэмплеров по умолчанию. */
+const OPENAI_REASONING_MODEL_PATTERNS = [/^o\d/u, /^gpt-5/u];
+
+/**
+ * Локальные серверы принимают весь набор Kobold-сэмплеров и молча игнорируют
+ * лишнее, а облако OpenAI на каждый незнакомый параметр отвечает 400 — там
+ * отправляем только то, что описано в их контракте. Лимит ответа тоже назван
+ * иначе: max_completion_tokens работает и на новых моделях, и на gpt-4o.
+ */
+function buildGenerationPayload(request: ChatCompletionRequest) {
+  if (request.endpoint.apiKind !== 'openai-cloud') {
+    return {
+      max_tokens: request.maxTokens,
+      min_p: request.sampling.minP,
+      presence_penalty: request.sampling.presencePenalty,
+      rep_pen: request.sampling.repeatPenalty,
+      rep_pen_range: request.sampling.repeatPenaltyRange,
+      temperature: request.sampling.temperature,
+      top_k: request.sampling.topK,
+      top_p: request.sampling.topP,
+    };
+  }
+
+  const isReasoningModel = OPENAI_REASONING_MODEL_PATTERNS.some((pattern) => pattern.test(request.endpoint.model));
+
+  return {
+    max_completion_tokens: request.maxTokens,
+    ...(isReasoningModel
+      ? {}
+      : {
+          presence_penalty: request.sampling.presencePenalty,
+          temperature: request.sampling.temperature,
+          top_p: request.sampling.topP,
+        }),
+  };
+}
+
 export class OpenAiCompatibleChatCompletionsClient implements ChatCompletionClient {
   async completeChat(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
     const streaming = Boolean(request.onDelta);
@@ -177,15 +205,8 @@ export class OpenAiCompatibleChatCompletionsClient implements ChatCompletionClie
         body: JSON.stringify({
           model: request.endpoint.model,
           messages: request.messages.map(buildMessagePayload),
-          max_tokens: request.maxTokens,
-          min_p: request.sampling.minP,
-          presence_penalty: request.sampling.presencePenalty,
-          rep_pen: request.sampling.repeatPenalty,
-          rep_pen_range: request.sampling.repeatPenaltyRange,
           stream: streaming,
-          temperature: request.sampling.temperature,
-          top_k: request.sampling.topK,
-          top_p: request.sampling.topP,
+          ...buildGenerationPayload(request),
         }),
         signal: buildRequestSignal(request.signal),
       });
@@ -198,10 +219,8 @@ export class OpenAiCompatibleChatCompletionsClient implements ChatCompletionClie
     }
 
     if (!response.ok) {
-      const errorText = await response.text();
-
       throw new ProviderGenerationError(
-        `Provider returned HTTP ${response.status}${errorText ? `: ${errorText.slice(0, 500)}` : ''}`,
+        `Provider returned HTTP ${response.status}${await readProviderErrorText(response)}`,
       );
     }
 

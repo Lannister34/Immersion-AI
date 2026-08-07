@@ -11,7 +11,7 @@ import { updateChatTitle } from '../../chats/application/update-chat-title.js';
 import { resolveChatGenerationSettings } from '../../prompting/application/resolve-chat-generation-settings.js';
 import { resolveGenerationProviderEndpoint } from '../../providers/application/generation-provider.js';
 import { getSettingsOverview } from '../../settings/application/get-settings-overview.js';
-import { OpenAiCompatibleChatCompletionsClient } from '../infrastructure/openai-compatible-chat-completions-client.js';
+import { createChatCompletionClient } from '../infrastructure/chat-completion-client-factory.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import { ChatTranscriptEmptyError, ProviderGenerationError } from './generation-errors.js';
 
@@ -66,7 +66,7 @@ export async function generateChatTitle(
   dependencies: GenerateChatTitleDependencies = {},
 ): Promise<GenerateChatTitleResponse> {
   const command = GenerateChatTitleCommandSchema.parse(input);
-  const chatCompletionClient = dependencies.chatCompletionClient ?? new OpenAiCompatibleChatCompletionsClient();
+  const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
   const session = await getChatSession(command.chatId);
 
   if (!session) {

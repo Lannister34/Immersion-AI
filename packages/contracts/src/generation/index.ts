@@ -21,6 +21,8 @@ export const GenerationReadinessIssueCodeSchema = z.enum([
   'builtin_runtime_not_running',
   'builtin_runtime_starting',
   'builtin_runtime_stopping',
+  'external_provider_api_key_missing',
+  'external_provider_model_missing',
   'external_provider_url_invalid',
   'external_provider_url_missing',
 ]);

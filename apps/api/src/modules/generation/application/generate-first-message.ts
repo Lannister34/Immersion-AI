@@ -13,7 +13,7 @@ import { loadChatPromptContext } from '../../prompting/application/load-chat-pro
 import { resolveChatReplyGenerationPlan } from '../../prompting/application/resolve-chat-reply-generation-plan.js';
 import { resolveGenerationProviderEndpoint } from '../../providers/application/generation-provider.js';
 import { getSettingsOverview } from '../../settings/application/get-settings-overview.js';
-import { OpenAiCompatibleChatCompletionsClient } from '../infrastructure/openai-compatible-chat-completions-client.js';
+import { createChatCompletionClient } from '../infrastructure/chat-completion-client-factory.js';
 import { getProviderTokenCounter } from '../infrastructure/provider-token-counter.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import { ChatNotEmptyError } from './generation-errors.js';
@@ -73,7 +73,7 @@ export async function generateFirstMessage(
 ): Promise<GenerateFirstMessageResponse> {
   const command = GenerateFirstMessageCommandSchema.parse(input);
   const now = dependencies.now ?? (() => new Date());
-  const chatCompletionClient = dependencies.chatCompletionClient ?? new OpenAiCompatibleChatCompletionsClient();
+  const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
   const session = await getChatSession(command.chatId);
 
   if (!session) {

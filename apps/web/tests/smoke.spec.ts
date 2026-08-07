@@ -235,3 +235,21 @@ test('creates a character together with the avatar picked before the first save'
   await expect(page).toHaveURL(/\/characters$/);
   await expect(cardLink).toBeHidden();
 });
+
+test('offers the cloud providers with their defaults and refuses a model list without a key', async ({ page }) => {
+  await page.goto('/server');
+
+  // Фикстура стартует во внешнем режиме — форма провайдера уже на экране.
+  await page.locator('#provider-type').selectOption('anthropic');
+  await expect(page.locator('#provider-url')).toHaveValue('https://api.anthropic.com/v1');
+  await expect(page.locator('#provider-model')).toHaveAttribute('placeholder', 'claude-sonnet-4-5');
+  await expect(page.locator('#provider-api-key')).toHaveAttribute('placeholder', 'sk-ant-…');
+
+  // Без ключа список моделей запрашивать не у кого: провайдера не трогаем.
+  await page.getByRole('button', { name: 'Список моделей' }).click();
+  await expect(page.getByText('API-ключ провайдера не задан — список моделей запросить не у кого.')).toBeVisible();
+
+  await page.locator('#provider-type').selectOption('openai');
+  await expect(page.locator('#provider-url')).toHaveValue('https://api.openai.com/v1');
+  await expect(page.locator('#provider-model')).toHaveAttribute('placeholder', 'gpt-4o');
+});

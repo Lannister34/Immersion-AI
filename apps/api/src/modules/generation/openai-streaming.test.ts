@@ -4,7 +4,7 @@ import type { ChatCompletionRequest } from './application/chat-completion-client
 import { OpenAiCompatibleChatCompletionsClient } from './infrastructure/openai-compatible-chat-completions-client.js';
 
 const BASE_REQUEST: Omit<ChatCompletionRequest, 'onDelta'> = {
-  endpoint: { apiKey: null, baseUrl: 'http://127.0.0.1:5001', model: 'test-model' },
+  endpoint: { apiKey: null, apiKind: 'openai-compatible', baseUrl: 'http://127.0.0.1:5001', model: 'test-model' },
   maxTokens: 128,
   messages: [{ content: 'Привет.', role: 'user' }],
   sampling: {
@@ -36,6 +36,45 @@ function sseBody(deltas: string[]): string {
     'data: [DONE]\n\n',
   ].join('');
 }
+
+describe('OpenAiCompatibleChatCompletionsClient request body', () => {
+  it('sends the extended sampler set to a local server', async () => {
+    const captured = mockFetch(JSON.stringify({ choices: [{ message: { content: 'раз' } }] }), 'application/json');
+    await new OpenAiCompatibleChatCompletionsClient().completeChat(BASE_REQUEST);
+
+    expect(captured[0]).toMatchObject({ max_tokens: 128, min_p: 0, rep_pen: 1, top_k: 0 });
+  });
+
+  it('drops parameters the OpenAI cloud rejects and renames the reply limit', async () => {
+    const captured = mockFetch(JSON.stringify({ choices: [{ message: { content: 'раз' } }] }), 'application/json');
+    await new OpenAiCompatibleChatCompletionsClient().completeChat({
+      ...BASE_REQUEST,
+      endpoint: { ...BASE_REQUEST.endpoint, apiKind: 'openai-cloud', model: 'gpt-4o' },
+    });
+
+    const body = captured[0] as Record<string, unknown>;
+    expect(body.max_completion_tokens).toBe(128);
+    expect(body.temperature).toBe(1);
+    expect(body).not.toHaveProperty('max_tokens');
+    expect(body).not.toHaveProperty('min_p');
+    expect(body).not.toHaveProperty('rep_pen');
+    expect(body).not.toHaveProperty('top_k');
+  });
+
+  it('leaves samplers alone for reasoning models, which only accept defaults', async () => {
+    const captured = mockFetch(JSON.stringify({ choices: [{ message: { content: 'раз' } }] }), 'application/json');
+    await new OpenAiCompatibleChatCompletionsClient().completeChat({
+      ...BASE_REQUEST,
+      endpoint: { ...BASE_REQUEST.endpoint, apiKind: 'openai-cloud', model: 'o3-mini' },
+    });
+
+    const body = captured[0] as Record<string, unknown>;
+    expect(body.max_completion_tokens).toBe(128);
+    expect(body).not.toHaveProperty('temperature');
+    expect(body).not.toHaveProperty('top_p');
+    expect(body).not.toHaveProperty('presence_penalty');
+  });
+});
 
 describe('OpenAiCompatibleChatCompletionsClient streaming', () => {
   it('reports every chunk in order and returns the joined reply', async () => {

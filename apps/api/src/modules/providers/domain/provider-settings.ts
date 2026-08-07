@@ -1,22 +1,42 @@
 import {
   type ProviderConfig,
+  type ProviderConfigs,
   ProviderConfigsSchema,
   ProviderModeSchema,
   type ProviderSettingsSnapshot,
   ProviderSettingsSnapshotSchema,
+  type ProviderType,
   ProviderTypeSchema,
   type UpdateProviderSettingsCommand,
 } from '@immersion/contracts/providers';
 import { z } from 'zod';
 
-import { providerDefinitions } from './provider-catalog.js';
+import { getProviderDefaultModel, getProviderDefaultUrl, providerDefinitions } from './provider-catalog.js';
 
 export const DEFAULT_OPENAI_COMPATIBLE_MODEL = 'local-model';
 
-const defaultProviderConfig: ProviderConfig = {
-  model: DEFAULT_OPENAI_COMPATIBLE_MODEL,
-  url: 'http://127.0.0.1:5001',
-};
+/**
+ * Значения по умолчанию берём из каталога: у локальных серверов это адрес
+ * и `local-model`, у облачных — только адрес, модель выбирает пользователь.
+ */
+function createDefaultProviderConfig(type: ProviderType): ProviderConfig {
+  const model = getProviderDefaultModel(type);
+
+  return {
+    url: getProviderDefaultUrl(type),
+    ...(model ? { model } : {}),
+  };
+}
+
+function createDefaultProviderConfigs(): ProviderConfigs {
+  const configs: ProviderConfigs = {};
+
+  for (const type of ProviderTypeSchema.options) {
+    configs[type] = createDefaultProviderConfig(type);
+  }
+
+  return configs;
+}
 
 const storedProviderSettingsSchema = z
   .object({
@@ -50,10 +70,7 @@ export function createDefaultProviderSettings(): UpdateProviderSettingsCommand {
   return {
     mode: 'builtin',
     activeProvider: 'custom',
-    providerConfigs: {
-      custom: defaultProviderConfig,
-      koboldcpp: defaultProviderConfig,
-    },
+    providerConfigs: createDefaultProviderConfigs(),
   };
 }
 
@@ -105,7 +122,7 @@ function mergeProviderConfigs(
       }
 
       result[provider] = {
-        ...(result[provider] ?? defaultProviderConfig),
+        ...(result[provider] ?? createDefaultProviderConfig(provider)),
         ...configs[provider],
       };
     }
@@ -132,7 +149,7 @@ export function normalizeStoredProviderSettings(raw: StoredUserSettingsRecord | 
     stored.providerConfigs,
   );
 
-  providerConfigs[activeProvider] ??= defaultProviderConfig;
+  providerConfigs[activeProvider] ??= createDefaultProviderConfig(activeProvider);
 
   return {
     mode,
