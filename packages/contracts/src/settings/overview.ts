@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-export const UiLanguageSchema = z.enum(['ru', 'en']);
 export const ResponseLanguageSchema = z.enum(['ru', 'en', 'none']);
 export const ContextTrimStrategySchema = z.enum(['trim_middle', 'trim_start']);
 
@@ -15,7 +14,6 @@ export const SettingsProfileSchema = z.object({
   userName: z.string(),
   userPersona: z.string(),
   systemPromptTemplate: z.string(),
-  uiLanguage: UiLanguageSchema,
   responseLanguage: ResponseLanguageSchema,
   streamingEnabled: z.boolean(),
   thinkingEnabled: z.boolean(),
@@ -60,7 +58,6 @@ export const UpdateSettingsProfileCommandSchema = z.object({
   userName: z.string().trim().min(1).max(120),
   userPersona: z.string().max(20_000),
   systemPromptTemplate: z.string().max(20_000),
-  uiLanguage: UiLanguageSchema,
   responseLanguage: ResponseLanguageSchema,
   streamingEnabled: z.boolean(),
   thinkingEnabled: z.boolean(),

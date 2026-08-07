@@ -2,7 +2,7 @@ import type { SamplerPresetInput, SettingsOverviewResponse } from '@immersion/co
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 
 import { getApiErrorMessage } from '../../../shared/api/get-api-error-message';
-import { CheckIcon, PlusIcon, TrashIcon, XIcon } from '../../../shared/ui/icons';
+import { CheckIcon, PlusIcon, RefreshIcon, TrashIcon, XIcon } from '../../../shared/ui/icons';
 import {
   useCreateSamplerPreset,
   useDeleteSamplerPreset,
@@ -33,19 +33,24 @@ function presetToForm(preset: SettingsOverviewResponse['sampler']['presets'][num
   };
 }
 
+/** Значения по умолчанию совпадают с пресетом, который backend отдаёт как Default. */
+const DEFAULT_SAMPLER_VALUES = {
+  contextTrimStrategy: 'trim_middle',
+  maxContextLength: 8192,
+  maxTokens: 600,
+  minP: 0.02,
+  presencePenalty: 0,
+  repeatPenalty: 1.05,
+  repeatPenaltyRange: 2048,
+  temperature: 1,
+  topK: 0,
+  topP: 1,
+} satisfies Omit<SamplerFormState, 'name'>;
+
 function emptyForm(): SamplerFormState {
   return {
-    contextTrimStrategy: 'trim_middle',
-    maxContextLength: 8192,
-    maxTokens: 600,
-    minP: 0.02,
+    ...DEFAULT_SAMPLER_VALUES,
     name: '',
-    presencePenalty: 0,
-    repeatPenalty: 1.05,
-    repeatPenaltyRange: 2048,
-    temperature: 1,
-    topK: 0,
-    topP: 1,
   };
 }
 
@@ -348,6 +353,15 @@ export function SamplerCard({ data }: SamplerCardProps) {
             ) : null}
           </div>
           <div className="row gap-8">
+            <button
+              className="btn btn--xs"
+              disabled={createMutation.isPending || updateMutation.isPending}
+              onClick={() => setForm((current) => ({ ...DEFAULT_SAMPLER_VALUES, name: current.name }))}
+              title="Вернуть параметры к значениям по умолчанию; название остаётся"
+              type="button"
+            >
+              <RefreshIcon size={11} /> К умолчаниям
+            </button>
             <button
               className="btn btn--xs"
               disabled={(!isCreating && !isDirty) || createMutation.isPending || updateMutation.isPending}

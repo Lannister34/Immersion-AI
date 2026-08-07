@@ -94,6 +94,9 @@ export function CharacterAvatarUploader({
     uploadMutation.mutate(file);
   };
 
+  const submitFileRef = useRef(submitFile);
+  submitFileRef.current = submitFile;
+
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = '';
@@ -110,6 +113,25 @@ export function CharacterAvatarUploader({
   const handleDragLeave = () => {
     setDragActive(false);
   };
+
+  // Ctrl+V на карточке: скриншот или скопированная картинка попадает в аватар
+  // без сохранения на диск. Слушаем документ, пока карточка на экране.
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const file = Array.from(event.clipboardData?.files ?? []).find((candidate) =>
+        candidate.type.startsWith('image/'),
+      );
+
+      if (file) {
+        event.preventDefault();
+        submitFileRef.current(file);
+      }
+    };
+
+    document.addEventListener('paste', onPaste);
+
+    return () => document.removeEventListener('paste', onPaste);
+  }, []);
 
   const handleDrop = (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
@@ -168,7 +190,7 @@ export function CharacterAvatarUploader({
       <div className="muted" style={{ fontSize: 'var(--fz-2xs)', marginTop: 8 }}>
         {isUnsaved && pendingFile
           ? 'Аватар загрузится вместе с карточкой.'
-          : 'Нажмите на квадрат или перетащите файл — PNG, JPEG или WebP до 8 МБ.'}
+          : 'Нажмите на квадрат, перетащите файл или вставьте из буфера — PNG, JPEG или WebP до 8 МБ.'}
       </div>
       {isUnsaved && pendingFile ? (
         <button

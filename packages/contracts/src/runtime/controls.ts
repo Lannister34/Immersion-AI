@@ -12,6 +12,19 @@ export const RuntimeStartCommandSchema = RuntimeConfigCommandSchema.omit({
 });
 export type RuntimeStartCommand = z.infer<typeof RuntimeStartCommandSchema>;
 
+/** Системный диалог выбора пути: каталог моделей или файл модели. */
+export const PickRuntimePathCommandSchema = z.object({
+  initialPath: z.string().max(4096).optional(),
+  kind: z.enum(['directory', 'file']),
+});
+export type PickRuntimePathCommand = z.infer<typeof PickRuntimePathCommandSchema>;
+
+export const PickRuntimePathResponseSchema = z.object({
+  /** null — пользователь закрыл диалог, ничего не выбрав. */
+  path: z.string().nullable(),
+});
+export type PickRuntimePathResponse = z.infer<typeof PickRuntimePathResponseSchema>;
+
 export const RuntimeStopCommandSchema = z.object({});
 export type RuntimeStopCommand = z.infer<typeof RuntimeStopCommandSchema>;
 

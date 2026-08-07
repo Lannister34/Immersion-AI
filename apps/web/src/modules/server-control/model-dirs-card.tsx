@@ -7,7 +7,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useEffect, useState } from 'react';
 
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
-import { FolderIcon, PlusIcon, XIcon } from '../../shared/ui/icons';
+import { FolderIcon, PlusIcon, SearchIcon, XIcon } from '../../shared/ui/icons';
+import { pickRuntimePath } from './api/pick-runtime-path';
 import { saveRuntimeConfig } from './api/save-runtime-config';
 import { runtimeOverviewQueryKey } from './queries/runtime-overview-query';
 
@@ -46,6 +47,17 @@ export function ModelDirsCard({ dirsStatus, serverConfig }: ModelDirsCardProps) 
   const existsByPath = new Map(dirsStatus.map((entry) => [entry.path, entry.exists]));
   const isDirty = !dirsEqual(draftDirs, baseline);
 
+  // Приложение локальное: диалог открывается на той же машине, где браузер.
+  const pickMutation = useMutation({
+    mutationFn: () => pickRuntimePath({ initialPath: newDir.trim(), kind: 'directory' }),
+    onSuccess: (response) => {
+      if (response.path) {
+        setNewDir(response.path);
+        setValidationError(null);
+      }
+    },
+  });
+
   const handleAdd = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmed = newDir.trim();
@@ -79,6 +91,7 @@ export function ModelDirsCard({ dirsStatus, serverConfig }: ModelDirsCardProps) 
 
   const errorMessage =
     validationError ??
+    (pickMutation.error ? getApiErrorMessage(pickMutation.error, 'Не удалось открыть системный диалог.') : null) ??
     (saveMutation.error ? getApiErrorMessage(saveMutation.error, 'Не удалось сохранить каталоги моделей.') : null);
 
   return (
@@ -130,6 +143,15 @@ export function ModelDirsCard({ dirsStatus, serverConfig }: ModelDirsCardProps) 
             style={{ flex: 1 }}
             value={newDir}
           />
+          <button
+            className="btn btn--ghost-bordered"
+            disabled={pickMutation.isPending}
+            onClick={() => pickMutation.mutate()}
+            title="Открыть системный диалог выбора папки"
+            type="button"
+          >
+            <SearchIcon size={13} /> {pickMutation.isPending ? 'Ждём диалог…' : 'Выбрать'}
+          </button>
           <button className="btn btn--ghost-bordered" type="submit">
             <PlusIcon size={13} /> Добавить
           </button>

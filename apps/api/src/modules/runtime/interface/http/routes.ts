@@ -1,3 +1,5 @@
+import { ApiProblemSchema } from '@immersion/contracts/common';
+import { PickRuntimePathCommandSchema, PickRuntimePathResponseSchema } from '@immersion/contracts/runtime';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
@@ -7,6 +9,7 @@ import { installRuntime } from '../../application/install-runtime.js';
 import { startRuntime } from '../../application/start-runtime.js';
 import { stopRuntime } from '../../application/stop-runtime.js';
 import { updateRuntimeConfig } from '../../application/update-runtime-config.js';
+import { PathPickerUnsupportedError, pickNativePath } from '../../infrastructure/native-path-picker.js';
 
 const toProblem = createToProblem(
   (error) => {
@@ -46,6 +49,29 @@ export const runtimeRoutes: FastifyPluginAsync = async (app) => {
     try {
       return await startRuntime(request.body);
     } catch (error) {
+      const mapped = toProblem(error);
+
+      return reply.status(mapped.statusCode).send(mapped.body);
+    }
+  });
+
+  app.post('/pick-path', async (request, reply) => {
+    try {
+      const command = PickRuntimePathCommandSchema.parse(request.body);
+      const path = await pickNativePath(command.kind, command.initialPath ?? '');
+
+      return PickRuntimePathResponseSchema.parse({ path });
+    } catch (error) {
+      if (error instanceof PathPickerUnsupportedError) {
+        return reply.status(501).send(
+          ApiProblemSchema.parse({
+            code: 'path_picker_unsupported',
+            message: 'Системный диалог выбора недоступен на этой платформе — введите путь вручную.',
+          }),
+        );
+      }
+
+      request.log.error({ err: error }, 'Failed to open native path picker');
       const mapped = toProblem(error);
 
       return reply.status(mapped.statusCode).send(mapped.body);

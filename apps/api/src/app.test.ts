@@ -71,7 +71,6 @@ describe('buildApiApp', () => {
     expect(overview).toMatchObject({
       profile: {
         userName: 'Тестер',
-        uiLanguage: 'ru',
       },
       sampler: {
         activePresetId: 'default',

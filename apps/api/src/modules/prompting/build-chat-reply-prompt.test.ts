@@ -12,7 +12,6 @@ const settings: SettingsOverviewResponse = {
     systemPromptTemplate: 'Global system prompt.',
     thinkingEnabled: true,
     messageFormatting: { actionsItalic: true, quotesHighlighted: false },
-    uiLanguage: 'ru',
     userName: 'Tester',
     userPersona: '',
   },
