@@ -22,21 +22,66 @@ function quoteAppleScript(value: string): string {
   return value.replace(/(["\\])/gu, '\\$1');
 }
 
+/**
+ * Диалог, открытый фоновым процессом, появляется ПОЗАДИ окна браузера: право
+ * вывести окно вперёд Windows даёт только процессу, владеющему фокусом. Поэтому
+ * заводим невидимое окно-владельца, силой отдаём ему передний план через
+ * AttachThreadInput и уже от него открываем модальный диалог — модальное окно
+ * потока, который стал активным, выходит вперёд само.
+ */
+const FOREGROUND_HELPER = `
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class ImmersionForeground {
+  [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr hWnd);
+  [DllImport("user32.dll")] static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+  [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr processId);
+  [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+  public static void Claim(IntPtr hWnd) {
+    uint foregroundThread = GetWindowThreadProcessId(GetForegroundWindow(), IntPtr.Zero);
+    uint currentThread = GetCurrentThreadId();
+    AttachThreadInput(foregroundThread, currentThread, true);
+    BringWindowToTop(hWnd);
+    SetForegroundWindow(hWnd);
+    AttachThreadInput(foregroundThread, currentThread, false);
+  }
+}
+"@
+$owner = New-Object System.Windows.Forms.Form
+$owner.TopMost = $true
+$owner.ShowInTaskbar = $false
+$owner.FormBorderStyle = 'None'
+$owner.Size = New-Object System.Drawing.Size(1, 1)
+$owner.StartPosition = 'Manual'
+$owner.Location = New-Object System.Drawing.Point(-4000, -4000)
+$owner.Show()
+[ImmersionForeground]::Claim($owner.Handle)
+`;
+
 async function pickOnWindows(kind: PathPickerKind, initialPath: string): Promise<string | null> {
   const dialog =
     kind === 'directory'
       ? [
           '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
           initialPath ? `$dialog.SelectedPath = '${quotePowerShell(initialPath)}'` : '',
-          "if ($dialog.ShowDialog() -eq 'OK') { $dialog.SelectedPath }",
+          '$result = $dialog.ShowDialog($owner)',
+          '$owner.Close()',
+          "if ($result -eq 'OK') { $dialog.SelectedPath }",
         ]
       : [
           '$dialog = New-Object System.Windows.Forms.OpenFileDialog',
           "$dialog.Filter = 'Модели GGUF (*.gguf)|*.gguf|Все файлы (*.*)|*.*'",
           initialPath ? `$dialog.InitialDirectory = '${quotePowerShell(initialPath)}'` : '',
-          "if ($dialog.ShowDialog() -eq 'OK') { $dialog.FileName }",
+          '$result = $dialog.ShowDialog($owner)',
+          '$owner.Close()',
+          "if ($result -eq 'OK') { $dialog.FileName }",
         ];
-  const script = ['Add-Type -AssemblyName System.Windows.Forms', ...dialog.filter(Boolean)].join('; ');
+  const script = [FOREGROUND_HELPER, ...dialog.filter(Boolean)].join('\n');
   const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-STA', '-Command', script], {
     timeout: PICKER_TIMEOUT_MS,
     windowsHide: true,

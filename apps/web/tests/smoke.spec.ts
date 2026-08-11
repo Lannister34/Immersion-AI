@@ -71,19 +71,33 @@ test('adds a models directory through the params card on /server', async ({ page
   await page.getByRole('button', { name: 'Параметры' }).click();
   await expect(page.getByRole('heading', { name: 'Каталоги моделей' })).toBeVisible();
 
-  await page.getByLabel('Новый каталог моделей').fill('C:\\smoke-models-extra');
-  await page.getByRole('button', { name: 'Добавить' }).click();
-
-  const putConfig = page.waitForResponse(
+  // Карточка применяет изменения сразу: отдельной кнопки «Сохранить» нет.
+  const addedConfig = page.waitForResponse(
     (response) => response.url().includes('/api/runtime/config') && response.request().method() === 'PUT',
   );
-  await page.getByRole('button', { name: 'Сохранить' }).click();
-  expect((await putConfig).status()).toBe(200);
+  await page.getByLabel('Новый каталог моделей').fill('C:\\smoke-models-extra');
+  await page.getByRole('button', { name: 'Добавить' }).click();
+  expect((await addedConfig).status()).toBe(200);
 
   // Шапка таблицы моделей переключается на счётчик каталогов после сохранения.
   await expect(page.getByText('2 каталога')).toBeVisible();
   // Каталог из фикстуры существует, добавленный — нет: ровно один бейдж «не найден».
   await expect(page.getByText('не найден', { exact: true })).toHaveCount(1);
+
+  // Перезагрузка — единственная честная проверка того, что каталог лёг на диск.
+  await page.reload();
+  await page.getByRole('button', { name: 'Параметры' }).click();
+  await expect(page.getByText('C:\\smoke-models-extra')).toBeVisible();
+
+  const removedConfig = page.waitForResponse(
+    (response) => response.url().includes('/api/runtime/config') && response.request().method() === 'PUT',
+  );
+  await page.locator('li', { hasText: 'C:\\smoke-models-extra' }).getByRole('button', { name: 'Убрать' }).click();
+  expect((await removedConfig).status()).toBe(200);
+
+  await page.reload();
+  await page.getByRole('button', { name: 'Параметры' }).click();
+  await expect(page.getByText('C:\\smoke-models-extra')).toBeHidden();
 });
 
 test('renders editable profile and sampler sections on /settings', async ({ page }) => {
