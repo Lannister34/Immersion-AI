@@ -106,7 +106,7 @@ const definitionsByType = new Map<ProviderType, ProviderDefinition>(
   providerDefinitions.map((definition) => [definition.type, definition]),
 );
 
-export function getProviderDefinition(type: ProviderType): ProviderDefinition {
+function getProviderDefinition(type: ProviderType): ProviderDefinition {
   const definition = definitionsByType.get(type);
 
   if (!definition) {

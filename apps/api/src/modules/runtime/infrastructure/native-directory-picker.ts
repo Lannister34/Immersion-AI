@@ -5,11 +5,9 @@ const execFileAsync = promisify(execFile);
 
 const PICKER_TIMEOUT_MS = 5 * 60 * 1000;
 
-export type PathPickerKind = 'directory' | 'file';
-
 export class PathPickerUnsupportedError extends Error {
   constructor() {
-    super('Native path picker is not available on this platform.');
+    super('Native directory picker is not available on this platform.');
     this.name = 'PathPickerUnsupportedError';
   }
 }
@@ -63,25 +61,17 @@ $owner.Show()
 [ImmersionForeground]::Claim($owner.Handle)
 `;
 
-async function pickOnWindows(kind: PathPickerKind, initialPath: string): Promise<string | null> {
-  const dialog =
-    kind === 'directory'
-      ? [
-          '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
-          initialPath ? `$dialog.SelectedPath = '${quotePowerShell(initialPath)}'` : '',
-          '$result = $dialog.ShowDialog($owner)',
-          '$owner.Close()',
-          "if ($result -eq 'OK') { $dialog.SelectedPath }",
-        ]
-      : [
-          '$dialog = New-Object System.Windows.Forms.OpenFileDialog',
-          "$dialog.Filter = 'Модели GGUF (*.gguf)|*.gguf|Все файлы (*.*)|*.*'",
-          initialPath ? `$dialog.InitialDirectory = '${quotePowerShell(initialPath)}'` : '',
-          '$result = $dialog.ShowDialog($owner)',
-          '$owner.Close()',
-          "if ($result -eq 'OK') { $dialog.FileName }",
-        ];
-  const script = [FOREGROUND_HELPER, ...dialog.filter(Boolean)].join('\n');
+async function pickOnWindows(initialPath: string): Promise<string | null> {
+  const script = [
+    FOREGROUND_HELPER,
+    '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
+    initialPath ? `$dialog.SelectedPath = '${quotePowerShell(initialPath)}'` : '',
+    '$result = $dialog.ShowDialog($owner)',
+    '$owner.Close()',
+    "if ($result -eq 'OK') { $dialog.SelectedPath }",
+  ]
+    .filter(Boolean)
+    .join('\n');
   const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-STA', '-Command', script], {
     timeout: PICKER_TIMEOUT_MS,
     windowsHide: true,
@@ -90,17 +80,16 @@ async function pickOnWindows(kind: PathPickerKind, initialPath: string): Promise
   return stdout.trim() || null;
 }
 
-async function pickOnMac(kind: PathPickerKind, initialPath: string): Promise<string | null> {
-  const target = kind === 'directory' ? 'folder' : 'file';
+async function pickOnMac(initialPath: string): Promise<string | null> {
   const location = initialPath ? ` default location POSIX file "${quoteAppleScript(initialPath)}"` : '';
-  const script = `POSIX path of (choose ${target}${location})`;
+  const script = `POSIX path of (choose folder${location})`;
   const { stdout } = await execFileAsync('osascript', ['-e', script], { timeout: PICKER_TIMEOUT_MS });
 
   return stdout.trim() || null;
 }
 
-async function pickOnLinux(kind: PathPickerKind, initialPath: string): Promise<string | null> {
-  const args = ['--file-selection', ...(kind === 'directory' ? ['--directory'] : [])];
+async function pickOnLinux(initialPath: string): Promise<string | null> {
+  const args = ['--file-selection', '--directory'];
 
   if (initialPath) {
     args.push(`--filename=${initialPath.endsWith('/') ? initialPath : `${initialPath}/`}`);
@@ -112,26 +101,26 @@ async function pickOnLinux(kind: PathPickerKind, initialPath: string): Promise<s
 }
 
 /**
- * Системный диалог выбора пути. Приложение локальное и открывается на той же
- * машине, где идёт браузер, поэтому диалог операционной системы — самый
+ * Системный диалог выбора каталога. Приложение локальное и открывается на той
+ * же машине, где идёт браузер, поэтому диалог операционной системы — самый
  * короткий путь к длинному пути с моделями. Где диалога нет, честно говорим об
  * этом: ручной ввод остаётся рабочим вариантом.
  *
  * Отмену пользователем отличаем от ошибки: обе ветки возвращают null, потому
  * что и zenity, и osascript выходят с ненулевым кодом при отмене.
  */
-export async function pickNativePath(kind: PathPickerKind, initialPath = ''): Promise<string | null> {
+export async function pickNativeDirectory(initialPath = ''): Promise<string | null> {
   try {
     if (process.platform === 'win32') {
-      return await pickOnWindows(kind, initialPath);
+      return await pickOnWindows(initialPath);
     }
 
     if (process.platform === 'darwin') {
-      return await pickOnMac(kind, initialPath);
+      return await pickOnMac(initialPath);
     }
 
     if (process.platform === 'linux') {
-      return await pickOnLinux(kind, initialPath);
+      return await pickOnLinux(initialPath);
     }
   } catch (error) {
     // Диалог отменили или инструмента нет — второе отличаем по коду запуска.

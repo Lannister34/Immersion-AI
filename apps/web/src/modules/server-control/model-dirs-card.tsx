@@ -8,7 +8,7 @@ import { type FormEvent, useState } from 'react';
 
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { FolderIcon, PlusIcon, SearchIcon, XIcon } from '../../shared/ui/icons';
-import { pickRuntimePath } from './api/pick-runtime-path';
+import { pickRuntimeDirectory } from './api/pick-runtime-directory';
 import { saveRuntimeConfig } from './api/save-runtime-config';
 import { runtimeOverviewQueryKey } from './queries/runtime-overview-query';
 
@@ -60,7 +60,7 @@ export function ModelDirsCard({ dirsStatus, serverConfig }: ModelDirsCardProps) 
 
   // Приложение локальное: диалог открывается на той же машине, где браузер.
   const pickMutation = useMutation({
-    mutationFn: () => pickRuntimePath({ initialPath: newDir.trim(), kind: 'directory' }),
+    mutationFn: () => pickRuntimeDirectory({ initialPath: newDir.trim() }),
     onSuccess: (response) => {
       // Отмену диалога отличаем от выбора: null — пользователь закрыл окно.
       if (response.path) {

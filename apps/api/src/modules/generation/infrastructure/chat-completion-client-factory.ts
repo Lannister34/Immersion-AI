@@ -11,7 +11,7 @@ import { OpenAiCompatibleChatCompletionsClient } from './openai-compatible-chat-
  * пользователь переключает провайдера в настройках между двумя генерациями,
  * и вызывающему коду знать об этом незачем.
  */
-export class RoutingChatCompletionsClient implements ChatCompletionClient {
+class RoutingChatCompletionsClient implements ChatCompletionClient {
   private readonly anthropic = new AnthropicMessagesClient();
   private readonly openAiCompatible = new OpenAiCompatibleChatCompletionsClient();
 
