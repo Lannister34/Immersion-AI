@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { createToProblem } from '../../../../shared/interface/http/problem.js';
 import { getProviderSettings } from '../../application/get-provider-settings.js';
 import { getProvidersOverview } from '../../application/get-providers-overview.js';
+import { patchProviderSettings } from '../../application/patch-provider-settings.js';
 import { probeProviderModels, testProviderConnection } from '../../application/test-provider-connection.js';
 import { updateProviderSettings } from '../../application/update-provider-settings.js';
 import { providerDefinitions } from '../../domain/provider-catalog.js';
@@ -53,6 +54,18 @@ export const providersRoutes: FastifyPluginAsync = async (app) => {
   app.put('/settings', async (request, reply) => {
     try {
       return await updateProviderSettings(request.body);
+    } catch (error) {
+      const mapped = toProblem(error);
+
+      return reply.status(mapped.statusCode).send(mapped.body);
+    }
+  });
+
+  // Точечное изменение для внешних клиентов: сменить модель или провайдера,
+  // не вычитывая и не переписывая настройки целиком.
+  app.patch('/settings', async (request, reply) => {
+    try {
+      return await patchProviderSettings(request.body);
     } catch (error) {
       const mapped = toProblem(error);
 

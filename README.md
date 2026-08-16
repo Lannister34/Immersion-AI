@@ -53,6 +53,25 @@ come from the active preset unless the request overrides `temperature`, `top_p`,
 image parts work; tool calls, `n > 1` and stop sequences are not supported and are reported
 as errors instead of being silently ignored.
 
+### Managing the provider
+
+The provider is switched over the same API, without opening the web UI:
+
+```
+GET   /api/providers/settings   # mode, active provider, configs (returns the stored key)
+PATCH /api/providers/settings   # change only the fields you send
+POST  /api/providers/models     # list a provider's models without saving anything
+GET   /api/runtime/overview     # built-in llama-server: status, models, directories
+POST  /api/runtime/start        # start the built-in server with a model
+POST  /api/runtime/stop
+```
+
+```
+curl -X PATCH http://127.0.0.1:4787/api/providers/settings   -H 'Content-Type: application/json'   -d '{"mode":"external","activeProvider":"anthropic","config":{"apiKey":"sk-ant-…","model":"claude-sonnet-4-5"}}'
+```
+
+`config` applies to the provider that becomes active; an empty `apiKey` clears the stored key.
+
 The API listens on 127.0.0.1 and has no authentication. Keep it on loopback, or put a
 reverse proxy in front of it before exposing it to a network.
 
@@ -122,6 +141,26 @@ curl http://127.0.0.1:4787/v1/chat/completions   -H 'Content-Type: application/j
 `max_tokens`; `model` уходит провайдеру как есть. Стриминг и картинки работают; вызов
 инструментов, `n > 1` и стоп-последовательности не поддерживаются — на них приходит ошибка,
 а не молчаливая подмена.
+
+### Управление провайдером
+
+Провайдер переключается тем же API, без захода в веб-интерфейс:
+
+```
+GET   /api/providers/settings   # режим, активный провайдер, конфиги (отдаёт и ключ)
+PATCH /api/providers/settings   # меняет только присланные поля
+POST  /api/providers/models     # список моделей провайдера, ничего не сохраняя
+GET   /api/runtime/overview     # встроенный llama-server: статус, модели, каталоги
+POST  /api/runtime/start        # запустить встроенный сервер с моделью
+POST  /api/runtime/stop
+```
+
+```
+curl -X PATCH http://127.0.0.1:4787/api/providers/settings   -H 'Content-Type: application/json'   -d '{"mode":"external","activeProvider":"anthropic","config":{"apiKey":"sk-ant-…","model":"claude-sonnet-4-5"}}'
+```
+
+`config` применяется к провайдеру, который становится активным; пустой `apiKey` снимает
+сохранённый ключ.
 
 API слушает 127.0.0.1 и не проверяет авторизацию. Держите его на loopback либо ставьте
 перед ним обратный прокси, прежде чем открывать в сеть.

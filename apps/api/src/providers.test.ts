@@ -424,6 +424,121 @@ describe('provider settings routes', () => {
     await app.close();
   });
 
+  it('patches a single provider field without touching the rest', async () => {
+    await writeUserSettings({
+      userName: 'Misha',
+      backendMode: 'external',
+      activeProvider: 'custom',
+      providerConfigs: {
+        custom: { url: 'http://127.0.0.1:6001', apiKey: 'secret', model: 'old-model' },
+        koboldcpp: { url: 'http://127.0.0.1:5001' },
+      },
+    });
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/providers/settings',
+      payload: { config: { model: 'new-model' } },
+    });
+    const snapshot = ProviderSettingsSnapshotSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(snapshot.providerConfigs.custom).toMatchObject({
+      apiKey: 'secret',
+      model: 'new-model',
+      url: 'http://127.0.0.1:6001',
+    });
+    expect(snapshot.mode).toBe('external');
+    expect(snapshot.providerConfigs.koboldcpp?.url).toBe('http://127.0.0.1:5001');
+
+    const stored = JSON.parse(await fs.readFile(path.join(dataRoot, 'user-settings.json'), 'utf8')) as Record<
+      string,
+      unknown
+    >;
+    expect(stored.userName).toBe('Misha');
+
+    await app.close();
+  });
+
+  it('switches the provider and applies the config to the one that becomes active', async () => {
+    await writeUserSettings({
+      backendMode: 'builtin',
+      activeProvider: 'custom',
+      providerConfigs: { custom: { url: 'http://127.0.0.1:6001', model: 'local-model' } },
+    });
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/providers/settings',
+      payload: {
+        activeProvider: 'anthropic',
+        config: { apiKey: 'sk-ant-test', model: 'claude-sonnet-4-5' },
+        mode: 'external',
+      },
+    });
+    const snapshot = ProviderSettingsSnapshotSchema.parse(response.json());
+
+    expect(snapshot.mode).toBe('external');
+    expect(snapshot.activeProvider).toBe('anthropic');
+    expect(snapshot.providerConfigs.anthropic).toMatchObject({
+      apiKey: 'sk-ant-test',
+      model: 'claude-sonnet-4-5',
+      url: 'https://api.anthropic.com/v1',
+    });
+    // Конфиг прежнего провайдера остаётся нетронутым.
+    expect(snapshot.providerConfigs.custom).toMatchObject({ model: 'local-model' });
+
+    await app.close();
+  });
+
+  it('clears the api key on an empty string and keeps it when the field is absent', async () => {
+    await writeUserSettings({
+      backendMode: 'external',
+      activeProvider: 'openai',
+      providerConfigs: { openai: { url: 'https://api.openai.com/v1', apiKey: 'sk-old', model: 'gpt-4o' } },
+    });
+    const app = buildApiApp();
+
+    const untouched = await app.inject({
+      method: 'PATCH',
+      url: '/api/providers/settings',
+      payload: { config: { model: 'gpt-4o-mini' } },
+    });
+    expect(ProviderSettingsSnapshotSchema.parse(untouched.json()).providerConfigs.openai?.apiKey).toBe('sk-old');
+
+    const cleared = await app.inject({
+      method: 'PATCH',
+      url: '/api/providers/settings',
+      payload: { config: { apiKey: '' } },
+    });
+    expect(ProviderSettingsSnapshotSchema.parse(cleared.json()).providerConfigs.openai?.apiKey).toBeUndefined();
+
+    await app.close();
+  });
+
+  it('rejects a patch that changes nothing or carries an empty url', async () => {
+    await writeUserSettings({
+      backendMode: 'external',
+      activeProvider: 'custom',
+      providerConfigs: { custom: { url: 'http://127.0.0.1:6001' } },
+    });
+    const app = buildApiApp();
+
+    const empty = await app.inject({ method: 'PATCH', url: '/api/providers/settings', payload: {} });
+    expect(empty.statusCode).toBe(400);
+
+    const blankUrl = await app.inject({
+      method: 'PATCH',
+      url: '/api/providers/settings',
+      payload: { config: { url: '   ' } },
+    });
+    expect(blankUrl.statusCode).toBe(400);
+
+    await app.close();
+  });
+
   it('falls back to default settings when the canonical source file contains invalid JSON', async () => {
     await fs.writeFile(path.join(dataRoot, 'user-settings.json'), '{ invalid json', 'utf8');
 

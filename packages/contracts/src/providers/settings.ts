@@ -59,6 +59,29 @@ export const UpdateProviderSettingsCommandSchema = z.object({
 });
 export type UpdateProviderSettingsCommand = z.infer<typeof UpdateProviderSettingsCommandSchema>;
 
+/**
+ * Точечное изменение: всё, чего нет в запросе, остаётся как было. Нужно
+ * внешним клиентам — чтобы сменить модель, не вычитывая и не переписывая
+ * настройки всех провайдеров целиком.
+ */
+export const PatchProviderSettingsCommandSchema = z
+  .object({
+    activeProvider: ProviderTypeSchema.optional(),
+    config: z
+      .object({
+        /** Пустая строка снимает ключ; отсутствие поля оставляет прежний. */
+        apiKey: z.string().max(500).optional(),
+        model: z.string().trim().min(1).max(200).optional(),
+        url: z.string().trim().min(1).max(2000).optional(),
+      })
+      .optional(),
+    mode: ProviderModeSchema.optional(),
+  })
+  .refine((command) => Object.keys(command).length > 0, {
+    message: 'Patch must change at least one field.',
+  });
+export type PatchProviderSettingsCommand = z.infer<typeof PatchProviderSettingsCommandSchema>;
+
 export const ProviderSettingsSnapshotSchema = UpdateProviderSettingsCommandSchema.extend({
   providerDefinitions: z.array(ProviderDefinitionSchema),
 });

@@ -19,7 +19,7 @@ export const DEFAULT_OPENAI_COMPATIBLE_MODEL = 'local-model';
  * Значения по умолчанию берём из каталога: у локальных серверов это адрес
  * и `local-model`, у облачных — только адрес, модель выбирает пользователь.
  */
-function createDefaultProviderConfig(type: ProviderType): ProviderConfig {
+export function createDefaultProviderConfig(type: ProviderType): ProviderConfig {
   const model = getProviderDefaultModel(type);
 
   return {
