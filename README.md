@@ -50,8 +50,14 @@ curl http://127.0.0.1:4787/v1/chat/completions   -H 'Content-Type: application/j
 The request carries the whole conversation: nothing is written to your chats. Sampler values
 come from the active preset unless the request overrides `temperature`, `top_p`,
 `presence_penalty` or `max_tokens`; `model` is passed to the provider as-is. Streaming and
-image parts work; tool calls, `n > 1` and stop sequences are not supported and are reported
-as errors instead of being silently ignored.
+image parts work.
+
+Fields outside the OpenAI contract — `enable_thinking`, `chat_template_kwargs`, `seed`,
+`stop` — are forwarded to local OpenAI-compatible servers unchanged; the OpenAI and
+Anthropic clouds reject unknown fields, so they are dropped there. Tool calls and `n > 1`
+are reported as errors instead of being silently ignored. When a reasoning model spends the
+whole budget on thinking, the answer comes back with `finish_reason: "length"` and the
+thinking in `reasoning_content`, not as an error.
 
 ### Managing the provider
 
@@ -65,6 +71,10 @@ GET   /api/runtime/overview     # built-in llama-server: status, models, directo
 POST  /api/runtime/start        # start the built-in server with a model
 POST  /api/runtime/stop
 ```
+
+`start` takes `modelPath`, `port`, `gpuLayers`, `contextSize`, `flashAttention`, `threads`
+and an optional `mmprojPath` — the multimodal projector passed to llama-server as
+`--mmproj`, which is what turns a VL model into a model that actually sees images.
 
 ```
 curl -X PATCH http://127.0.0.1:4787/api/providers/settings   -H 'Content-Type: application/json'   -d '{"mode":"external","activeProvider":"anthropic","config":{"apiKey":"sk-ant-…","model":"claude-sonnet-4-5"}}'
@@ -138,9 +148,14 @@ curl http://127.0.0.1:4787/v1/chat/completions   -H 'Content-Type: application/j
 
 Вся история приходит в запросе, в ваши чаты ничего не пишется. Параметры сэмплера берутся
 из активного пресета, если запрос не задал `temperature`, `top_p`, `presence_penalty` или
-`max_tokens`; `model` уходит провайдеру как есть. Стриминг и картинки работают; вызов
-инструментов, `n > 1` и стоп-последовательности не поддерживаются — на них приходит ошибка,
-а не молчаливая подмена.
+`max_tokens`; `model` уходит провайдеру как есть. Стриминг и картинки работают.
+
+Поля вне контракта OpenAI — `enable_thinking`, `chat_template_kwargs`, `seed`, `stop` —
+уходят локальным OpenAI-совместимым серверам без изменений; облака OpenAI и Anthropic
+отвечают 400 на незнакомое, поэтому им такие поля не отправляются. Вызов инструментов и
+`n > 1` возвращают ошибку, а не молчаливую подмену. Если модель-рассуждатель потратила весь
+лимит на размышления, ответ приходит с `finish_reason: "length"` и мыслями в
+`reasoning_content` — это не ошибка.
 
 ### Управление провайдером
 
@@ -154,6 +169,10 @@ GET   /api/runtime/overview     # встроенный llama-server: стату�
 POST  /api/runtime/start        # запустить встроенный сервер с моделью
 POST  /api/runtime/stop
 ```
+
+`start` принимает `modelPath`, `port`, `gpuLayers`, `contextSize`, `flashAttention`,
+`threads` и необязательный `mmprojPath` — мультимодальный проектор, который уходит
+llama-server как `--mmproj`; без него VL-модель запускается текстовой и картинок не видит.
 
 ```
 curl -X PATCH http://127.0.0.1:4787/api/providers/settings   -H 'Content-Type: application/json'   -d '{"mode":"external","activeProvider":"anthropic","config":{"apiKey":"sk-ant-…","model":"claude-sonnet-4-5"}}'

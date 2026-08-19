@@ -12,6 +12,12 @@ export async function startRuntime(input: unknown) {
     throw new Error(`Model not found: ${command.modelPath}`);
   }
 
+  // Проектор проверяем так же, как модель: llama-server с битым --mmproj
+  // падает уже после запуска, и причина теряется в его логе.
+  if (command.mmprojPath && !fs.existsSync(command.mmprojPath)) {
+    throw new Error(`Multimodal projector not found: ${command.mmprojPath}`);
+  }
+
   const manager = getLlmProcessManager();
   const engine = manager.getEngineInfo();
 

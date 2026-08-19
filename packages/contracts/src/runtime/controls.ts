@@ -8,6 +8,8 @@ export type RuntimeConfigCommand = z.infer<typeof RuntimeConfigCommandSchema>;
 export const RuntimeStartCommandSchema = RuntimeConfigCommandSchema.omit({
   modelsDirs: true,
 }).extend({
+  /** Мультимодальный проектор (--mmproj): без него VL-модель не видит картинок. */
+  mmprojPath: z.string().min(1).optional(),
   modelPath: z.string().min(1),
 });
 export type RuntimeStartCommand = z.infer<typeof RuntimeStartCommandSchema>;

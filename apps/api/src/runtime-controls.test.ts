@@ -221,6 +221,31 @@ describe('runtime control routes', () => {
     await app.close();
   });
 
+  it('rejects model start when the multimodal projector path does not exist', async () => {
+    const modelPath = path.join(dataRoot, 'model.gguf');
+    await fs.writeFile(modelPath, 'gguf', 'utf8');
+    const app = buildApiApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/runtime/start',
+      payload: {
+        contextSize: 8192,
+        flashAttention: false,
+        gpuLayers: 0,
+        mmprojPath: path.join(dataRoot, 'missing-mmproj.gguf'),
+        modelPath,
+        port: 5001,
+        threads: 0,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().message).toContain('Multimodal projector not found');
+
+    await app.close();
+  });
+
   it('returns runtime overview after stop on an idle server', async () => {
     const app = buildApiApp();
     const response = await app.inject({

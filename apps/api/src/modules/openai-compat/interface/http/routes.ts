@@ -120,7 +120,9 @@ export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
         return {
           choices: [
             {
-              finish_reason: 'stop',
+              // Пустой текст при непустых размышлениях означает, что лимит ушёл
+              // на них: это обрыв по длине, а не нормальное завершение.
+              finish_reason: result.content ? 'stop' : 'length',
               index: 0,
               message: {
                 content: result.content,
@@ -193,7 +195,7 @@ export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
         writeChunk({ content: result.content });
       }
 
-      writeChunk({}, 'stop');
+      writeChunk({}, result.content || deltaCount > 0 ? 'stop' : 'length');
       reply.raw.write('data: [DONE]\n\n');
       reply.raw.end();
 

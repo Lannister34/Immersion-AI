@@ -49,6 +49,8 @@ function readLogFileTail(): string[] {
 type RuntimeLifecycleStatus = RuntimeStatusSnapshot['status'];
 
 export interface LlmStartConfig extends Omit<RuntimeConfigCommand, 'modelsDirs'> {
+  /** Путь к mmproj-проектору; без него VL-модель запускается как текстовая. */
+  mmprojPath?: string | undefined;
   modelPath: string;
 }
 
@@ -286,6 +288,10 @@ export class LlmProcessManager {
       '--port',
       String(config.port),
     ];
+
+    if (config.mmprojPath) {
+      args.push('--mmproj', config.mmprojPath);
+    }
 
     if (config.flashAttention) {
       args.push('-fa', 'on');

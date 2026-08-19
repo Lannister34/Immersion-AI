@@ -13,7 +13,10 @@ import { PathPickerUnsupportedError, pickNativeDirectory } from '../../infrastru
 
 const toProblem = createToProblem(
   (error) => {
-    if (error instanceof Error && error.message.startsWith('Model not found:')) {
+    if (
+      error instanceof Error &&
+      (error.message.startsWith('Model not found:') || error.message.startsWith('Multimodal projector not found:'))
+    ) {
       return problem(400, 'validation_error', error.message);
     }
 

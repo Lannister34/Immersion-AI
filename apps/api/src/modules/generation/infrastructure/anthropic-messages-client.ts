@@ -287,7 +287,7 @@ export class AnthropicMessagesClient implements ChatCompletionClient {
         );
       }
 
-      if (!streamed.content) {
+      if (!streamed.content && !request.allowEmptyContent) {
         throw new ProviderGenerationError('Provider returned an empty reply.');
       }
 
@@ -308,7 +308,7 @@ export class AnthropicMessagesClient implements ChatCompletionClient {
 
     const completion = readResponseBlocks(payload);
 
-    if (!completion.content) {
+    if (!completion.content && !request.allowEmptyContent) {
       throw new ProviderGenerationError('Provider returned an empty reply.');
     }
 

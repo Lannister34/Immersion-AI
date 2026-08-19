@@ -13,6 +13,37 @@ import {
   type OpenAiChatCompletionRequest,
 } from '../domain/openai-contract.js';
 
+/**
+ * Поля, которые разбираем сами. Всё остальное — расширения конкретного сервера
+ * (enable_thinking, chat_template_kwargs, seed, stop): их отдаём провайдеру как
+ * есть, иначе клиент не может докричаться до собственного бэкенда через нас.
+ */
+const HANDLED_REQUEST_KEYS = new Set([
+  'max_completion_tokens',
+  'max_tokens',
+  'messages',
+  'model',
+  'n',
+  'presence_penalty',
+  'stream',
+  'temperature',
+  'tool_choice',
+  'tools',
+  'top_p',
+]);
+
+function collectProviderOptions(request: OpenAiChatCompletionRequest): Record<string, unknown> {
+  const options: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(request)) {
+    if (!HANDLED_REQUEST_KEYS.has(key) && value !== undefined) {
+      options[key] = value;
+    }
+  }
+
+  return options;
+}
+
 /** Значения, которыми клиенты обозначают «сам решай»: модель берём из настроек. */
 const MODEL_ALIASES = new Set(['', 'default', 'immersion', 'immersion-ai', 'gpt-3.5-turbo', 'gpt-4']);
 
@@ -79,11 +110,16 @@ export async function createOpenAiChatCompletion(
   const preset = resolveSamplerPresetForModel(settings, model);
   const client = dependencies.chatCompletionClient ?? createChatCompletionClient();
 
+  const providerOptions = collectProviderOptions(request);
   const completion = await client.completeChat({
+    // Пустой ответ здесь не ошибка: модель могла потратить лимит на
+    // размышления, и клиент вправе увидеть это как finish_reason: length.
+    allowEmptyContent: true,
     endpoint: { ...providerEndpoint, model },
     maxTokens: request.max_completion_tokens ?? request.max_tokens ?? preset.maxTokens,
     messages,
     ...(dependencies.onDelta ? { onDelta: dependencies.onDelta } : {}),
+    ...(Object.keys(providerOptions).length > 0 ? { providerOptions } : {}),
     sampling: {
       minP: preset.minP,
       presencePenalty: request.presence_penalty ?? preset.presencePenalty,

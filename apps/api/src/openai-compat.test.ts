@@ -228,6 +228,52 @@ describe('OpenAI-compatible endpoint', () => {
     await app.close();
   });
 
+  it('forwards server extensions such as enable_thinking to a local provider', async () => {
+    const providerRequests = mockProvider(jsonCompletion('ок'));
+    const app = buildApiApp();
+
+    await app.inject({
+      method: 'POST',
+      payload: {
+        chat_template_kwargs: { enable_thinking: false },
+        enable_thinking: false,
+        messages: [{ content: 'Привет.', role: 'user' }],
+        seed: 42,
+        stop: ['<<STOP>>'],
+      },
+      url: '/v1/chat/completions',
+    });
+
+    expect(providerRequests[0]?.body).toMatchObject({
+      chat_template_kwargs: { enable_thinking: false },
+      enable_thinking: false,
+      seed: 42,
+      stop: ['<<STOP>>'],
+    });
+    // Наши поля расширения не перекрывают.
+    expect(providerRequests[0]?.body.messages).toBeDefined();
+
+    await app.close();
+  });
+
+  it('answers with finish_reason length instead of failing when thinking ate the budget', async () => {
+    mockProvider(JSON.stringify({ choices: [{ message: { content: '<think>Всё ушло сюда' } }] }));
+    const app = buildApiApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      payload: { max_tokens: 8, messages: [{ content: 'Привет.', role: 'user' }] },
+      url: '/v1/chat/completions',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().choices[0].finish_reason).toBe('length');
+    expect(response.json().choices[0].message.content).toBe('');
+    expect(response.json().choices[0].message.reasoning_content).toBe('Всё ушло сюда');
+
+    await app.close();
+  });
+
   it('rejects what it cannot honour instead of answering something else', async () => {
     mockProvider(jsonCompletion('ок'));
     const app = buildApiApp();

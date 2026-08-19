@@ -193,6 +193,19 @@ function buildGenerationPayload(request: ChatCompletionRequest) {
   };
 }
 
+/**
+ * Локальные серверы принимают собственные расширения, и клиенту важно, чтобы они
+ * дошли: без enable_thinking: false Qwen3 тратит весь лимит на размышления.
+ * Облаку OpenAI то же самое отправлять нельзя — оно отвечает 400.
+ */
+function buildProviderOptions(request: ChatCompletionRequest) {
+  if (request.endpoint.apiKind !== 'openai-compatible' || !request.providerOptions) {
+    return {};
+  }
+
+  return request.providerOptions;
+}
+
 export class OpenAiCompatibleChatCompletionsClient implements ChatCompletionClient {
   async completeChat(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
     const streaming = Boolean(request.onDelta);
@@ -203,6 +216,8 @@ export class OpenAiCompatibleChatCompletionsClient implements ChatCompletionClie
         method: 'POST',
         headers: buildHeaders(request.endpoint.apiKey),
         body: JSON.stringify({
+          // Расширения идут первыми: наши поля не должны ими перекрываться.
+          ...buildProviderOptions(request),
           model: request.endpoint.model,
           messages: request.messages.map(buildMessagePayload),
           stream: streaming,
@@ -243,7 +258,7 @@ export class OpenAiCompatibleChatCompletionsClient implements ChatCompletionClie
         );
       }
 
-      if (!streamed.content) {
+      if (!streamed.content && !request.allowEmptyContent) {
         throw new ProviderGenerationError('Provider returned an empty reply.');
       }
 
@@ -270,7 +285,7 @@ export class OpenAiCompatibleChatCompletionsClient implements ChatCompletionClie
       .join('\n\n')
       .trim();
 
-    if (!split.content) {
+    if (!split.content && !request.allowEmptyContent) {
       throw new ProviderGenerationError('Provider returned an empty reply.');
     }
 
