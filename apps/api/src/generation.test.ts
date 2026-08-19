@@ -472,6 +472,45 @@ describe('generation routes', () => {
     await app.close();
   });
 
+  it('reports vision by how the built-in server was started, not by the model file', async () => {
+    await writeProviderSettings({ backendMode: 'builtin' });
+    const modelPath = path.join(temporaryDataRoot, 'qwen-vl.gguf');
+    await fs.writeFile(modelPath, 'gguf', 'utf8');
+
+    // PID текущего процесса заведомо жив: так рантайм выглядит запущенным без
+    // настоящего llama-server, а состояние приходит из PID-файла, как после
+    // рестарта API.
+    async function pretendRunning(mmprojPath: string | null) {
+      await fs.writeFile(
+        path.join(temporaryDataRoot, '.llm-server.json'),
+        JSON.stringify({ mmprojPath, model: 'qwen-vl.gguf', modelPath, pid: process.pid, port: 5001 }),
+        'utf8',
+      );
+    }
+
+    async function readVisionSupport() {
+      const app = buildApiApp();
+      const response = await app.inject({ method: 'GET', url: '/api/generation/readiness' });
+      const payload = GenerationReadinessResponseSchema.parse(response.json());
+      await app.close();
+
+      return payload;
+    }
+
+    await pretendRunning(null);
+    const withoutProjector = await readVisionSupport();
+
+    expect(withoutProjector.status).toBe('ready');
+    expect(withoutProjector.visionSupport).toBe('unsupported');
+
+    await pretendRunning(path.join(temporaryDataRoot, 'mmproj-qwen-vl.gguf'));
+    const withProjector = await readVisionSupport();
+
+    expect(withProjector.visionSupport).toBe('supported');
+
+    await fs.rm(path.join(temporaryDataRoot, '.llm-server.json'), { force: true });
+  });
+
   it('keeps prompt preview available when builtin generation is blocked', async () => {
     await writeProviderSettings({
       backendMode: 'builtin',

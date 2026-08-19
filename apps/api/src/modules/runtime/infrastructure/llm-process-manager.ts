@@ -59,6 +59,8 @@ interface PidFileData {
   port: number;
   model: string;
   modelPath: string;
+  /** Запущен ли процесс с проектором: переживает рестарт API вместе с PID. */
+  mmprojPath?: string | null;
 }
 
 interface RuntimeBinaryLocation {
@@ -190,6 +192,12 @@ const MAX_LOG_LINES = 100;
  */
 export class LlmProcessManager {
   private childProcess: ChildProcess | null = null;
+  /**
+   * Проектор текущего процесса. Зрение — свойство запуска, а не модели: тот же
+   * файл модели без --mmproj картинок не видит, поэтому спрашивать об этом
+   * кого-то ещё не нужно, мы сами его и запускали.
+   */
+  private visionProjectorPath: string | null = null;
   private healthPollTimer: ReturnType<typeof setInterval> | null = null;
   private startTimeout: ReturnType<typeof setTimeout> | null = null;
   private logStream: fs.WriteStream | null = null;
@@ -241,6 +249,19 @@ export class LlmProcessManager {
     };
   }
 
+  /**
+   * Путь к проектору работающего процесса или null. После рестарта API берём
+   * его из PID-файла — иначе переподключение к живому серверу «забывало» бы
+   * про зрение.
+   */
+  getVisionProjectorPath(): string | null {
+    if (this.getState().status !== 'running') {
+      return null;
+    }
+
+    return this.visionProjectorPath ?? readPidFile()?.mmprojPath ?? null;
+  }
+
   getLogs() {
     // Буфер живёт в памяти API. Если процесс запускала предыдущая версия API
     // (tsx watch перезапускается на каждой правке), читаем хвост файла — иначе
@@ -268,6 +289,7 @@ export class LlmProcessManager {
     }
 
     this.logBuffer.length = 0;
+    this.visionProjectorPath = config.mmprojPath ?? null;
     this.setStateStatus('starting', {
       model: path.basename(config.modelPath),
       modelPath: config.modelPath,
@@ -318,6 +340,7 @@ export class LlmProcessManager {
         port: config.port,
         model: this.state.model ?? path.basename(config.modelPath),
         modelPath: config.modelPath,
+        mmprojPath: config.mmprojPath ?? null,
       });
     }
 
@@ -390,6 +413,7 @@ export class LlmProcessManager {
       return;
     }
 
+    this.visionProjectorPath = pidFile.mmprojPath ?? null;
     this.setStateStatus('starting', {
       model: pidFile.model,
       modelPath: pidFile.modelPath,

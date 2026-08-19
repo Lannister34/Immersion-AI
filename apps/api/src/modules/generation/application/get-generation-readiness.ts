@@ -2,6 +2,7 @@ import {
   type GenerationReadinessIssue,
   type GenerationReadinessResponse,
   GenerationReadinessResponseSchema,
+  type VisionSupport,
 } from '@immersion/contracts/generation';
 import type { ProviderSettingsSnapshot } from '@immersion/contracts/providers';
 import type { RuntimeOverviewResponse } from '@immersion/contracts/runtime';
@@ -12,6 +13,7 @@ import {
 import { getProviderSettings } from '../../providers/application/get-provider-settings.js';
 import { getProviderDefaultModel, isProviderApiKeyRequired } from '../../providers/domain/provider-catalog.js';
 import { getProviderVisionProbe } from '../../providers/infrastructure/provider-vision-probe.js';
+import { getRunningRuntimeEndpoint } from '../../runtime/application/get-running-runtime-endpoint.js';
 import { getRuntimeOverview } from '../../runtime/application/get-runtime-overview.js';
 
 function toRuntimeSummary(runtime: RuntimeOverviewResponse) {
@@ -189,9 +191,18 @@ function getExternalReadiness(settings: ProviderSettingsSnapshot): GenerationRea
 }
 
 /**
- * Поддержку изображений спрашиваем у самого сервера и только когда генерация
- * уже готова: у остановленного рантайма спрашивать нечего, а ответ кэшируется
- * в пробе — на частые опросы готовности это не ложится.
+ * Зрение — свойство запущенного процесса, а не файла модели: одна и та же
+ * модель без --mmproj картинок не видит. Встроенный сервер запускали мы сами,
+ * поэтому там отвечаем по факту запуска, ничего не опрашивая и не кэшируя.
+ */
+export function resolveBuiltinVisionSupport(visionProjectorPath: string | null): VisionSupport {
+  return visionProjectorPath ? 'supported' : 'unsupported';
+}
+
+/**
+ * Поддержку изображений выясняем только когда генерация уже готова: у
+ * остановленного рантайма спрашивать нечего. Внешний сервер — чужой процесс,
+ * его спрашиваем по HTTP, и ответ кэшируется в пробе.
  */
 async function withVisionSupport(readiness: GenerationReadinessResponse): Promise<GenerationReadinessResponse> {
   if (readiness.status !== 'ready') {
@@ -199,12 +210,20 @@ async function withVisionSupport(readiness: GenerationReadinessResponse): Promis
   }
 
   try {
+    if (readiness.mode === 'builtin') {
+      const runtimeEndpoint = await getRunningRuntimeEndpoint();
+
+      return {
+        ...readiness,
+        visionSupport: resolveBuiltinVisionSupport(runtimeEndpoint?.visionProjectorPath ?? null),
+      };
+    }
+
     const endpoint = await resolveGenerationProviderEndpoint();
     const visionSupport = await getProviderVisionProbe().getVisionSupport({
       baseUrl: endpoint.baseUrl,
       model: endpoint.model,
-      // У встроенного сервера провайдера нет: там спрашиваем сам движок.
-      provider: readiness.mode === 'builtin' ? null : readiness.activeProvider,
+      provider: readiness.activeProvider,
     });
 
     return { ...readiness, visionSupport };
