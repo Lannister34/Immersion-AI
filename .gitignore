@@ -55,3 +55,7 @@ Thumbs.db
 
 # Design handoff bundles are internal working material
 /design_handoff_*/
+
+# devkit:review:start
+.claude/.review-state
+# devkit:review:end
