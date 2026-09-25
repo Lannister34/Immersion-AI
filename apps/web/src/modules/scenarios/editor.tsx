@@ -308,6 +308,7 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
             >
               <Field id="scenario-name" label="Название" required>
                 <input
+                  autoComplete="off"
                   className="input"
                   disabled={saveMutation.isPending}
                   id="scenario-name"
@@ -343,6 +344,7 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
                 label="Концепт"
               >
                 <input
+                  autoComplete="off"
                   className="input"
                   disabled={saveMutation.isPending || draftMutation.isPending}
                   id="scenario-concept"
@@ -408,6 +410,7 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
               ) : null}
               <Field hint="Через запятую: до 50 тегов, каждый до 60 символов." id="scenario-tags" label="Теги">
                 <input
+                  autoComplete="off"
                   className="input"
                   disabled={saveMutation.isPending}
                   id="scenario-tags"
