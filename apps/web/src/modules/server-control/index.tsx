@@ -336,7 +336,18 @@ export function ServerControlScreen() {
                               <div className="row gap-8">
                                 <CpuIcon size={14} stroke={isActive ? 'var(--accent)' : 'var(--muted)'} />
                                 <div>
-                                  <strong style={{ fontWeight: isActive ? 600 : 500 }}>{model.name}</strong>
+                                  <div className="row gap-6">
+                                    <strong style={{ fontWeight: isActive ? 600 : 500 }}>{model.name}</strong>
+                                    {model.visionProjectorPath ? (
+                                      <span
+                                        className="pill pill--ok"
+                                        style={{ fontSize: 'var(--fz-2xs)' }}
+                                        title="Рядом найден mmproj — модель запустится с поддержкой изображений."
+                                      >
+                                        Изображения
+                                      </span>
+                                    ) : null}
+                                  </div>
                                   <div className="muted mono" style={{ fontSize: 'var(--fz-2xs)' }}>
                                     {model.path}
                                   </div>
@@ -371,6 +382,7 @@ export function ServerControlScreen() {
                                       modelPath: model.path,
                                       port: overview.serverConfig.port,
                                       threads: overview.serverConfig.threads,
+                                      ...(model.visionProjectorPath ? { mmprojPath: model.visionProjectorPath } : {}),
                                     })
                                   }
                                   type="button"
