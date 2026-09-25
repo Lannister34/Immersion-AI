@@ -7,7 +7,15 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["apps/**/src/**", "packages/**/src/**", "apps/web/tests/**"]
+    "includes": [
+      "apps/**/src/**",
+      "packages/**/src/**",
+      "apps/web/tests/**",
+      "apps/*/*.config.ts",
+      "scripts/**",
+      "*.cjs",
+      "*.ts"
+    ]
   },
   "formatter": {
     "enabled": true,

@@ -6,7 +6,7 @@
   "packageManager": "pnpm@10.33.0",
   "license": "AGPL-3.0",
   "engines": {
-    "node": ">= 18"
+    "node": ">=24"
   },
   "scripts": {
     "install:deps": "corepack pnpm install",
@@ -16,23 +16,24 @@
     "stop": "pm2 stop ecosystem.config.cjs",
     "restart": "pm2 restart ecosystem.config.cjs",
     "logs": "pm2 logs",
-    "lint": "biome check ./apps ./packages",
-    "lint:fix": "biome check --write ./apps ./packages",
-    "format": "biome format --write ./apps ./packages",
-    "typecheck": "corepack pnpm -r typecheck",
+    "lint": "biome check --error-on-warnings .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "corepack pnpm -r typecheck && tsc -p scripts/tsconfig.json",
     "build": "corepack pnpm -r build",
-    "test": "corepack pnpm -r --if-present test",
+    "test": "corepack pnpm -r --if-present test && node --test \"scripts/**/*.test.ts\"",
     "smoke": "corepack pnpm --filter @immersion/web test:smoke",
     "check": "npm run lint && npm run typecheck && npm run build && npm run test",
     "ci": "npm run check && npm run smoke",
-    "ci:clean": "node ./scripts/ci-clean.mjs",
-    "verify:prepush": "node ./scripts/pre-push-verify.mjs",
+    "verify:prepush": "node scripts/ci-clean.ts",
     "prepare": "husky"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.7",
     "@commitlint/cli": "^20.1.0",
     "@commitlint/config-conventional": "^20.0.0",
-    "husky": "^9.1.7"
+    "@types/node": "^24.10.13",
+    "husky": "^9.1.7",
+    "typescript": "~5.9.3"
   }
 }

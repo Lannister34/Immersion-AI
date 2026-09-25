@@ -17,7 +17,7 @@ All data is stored locally. No cloud dependencies, no telemetry.
 
 ## Requirements
 
-- [Node.js](https://nodejs.org/) 24+ (Corepack ships with it and provides pnpm)
+- [Node.js](https://nodejs.org/) of the major version in [`.nvmrc`](.nvmrc) or newer (Corepack ships with it and provides pnpm); `corepack pnpm install` refuses an older Node
 
 ## Getting Started
 
@@ -116,7 +116,7 @@ LLM-фронтенд для ролевых чатов и творческого 
 
 ## Требования
 
-- [Node.js](https://nodejs.org/) версии 24+ (pnpm поставляется с ним через Corepack)
+- [Node.js](https://nodejs.org/) мажорной версии из [`.nvmrc`](.nvmrc) или новее (pnpm поставляется с ним через Corepack); на более старом Node `corepack pnpm install` завершится ошибкой
 
 ## Запуск
 
