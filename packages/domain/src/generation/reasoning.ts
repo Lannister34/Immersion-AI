@@ -35,7 +35,12 @@ function partialTagTailLength(text: string, tags: readonly string[]): number {
   return 0;
 }
 
-export function createReplySplitter() {
+export interface ReplySplitter {
+  flush(): ReplyChunk[];
+  push(text: string): ReplyChunk[];
+}
+
+export function createReplySplitter(): ReplySplitter {
   let buffer = '';
   let insideReasoning = false;
 

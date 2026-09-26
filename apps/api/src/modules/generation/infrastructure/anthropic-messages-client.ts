@@ -61,7 +61,12 @@ function buildMessageContent(message: ChatCompletionRequest['messages'][number])
   return [...images, ...(message.content.trim().length > 0 ? [{ text: message.content, type: 'text' as const }] : [])];
 }
 
-export function buildAnthropicPayload(messages: ChatCompletionRequest['messages']) {
+export interface AnthropicPayload {
+  conversation: AnthropicMessage[];
+  system: string;
+}
+
+export function buildAnthropicPayload(messages: ChatCompletionRequest['messages']): AnthropicPayload {
   const system = messages
     .filter((message) => message.role === 'system')
     .map((message) => message.content)
