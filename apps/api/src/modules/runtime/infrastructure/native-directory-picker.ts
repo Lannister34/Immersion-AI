@@ -5,6 +5,8 @@ const execFileAsync = promisify(execFile);
 
 const PICKER_TIMEOUT_MS = 5 * 60 * 1000;
 
+export const PICKER_INITIAL_PATH_ENV = 'IMMERSION_PICKER_INITIAL_PATH';
+
 export class PathPickerUnsupportedError extends Error {
   constructor() {
     super('Native directory picker is not available on this platform.');
@@ -12,12 +14,10 @@ export class PathPickerUnsupportedError extends Error {
   }
 }
 
-function quotePowerShell(value: string): string {
-  return value.replace(/'/gu, "''");
-}
-
-function quoteAppleScript(value: string): string {
-  return value.replace(/(["\\])/gu, '\\$1');
+export interface PickerInvocation {
+  args: string[];
+  command: string;
+  env: NodeJS.ProcessEnv;
 }
 
 const FOREGROUND_HELPER = `
@@ -54,58 +54,91 @@ $owner.Show()
 [ImmersionForeground]::Claim($owner.Handle)
 `;
 
-async function pickOnWindows(initialPath: string): Promise<string | null> {
+function withInitialPath(baseEnv: NodeJS.ProcessEnv, initialPath: string): NodeJS.ProcessEnv {
+  const env = { ...baseEnv };
+
+  delete env[PICKER_INITIAL_PATH_ENV];
+
+  if (initialPath) {
+    env[PICKER_INITIAL_PATH_ENV] = initialPath;
+  }
+
+  return env;
+}
+
+export function buildWindowsPickerInvocation(initialPath: string, baseEnv: NodeJS.ProcessEnv): PickerInvocation {
   const script = [
+    '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
     FOREGROUND_HELPER,
     '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
-    initialPath ? `$dialog.SelectedPath = '${quotePowerShell(initialPath)}'` : '',
+    `$initialPath = $env:${PICKER_INITIAL_PATH_ENV}`,
+    'if ($initialPath) { $dialog.SelectedPath = $initialPath }',
     '$result = $dialog.ShowDialog($owner)',
     '$owner.Close()',
     "if ($result -eq 'OK') { $dialog.SelectedPath }",
-  ]
-    .filter(Boolean)
-    .join('\n');
-  const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-STA', '-Command', script], {
-    timeout: PICKER_TIMEOUT_MS,
-    windowsHide: true,
-  });
+  ].join('\n');
 
-  return stdout.trim() || null;
+  return {
+    args: ['-NoProfile', '-STA', '-Command', script],
+    command: 'powershell',
+    env: withInitialPath(baseEnv, initialPath),
+  };
 }
 
-async function pickOnMac(initialPath: string): Promise<string | null> {
-  const location = initialPath ? ` default location POSIX file "${quoteAppleScript(initialPath)}"` : '';
-  const script = `POSIX path of (choose folder${location})`;
-  const { stdout } = await execFileAsync('osascript', ['-e', script], { timeout: PICKER_TIMEOUT_MS });
+export function buildMacPickerInvocation(initialPath: string, baseEnv: NodeJS.ProcessEnv): PickerInvocation {
+  const location = initialPath ? ` default location POSIX file (system attribute "${PICKER_INITIAL_PATH_ENV}")` : '';
 
-  return stdout.trim() || null;
+  return {
+    args: ['-e', `POSIX path of (choose folder${location})`],
+    command: 'osascript',
+    env: withInitialPath(baseEnv, initialPath),
+  };
 }
 
-async function pickOnLinux(initialPath: string): Promise<string | null> {
+export function buildLinuxPickerInvocation(initialPath: string, baseEnv: NodeJS.ProcessEnv): PickerInvocation {
   const args = ['--file-selection', '--directory'];
 
   if (initialPath) {
     args.push(`--filename=${initialPath.endsWith('/') ? initialPath : `${initialPath}/`}`);
   }
 
-  const { stdout } = await execFileAsync('zenity', args, { timeout: PICKER_TIMEOUT_MS });
-
-  return stdout.trim() || null;
+  return { args, command: 'zenity', env: baseEnv };
 }
 
-export async function pickNativeDirectory(initialPath = ''): Promise<string | null> {
+export function buildPickerInvocation(
+  platform: NodeJS.Platform,
+  initialPath: string,
+  baseEnv: NodeJS.ProcessEnv = process.env,
+): PickerInvocation {
+  if (platform === 'win32') {
+    return buildWindowsPickerInvocation(initialPath, baseEnv);
+  }
+
+  if (platform === 'darwin') {
+    return buildMacPickerInvocation(initialPath, baseEnv);
+  }
+
+  if (platform === 'linux') {
+    return buildLinuxPickerInvocation(initialPath, baseEnv);
+  }
+
+  throw new PathPickerUnsupportedError();
+}
+
+export async function pickNativeDirectory(
+  initialPath = '',
+  platform: NodeJS.Platform = process.platform,
+): Promise<string | null> {
+  const invocation = buildPickerInvocation(platform, initialPath);
+
   try {
-    if (process.platform === 'win32') {
-      return await pickOnWindows(initialPath);
-    }
+    const { stdout } = await execFileAsync(invocation.command, invocation.args, {
+      env: invocation.env,
+      timeout: PICKER_TIMEOUT_MS,
+      windowsHide: true,
+    });
 
-    if (process.platform === 'darwin') {
-      return await pickOnMac(initialPath);
-    }
-
-    if (process.platform === 'linux') {
-      return await pickOnLinux(initialPath);
-    }
+    return stdout.trim() || null;
   } catch (error) {
     if (typeof error === 'object' && error !== null && (error as NodeJS.ErrnoException).code === 'ENOENT') {
       throw new PathPickerUnsupportedError();
@@ -113,6 +146,4 @@ export async function pickNativeDirectory(initialPath = ''): Promise<string | nu
 
     return null;
   }
-
-  throw new PathPickerUnsupportedError();
 }
