@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 
 const PICKER_TIMEOUT_MS = 5 * 60 * 1000;
+const CANCEL_EXIT_CODE = 1;
 
 export const PICKER_INITIAL_PATH_ENV = 'IMMERSION_PICKER_INITIAL_PATH';
 
@@ -14,8 +15,11 @@ export class PathPickerUnsupportedError extends Error {
   }
 }
 
+export type PickerCancelReport = 'empty-output' | 'exit-code-1';
+
 export interface PickerInvocation {
   args: string[];
+  cancelReport: PickerCancelReport;
   command: string;
   env: NodeJS.ProcessEnv;
 }
@@ -69,6 +73,7 @@ function withInitialPath(baseEnv: NodeJS.ProcessEnv, initialPath: string): NodeJ
 export function buildWindowsPickerInvocation(initialPath: string, baseEnv: NodeJS.ProcessEnv): PickerInvocation {
   const script = [
     '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
+    "$ErrorActionPreference = 'Stop'",
     FOREGROUND_HELPER,
     '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
     `$initialPath = $env:${PICKER_INITIAL_PATH_ENV}`,
@@ -80,6 +85,7 @@ export function buildWindowsPickerInvocation(initialPath: string, baseEnv: NodeJ
 
   return {
     args: ['-NoProfile', '-STA', '-Command', script],
+    cancelReport: 'empty-output',
     command: 'powershell',
     env: withInitialPath(baseEnv, initialPath),
   };
@@ -90,6 +96,7 @@ export function buildMacPickerInvocation(initialPath: string, baseEnv: NodeJS.Pr
 
   return {
     args: ['-e', `POSIX path of (choose folder${location})`],
+    cancelReport: 'exit-code-1',
     command: 'osascript',
     env: withInitialPath(baseEnv, initialPath),
   };
@@ -102,7 +109,7 @@ export function buildLinuxPickerInvocation(initialPath: string, baseEnv: NodeJS.
     args.push(`--filename=${initialPath.endsWith('/') ? initialPath : `${initialPath}/`}`);
   }
 
-  return { args, command: 'zenity', env: baseEnv };
+  return { args, cancelReport: 'exit-code-1', command: 'zenity', env: baseEnv };
 }
 
 export function buildPickerInvocation(
@@ -125,12 +132,7 @@ export function buildPickerInvocation(
   throw new PathPickerUnsupportedError();
 }
 
-export async function pickNativeDirectory(
-  initialPath = '',
-  platform: NodeJS.Platform = process.platform,
-): Promise<string | null> {
-  const invocation = buildPickerInvocation(platform, initialPath);
-
+async function runPicker(invocation: PickerInvocation): Promise<string | null> {
   try {
     const { stdout } = await execFileAsync(invocation.command, invocation.args, {
       env: invocation.env,
@@ -138,12 +140,42 @@ export async function pickNativeDirectory(
       windowsHide: true,
     });
 
-    return stdout.trim() || null;
+    return stdout;
   } catch (error) {
-    if (typeof error === 'object' && error !== null && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+    const code = error instanceof Error && 'code' in error ? error.code : undefined;
+
+    if (code === 'ENOENT') {
       throw new PathPickerUnsupportedError();
     }
 
+    if (invocation.cancelReport === 'exit-code-1' && code === CANCEL_EXIT_CODE) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+export async function pickNativeDirectory(
+  initialPath = '',
+  platform: NodeJS.Platform = process.platform,
+): Promise<string | null> {
+  const invocation = buildPickerInvocation(platform, initialPath);
+  const output = await runPicker(invocation);
+
+  if (output === null) {
     return null;
   }
+
+  const picked = output.trim();
+
+  if (picked) {
+    return picked;
+  }
+
+  if (invocation.cancelReport === 'empty-output') {
+    return null;
+  }
+
+  throw new Error('Directory picker exited without printing a path.');
 }

@@ -41,6 +41,10 @@ function scriptOf(args: string[]): string {
   return args.at(-1) ?? '';
 }
 
+function exitWith(code: number): ExecFileException {
+  return Object.assign(new Error(`Command failed with exit code ${code}`), { code });
+}
+
 beforeEach(() => {
   execFileMock.mockReset();
 });
@@ -61,6 +65,12 @@ describe('buildWindowsPickerInvocation', () => {
     const script = scriptOf(buildWindowsPickerInvocation('D:/Модели', {}).args);
 
     expect(script.split('\n')[0]).toBe(UTF8_OUTPUT_LINE);
+  });
+
+  it('stops the script at its first error, so a failed dialog exits non-zero instead of printing nothing', () => {
+    const script = scriptOf(buildWindowsPickerInvocation('', {}).args);
+
+    expect(script.split('\n')[1]).toBe("$ErrorActionPreference = 'Stop'");
   });
 
   it('drops a stale initial path from the inherited environment when none is given', () => {
@@ -120,10 +130,43 @@ describe('pickNativeDirectory', () => {
     expect(args).toEqual(['--file-selection', '--directory', '--filename=/home/me/models/']);
   });
 
-  it('reads a non-zero exit of the dialog tool as a cancel, the way zenity and osascript report one', async () => {
-    answerPickerWith(Object.assign(new Error('Command failed'), { code: 1 }));
+  it('reads exit code 1 as a cancel on Linux and macOS, the way zenity and osascript report one', async () => {
+    answerPickerWith(exitWith(1));
 
     await expect(pickNativeDirectory('', 'linux')).resolves.toBeNull();
+    await expect(pickNativeDirectory('', 'darwin')).resolves.toBeNull();
+  });
+
+  it('reads empty output as a cancel on Windows, where the script prints nothing for a closed dialog', async () => {
+    answerPickerWith(null, '\r\n');
+
+    await expect(pickNativeDirectory('', 'win32')).resolves.toBeNull();
+  });
+
+  it('reports a failed PowerShell script on Windows instead of treating it as a cancel', async () => {
+    answerPickerWith(exitWith(1));
+
+    await expect(pickNativeDirectory('', 'win32')).rejects.toThrow('exit code 1');
+  });
+
+  it('reports a dialog tool that exited with another code instead of treating it as a cancel', async () => {
+    answerPickerWith(exitWith(255));
+
+    await expect(pickNativeDirectory('', 'linux')).rejects.toThrow('exit code 255');
+  });
+
+  it('reports a dialog killed by the timeout instead of treating it as a cancel', async () => {
+    answerPickerWith(
+      Object.assign(new Error('Command failed: zenity'), { code: null, killed: true, signal: 'SIGTERM' as const }),
+    );
+
+    await expect(pickNativeDirectory('', 'linux')).rejects.toThrow('Command failed: zenity');
+  });
+
+  it('reports a dialog tool that exited without printing a path on Linux instead of treating it as a cancel', async () => {
+    answerPickerWith(null, '');
+
+    await expect(pickNativeDirectory('', 'linux')).rejects.toThrow('without printing a path');
   });
 
   it('reports the picker as unsupported when the dialog tool is not installed', async () => {
