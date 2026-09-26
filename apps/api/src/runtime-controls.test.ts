@@ -153,6 +153,49 @@ describe('runtime control routes', () => {
     await app.close();
   });
 
+  it('reports each scanned model with its own mmproj projector and hides projectors from the list', async () => {
+    const modelsDir = path.join(dataRoot, 'models-root');
+    const visionDir = path.join(modelsDir, 'vl');
+    const textDir = path.join(modelsDir, 'text');
+    await fs.mkdir(visionDir, { recursive: true });
+    await fs.mkdir(textDir, { recursive: true });
+    const projectorPath = path.join(visionDir, 'mmproj-F16.gguf');
+    const flatProjectorPath = path.join(modelsDir, 'mmproj-Gemma-3-4B-f16.gguf');
+    await fs.writeFile(path.join(visionDir, 'Qwen-VL-Q4_K_M.gguf'), 'gguf');
+    await fs.writeFile(path.join(visionDir, 'Qwen-VL-Q8_0.gguf'), 'gguf');
+    await fs.writeFile(projectorPath, 'gguf');
+    await fs.writeFile(path.join(textDir, 'Qwen-VL-Q2_K.gguf'), 'gguf');
+    await fs.writeFile(path.join(modelsDir, 'Gemma-3-4B-Q4_K_M.gguf'), 'gguf');
+    await fs.writeFile(path.join(modelsDir, 'Llama-3-8B-Q4_K_M.gguf'), 'gguf');
+    await fs.writeFile(flatProjectorPath, 'gguf');
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/runtime/config',
+      payload: {
+        modelsDirs: [modelsDir],
+        port: 5001,
+        gpuLayers: 0,
+        contextSize: 8192,
+        flashAttention: false,
+        threads: 0,
+      },
+    });
+    const overview = RuntimeOverviewResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(Object.fromEntries(overview.models.map((model) => [model.name, model.visionProjectorPath]))).toEqual({
+      'Gemma-3-4B-Q4_K_M.gguf': flatProjectorPath,
+      'Llama-3-8B-Q4_K_M.gguf': null,
+      'text/Qwen-VL-Q2_K.gguf': null,
+      'vl/Qwen-VL-Q4_K_M.gguf': projectorPath,
+      'vl/Qwen-VL-Q8_0.gguf': projectorPath,
+    });
+
+    await app.close();
+  });
+
   it('rejects blank models directory entries in the config command', async () => {
     const app = buildApiApp();
     const response = await app.inject({
@@ -217,6 +260,31 @@ describe('runtime control routes', () => {
     expect(response.json()).toMatchObject({
       code: 'validation_error',
     });
+
+    await app.close();
+  });
+
+  it('rejects a missing mmproj projector before launch, since llama-server would die after starting and bury the cause in its log', async () => {
+    const modelPath = path.join(dataRoot, 'model.gguf');
+    await fs.writeFile(modelPath, 'gguf', 'utf8');
+    const app = buildApiApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/runtime/start',
+      payload: {
+        contextSize: 8192,
+        flashAttention: false,
+        gpuLayers: 0,
+        mmprojPath: path.join(dataRoot, 'missing-mmproj.gguf'),
+        modelPath,
+        port: 5001,
+        threads: 0,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().message).toContain('Multimodal projector not found');
 
     await app.close();
   });

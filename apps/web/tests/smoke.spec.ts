@@ -64,26 +64,40 @@ test('shows the LLM-runtime page with the LLM-runtime heading and mode switcher'
   await expect(page.getByRole('button', { name: 'Скопировать' })).toBeVisible();
 });
 
-test('adds a models directory through the params card on /server', async ({ page }) => {
+test('adds and removes a models directory on /server without a save step, keeping each change across reloads', async ({
+  page,
+}) => {
   await page.goto('/server');
   await page.getByRole('button', { name: 'Встроенный' }).click();
 
   await page.getByRole('button', { name: 'Параметры' }).click();
   await expect(page.getByRole('heading', { name: 'Каталоги моделей' })).toBeVisible();
 
-  await page.getByLabel('Новый каталог моделей').fill('C:\\smoke-models-extra');
-  await page.getByRole('button', { name: 'Добавить' }).click();
-
-  const putConfig = page.waitForResponse(
+  const addedConfig = page.waitForResponse(
     (response) => response.url().includes('/api/runtime/config') && response.request().method() === 'PUT',
   );
-  await page.getByRole('button', { name: 'Сохранить' }).click();
-  expect((await putConfig).status()).toBe(200);
+  await page.getByLabel('Новый каталог моделей').fill('C:\\smoke-models-extra');
+  await page.getByRole('button', { name: 'Добавить' }).click();
+  expect((await addedConfig).status()).toBe(200);
 
   // Шапка таблицы моделей переключается на счётчик каталогов после сохранения.
   await expect(page.getByText('2 каталога')).toBeVisible();
   // Каталог из фикстуры существует, добавленный — нет: ровно один бейдж «не найден».
   await expect(page.getByText('не найден', { exact: true })).toHaveCount(1);
+
+  await page.reload();
+  await page.getByRole('button', { name: 'Параметры' }).click();
+  await expect(page.getByText('C:\\smoke-models-extra')).toBeVisible();
+
+  const removedConfig = page.waitForResponse(
+    (response) => response.url().includes('/api/runtime/config') && response.request().method() === 'PUT',
+  );
+  await page.locator('li', { hasText: 'C:\\smoke-models-extra' }).getByRole('button', { name: 'Убрать' }).click();
+  expect((await removedConfig).status()).toBe(200);
+
+  await page.reload();
+  await page.getByRole('button', { name: 'Параметры' }).click();
+  await expect(page.getByText('C:\\smoke-models-extra')).toBeHidden();
 });
 
 test('renders editable profile and sampler sections on /settings', async ({ page }) => {
@@ -234,4 +248,45 @@ test('creates a character together with the avatar picked before the first save'
   await page.getByRole('button', { name: 'Да, удалить' }).click();
   await expect(page).toHaveURL(/\/characters$/);
   await expect(cardLink).toBeHidden();
+});
+
+test('offers the cloud providers with their defaults and refuses a model list without a key', async ({ page }) => {
+  await page.goto('/server');
+
+  await expect(page.locator('#provider-type')).toBeVisible();
+  await page.locator('#provider-type').selectOption('anthropic');
+  await expect(page.locator('#provider-url')).toHaveValue('https://api.anthropic.com/v1');
+  await expect(page.locator('#provider-model')).toHaveAttribute('placeholder', 'claude-sonnet-4-5');
+  await expect(page.locator('#provider-api-key')).toHaveAttribute('placeholder', 'sk-ant-…');
+
+  await page.getByRole('button', { name: 'Список моделей' }).click();
+  await expect(page.getByText('API-ключ провайдера не задан — список моделей запросить не у кого.')).toBeVisible();
+
+  await page.locator('#provider-type').selectOption('openai');
+  await expect(page.locator('#provider-url')).toHaveValue('https://api.openai.com/v1');
+  await expect(page.locator('#provider-model')).toHaveAttribute('placeholder', 'gpt-4o');
+});
+
+test('drops the fetched model list when another provider is selected', async ({ page }) => {
+  await page.route('**/api/providers/models', (route) =>
+    route.fulfill({
+      json: {
+        activeProvider: 'custom',
+        endpoint: 'http://127.0.0.1:5001/v1/models',
+        issue: null,
+        mode: 'external',
+        models: [{ id: 'smoke-model-a' }, { id: 'smoke-model-b' }],
+        status: 'ok',
+      },
+    }),
+  );
+  await page.goto('/server');
+
+  await page.locator('#provider-type').selectOption('custom');
+  await page.getByRole('button', { name: 'Список моделей' }).click();
+  await expect(page.locator('#provider-models option')).toHaveCount(2);
+  await expect(page.getByText('Провайдер вернул 2 модели — они подсказываются в поле.')).toBeVisible();
+
+  await page.locator('#provider-type').selectOption('koboldcpp');
+  await expect(page.locator('#provider-models option')).toHaveCount(0);
 });

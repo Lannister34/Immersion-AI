@@ -11,7 +11,6 @@ const settings: SettingsOverviewResponse = {
     systemPromptTemplate: '',
     thinkingEnabled: true,
     messageFormatting: { actionsItalic: true, quotesHighlighted: false },
-    uiLanguage: 'ru',
     userName: 'Tester',
     userPersona: '',
   },

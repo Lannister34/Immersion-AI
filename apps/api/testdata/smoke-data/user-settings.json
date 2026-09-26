@@ -2,7 +2,6 @@
   "userName": "Тестер",
   "userPersona": "Инженер, который проверяет rewrite.",
   "systemPromptTemplate": "Пиши как {{char}} и не говори за {{user}}.",
-  "uiLanguage": "ru",
   "responseLanguage": "ru",
   "streamingEnabled": true,
   "thinkingEnabled": false,

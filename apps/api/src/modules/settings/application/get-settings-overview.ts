@@ -26,10 +26,6 @@ function getBoolean(value: unknown, fallback: boolean) {
   return typeof value === 'boolean' ? value : fallback;
 }
 
-function getUiLanguage(value: unknown) {
-  return value === 'en' ? 'en' : 'ru';
-}
-
 // Курсив действий включён исторически, подсветка речи — опция по желанию.
 function getMessageFormatting(value: unknown) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -146,7 +142,6 @@ export function getSettingsOverview(): SettingsOverviewResponse {
       userName: getString(source.userName, DEFAULT_USER_NAME),
       userPersona: getString(source.userPersona),
       systemPromptTemplate: getString(source.systemPromptTemplate),
-      uiLanguage: getUiLanguage(source.uiLanguage),
       responseLanguage: getResponseLanguage(source.responseLanguage),
       streamingEnabled: getBoolean(source.streamingEnabled, true),
       thinkingEnabled: getBoolean(source.thinkingEnabled, true),

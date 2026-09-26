@@ -6,6 +6,7 @@ import { getRuntimeOverview } from './get-runtime-overview.js';
 export interface RunningRuntimeEndpoint {
   baseUrl: string;
   model: string | null;
+  visionProjectorPath: string | null;
 }
 
 async function resolveCanonicalModelName(modelPath: string | null, fallbackModel: string | null) {
@@ -30,5 +31,6 @@ export async function getRunningRuntimeEndpoint(): Promise<RunningRuntimeEndpoin
   return {
     baseUrl: `http://127.0.0.1:${state.port}`,
     model: await resolveCanonicalModelName(state.modelPath, state.model),
+    visionProjectorPath: getLlmProcessManager().getVisionProjectorPath(),
   };
 }

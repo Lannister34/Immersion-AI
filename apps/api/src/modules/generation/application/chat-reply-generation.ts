@@ -5,6 +5,7 @@ import type {
   StartChatReplyCommand,
 } from '@immersion/contracts/generation';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
+import type { ReplyChannel } from '@immersion/domain/generation';
 import { appendChatMessages } from '../../chats/application/append-chat-messages.js';
 import { readChatAttachmentDataUrl, resolveChatAttachments } from '../../chats/application/chat-attachments.js';
 import { ChatLastMessageChangedError } from '../../chats/application/chat-conflicts.js';
@@ -17,9 +18,9 @@ import {
   resolveGenerationProviderEndpoint,
 } from '../../providers/application/generation-provider.js';
 import { getSettingsOverview } from '../../settings/application/get-settings-overview.js';
-import { OpenAiCompatibleChatCompletionsClient } from '../infrastructure/openai-compatible-chat-completions-client.js';
+import { createChatCompletionClient } from '../infrastructure/chat-completion-client-factory.js';
 import { getProviderTokenCounter } from '../infrastructure/provider-token-counter.js';
-import type { ChatCompletionClient } from './chat-completion-client.js';
+import type { ChatCompletionClient, ChatCompletionResponse } from './chat-completion-client.js';
 import {
   ChatReplyGenerationFailedError,
   NothingToAnswerError,
@@ -28,6 +29,7 @@ import {
 } from './generation-errors.js';
 
 export interface ChatReplyGenerationDependencies {
+  onDelta?: ((delta: string, channel: ReplyChannel) => void) | undefined;
   chatCompletionClient?: ChatCompletionClient;
   now?: () => Date;
   signal?: AbortSignal;
@@ -79,8 +81,8 @@ async function runChatCompletionForSession(
   session: ChatSessionDto,
   dependencies: ChatReplyGenerationDependencies,
   buildTrailingInstruction?: (settings: SettingsOverviewResponse) => string,
-): Promise<string> {
-  const chatCompletionClient = dependencies.chatCompletionClient ?? new OpenAiCompatibleChatCompletionsClient();
+): Promise<ChatCompletionResponse> {
+  const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
 
   try {
     throwIfAborted(dependencies.signal);
@@ -102,17 +104,19 @@ async function runChatCompletionForSession(
       tokenCounter: getProviderTokenCounter(),
       trailingUserInstruction: buildTrailingInstruction ? buildTrailingInstruction(settings) : null,
     });
+    const streamingDelta = settings.profile.streamingEnabled ? dependencies.onDelta : undefined;
     const completion = await chatCompletionClient.completeChat({
       endpoint,
       maxTokens: generationPlan.providerRequest.maxTokens,
       messages: generationPlan.providerRequest.messages,
+      ...(streamingDelta ? { onDelta: streamingDelta } : {}),
       sampling: generationPlan.providerRequest.sampling,
       signal: dependencies.signal,
     });
 
     throwIfAborted(dependencies.signal);
 
-    return completion.content;
+    return completion;
   } catch (error) {
     throw mapChatReplyGenerationError(error, session);
   }
@@ -176,8 +180,9 @@ export async function completeChatReplyForSession(
   const sessionAfterGeneratedExchange = await appendChatMessages(command.chatId, [
     {
       role: 'assistant',
-      content,
+      content: content.content,
       createdAt: now().toISOString(),
+      reasoning: content.reasoning,
     },
   ]);
 
@@ -214,7 +219,7 @@ export async function completeChatReplyContinuationForSession(
 ): Promise<ChatReplyGenerationResponse> {
   const now = dependencies.now ?? (() => new Date());
   const lastMessage = getContinuableAssistantMessage(command.chatId, session);
-  const continuation = await runChatCompletionForSession(
+  const continuationResponse = await runChatCompletionForSession(
     session,
     dependencies,
     (settings) =>
@@ -223,7 +228,7 @@ export async function completeChatReplyContinuationForSession(
 
   try {
     const sessionAfterContinuation = await appendAssistantMessageContinuation(command.chatId, {
-      continuation,
+      continuation: continuationResponse.content,
       expectedContentPrefix: lastMessage.content,
       expectedMessageIndex: session.messages.length,
       updatedAt: now().toISOString(),

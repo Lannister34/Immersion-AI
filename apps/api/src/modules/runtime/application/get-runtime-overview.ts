@@ -10,6 +10,7 @@ import {
 
 import { resolveDataRoot } from '../../../lib/data-root.js';
 import { getLlmServerRuntimeConfig } from '../../settings/application/get-llm-server-runtime-config.js';
+import { pairVisionProjectors, type ScannedGgufFile } from '../domain/vision-projector-pairing.js';
 import { getLlmProcessManager } from '../infrastructure/llm-process-manager.js';
 import { normalizeRuntimeConfig } from './runtime-config.js';
 
@@ -50,9 +51,17 @@ async function statFileSize(filePath: string) {
   }
 }
 
+interface ScannedModelFile extends Omit<RuntimeModelSummary, 'visionProjectorPath'>, ScannedGgufFile {}
+
+function toModelSummaries(files: ScannedModelFile[]): RuntimeModelSummary[] {
+  return pairVisionProjectors(files)
+    .map(({ containingDirectory: _containingDirectory, ...model }): RuntimeModelSummary => model)
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
 async function scanModels(modelsDirs: string[]): Promise<RuntimeModelScanResult> {
   const directories: RuntimeModelsDirStatus[] = [];
-  const models: RuntimeModelSummary[] = [];
+  const files: ScannedModelFile[] = [];
   const seenPaths = new Set<string>();
 
   for (const modelsDir of modelsDirs) {
@@ -70,11 +79,12 @@ async function scanModels(modelsDirs: string[]): Promise<RuntimeModelScanResult>
         }
 
         seenPaths.add(entryPath);
-        models.push({
+        files.push({
           name: entry.name,
           path: entryPath,
           size,
           sourceDirectory: modelsDir,
+          containingDirectory: modelsDir,
         });
       }
 
@@ -101,19 +111,18 @@ async function scanModels(modelsDirs: string[]): Promise<RuntimeModelScanResult>
         }
 
         seenPaths.add(nestedPath);
-        models.push({
+        files.push({
           name: `${entry.name}/${nestedEntry.name}`,
           path: nestedPath,
           size,
           sourceDirectory: modelsDir,
+          containingDirectory: entryPath,
         });
       }
     }
   }
 
-  models.sort((left, right) => left.name.localeCompare(right.name));
-
-  return { directories, models };
+  return { directories, models: toModelSummaries(files) };
 }
 
 async function scanModelsCached(modelsDirs: string[]): Promise<RuntimeModelScanResult> {

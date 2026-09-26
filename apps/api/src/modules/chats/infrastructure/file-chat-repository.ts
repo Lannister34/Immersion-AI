@@ -336,6 +336,16 @@ function getStoredAttachments(line: StoredChatLine): ChatMessageAttachmentRecord
   });
 }
 
+function getStoredReasoning(line: StoredChatLine): string | null {
+  const extra = line.extra;
+
+  if (!extra || typeof extra !== 'object' || Array.isArray(extra)) {
+    return null;
+  }
+
+  return getNullableString((extra as Record<string, unknown>).reasoning);
+}
+
 function getMessageRole(line: StoredChatLine): ChatMessageRoleRecord {
   if (line.extra && typeof line.extra === 'object' && !Array.isArray(line.extra)) {
     const extraSource = line.extra as Record<string, unknown>;
@@ -352,6 +362,11 @@ function createStoredChatLine(message: AppendChatMessageInput): StoredChatLine {
     file: attachment.id,
     mime: attachment.mimeType,
   }));
+  const reasoning = message.reasoning?.trim() ? message.reasoning : null;
+  const extra = {
+    ...(attachments.length > 0 ? { attachments } : {}),
+    ...(reasoning ? { reasoning } : {}),
+  };
 
   if (message.role === 'system') {
     return {
@@ -365,7 +380,7 @@ function createStoredChatLine(message: AppendChatMessageInput): StoredChatLine {
   }
 
   return {
-    ...(attachments.length > 0 ? { extra: { attachments } } : {}),
+    ...(Object.keys(extra).length > 0 ? { extra } : {}),
     is_user: message.role === 'user',
     mes: message.content,
     send_date: message.createdAt,
@@ -544,6 +559,7 @@ async function readChatFile(chatId: string): Promise<ChatSessionRecord | null> {
       {
         attachments: getStoredAttachments(storedLine),
         id: `${chatId}:${index + 1}`,
+        reasoning: getStoredReasoning(storedLine),
         role: getMessageRole(storedLine),
         content: storedLine.mes ?? '',
         createdAt: storedLine.send_date || fallbackCreatedAt,

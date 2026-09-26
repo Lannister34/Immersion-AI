@@ -6,6 +6,7 @@ import { charactersRoutes } from './modules/characters/interface/http/routes.js'
 import { chatsRoutes } from './modules/chats/interface/http/routes.js';
 import { generationRoutes } from './modules/generation/interface/http/routes.js';
 import { lorebooksRoutes } from './modules/lorebooks/interface/http/routes.js';
+import { openAiCompatRoutes } from './modules/openai-compat/interface/http/routes.js';
 import { providersRoutes } from './modules/providers/interface/http/routes.js';
 import { runtimeRoutes } from './modules/runtime/interface/http/routes.js';
 import { scenariosRoutes } from './modules/scenarios/interface/http/routes.js';
@@ -59,6 +60,7 @@ export function buildApiApp() {
   app.register(settingsRoutes, { prefix: '/api/settings' });
   app.register(providersRoutes, { prefix: '/api/providers' });
   app.register(runtimeRoutes, { prefix: '/api/runtime' });
+  app.register(openAiCompatRoutes, { prefix: '/v1' });
 
   return app;
 }

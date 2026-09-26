@@ -13,6 +13,7 @@ export interface ChatMessageRecord {
   content: string;
   createdAt: string;
   id: string;
+  reasoning: string | null;
   role: ChatMessageRoleRecord;
 }
 
@@ -60,6 +61,7 @@ export interface AppendChatMessageInput {
   attachments?: ChatMessageAttachmentRecord[];
   content: string;
   createdAt: string;
+  reasoning?: string | null;
   role: ChatMessageRoleRecord;
 }
 

@@ -71,7 +71,6 @@ describe('buildApiApp', () => {
     expect(overview).toMatchObject({
       profile: {
         userName: 'Тестер',
-        uiLanguage: 'ru',
       },
       sampler: {
         activePresetId: 'default',
@@ -102,7 +101,7 @@ describe('buildApiApp', () => {
     await app.close();
   });
 
-  it('serves the providers overview contract from canonical files', async () => {
+  it('serves the providers overview from canonical files with a config for every catalog provider, cloud ones included', async () => {
     const app = buildApiApp();
     const response = await app.inject({
       method: 'GET',
@@ -113,7 +112,12 @@ describe('buildApiApp', () => {
     expect(response.statusCode).toBe(200);
     expect(overview.activeProvider).toBe('custom');
     expect(overview.backendMode).toBe('external');
-    expect(overview.providerConfigs).toHaveLength(2);
+    expect(overview.providerConfigs.map((config) => config.provider).sort()).toEqual([
+      'anthropic',
+      'custom',
+      'koboldcpp',
+      'openai',
+    ]);
 
     await app.close();
   });

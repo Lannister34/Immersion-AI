@@ -4,10 +4,11 @@ import type {
   RuntimeOverviewResponse,
 } from '@immersion/contracts/runtime';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useState } from 'react';
 
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
-import { FolderIcon, PlusIcon, XIcon } from '../../shared/ui/icons';
+import { FolderIcon, PlusIcon, SearchIcon, XIcon } from '../../shared/ui/icons';
+import { pickRuntimeDirectory } from './api/pick-runtime-directory';
 import { saveRuntimeConfig } from './api/save-runtime-config';
 import { runtimeOverviewQueryKey } from './queries/runtime-overview-query';
 
@@ -16,23 +17,11 @@ interface ModelDirsCardProps {
   serverConfig: RuntimeConfigSnapshot;
 }
 
-function dirsEqual(left: string[], right: string[]): boolean {
-  return left.length === right.length && left.every((dir, index) => dir === right[index]);
-}
-
 export function ModelDirsCard({ dirsStatus, serverConfig }: ModelDirsCardProps) {
   const queryClient = useQueryClient();
-  // Структурный шаринг TanStack Query держит ссылку стабильной между
-  // опросами overview, поэтому черновик не сбрасывается без реальных изменений.
-  const baseline = serverConfig.modelsDirs;
-  const [draftDirs, setDraftDirs] = useState<string[]>(baseline);
+  const dirs = serverConfig.modelsDirs;
   const [newDir, setNewDir] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDraftDirs(baseline);
-    setValidationError(null);
-  }, [baseline]);
 
   const saveMutation = useMutation({
     mutationFn: saveRuntimeConfig,
@@ -44,41 +33,46 @@ export function ModelDirsCard({ dirsStatus, serverConfig }: ModelDirsCardProps) 
   });
 
   const existsByPath = new Map(dirsStatus.map((entry) => [entry.path, entry.exists]));
-  const isDirty = !dirsEqual(draftDirs, baseline);
 
-  const handleAdd = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmed = newDir.trim();
+  const applyDirs = (nextDirs: string[]) => {
+    setValidationError(null);
+    saveMutation.mutate({ ...serverConfig, modelsDirs: nextDirs });
+  };
+
+  const addDir = (candidate: string) => {
+    const trimmed = candidate.trim();
+
     if (trimmed.length === 0) {
       setValidationError('Укажите абсолютный путь к каталогу.');
       return;
     }
-    if (draftDirs.includes(trimmed)) {
+
+    if (dirs.includes(trimmed)) {
       setValidationError('Такой каталог уже есть в списке.');
       return;
     }
-    setDraftDirs((current) => [...current, trimmed]);
+
+    applyDirs([...dirs, trimmed]);
     setNewDir('');
-    setValidationError(null);
   };
 
-  const handleRemove = (dir: string) => {
-    setDraftDirs((current) => current.filter((entry) => entry !== dir));
-    setValidationError(null);
-  };
+  const pickMutation = useMutation({
+    mutationFn: () => pickRuntimeDirectory({ initialPath: newDir.trim() }),
+    onSuccess: (response) => {
+      if (response.path) {
+        addDir(response.path);
+      }
+    },
+  });
 
-  const handleSave = () => {
-    saveMutation.mutate({ ...serverConfig, modelsDirs: draftDirs });
-  };
-
-  const handleReset = () => {
-    setDraftDirs(baseline);
-    setNewDir('');
-    setValidationError(null);
+  const handleAdd = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    addDir(newDir);
   };
 
   const errorMessage =
     validationError ??
+    (pickMutation.error ? getApiErrorMessage(pickMutation.error, 'Не удалось открыть системный диалог.') : null) ??
     (saveMutation.error ? getApiErrorMessage(saveMutation.error, 'Не удалось сохранить каталоги моделей.') : null);
 
   return (
@@ -91,13 +85,13 @@ export function ModelDirsCard({ dirsStatus, serverConfig }: ModelDirsCardProps) 
       </div>
       <div className="col gap-8">
         <h3 style={{ margin: 0, fontSize: 'var(--fz-sm)', fontWeight: 600 }}>Каталоги моделей</h3>
-        {draftDirs.length === 0 ? (
+        {dirs.length === 0 ? (
           <p className="muted" style={{ margin: 0, fontSize: 'var(--fz-xs)' }}>
             Каталоги не заданы — список моделей будет пуст.
           </p>
         ) : (
           <ul className="col gap-6" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-            {draftDirs.map((dir) => (
+            {dirs.map((dir) => (
               <li className="row gap-8" key={dir} style={{ alignItems: 'center' }}>
                 <FolderIcon size={13} />
                 <span className="mono" style={{ fontSize: 'var(--fz-xs)', wordBreak: 'break-all' }}>
@@ -106,7 +100,8 @@ export function ModelDirsCard({ dirsStatus, serverConfig }: ModelDirsCardProps) 
                 {existsByPath.get(dir) === false ? <span className="pill pill--warn">не найден</span> : null}
                 <button
                   className="btn btn--xs btn--ghost-bordered"
-                  onClick={() => handleRemove(dir)}
+                  disabled={saveMutation.isPending}
+                  onClick={() => applyDirs(dirs.filter((entry) => entry !== dir))}
                   style={{ marginLeft: 'auto' }}
                   type="button"
                 >
@@ -130,33 +125,34 @@ export function ModelDirsCard({ dirsStatus, serverConfig }: ModelDirsCardProps) 
             style={{ flex: 1 }}
             value={newDir}
           />
-          <button className="btn btn--ghost-bordered" type="submit">
+          <button
+            className="btn btn--ghost-bordered"
+            disabled={pickMutation.isPending}
+            onClick={() => pickMutation.mutate()}
+            title="Открыть системный диалог выбора папки"
+            type="button"
+          >
+            <SearchIcon size={13} /> {pickMutation.isPending ? 'Ждём диалог…' : 'Выбрать'}
+          </button>
+          <button className="btn btn--ghost-bordered" disabled={saveMutation.isPending} type="submit">
             <PlusIcon size={13} /> Добавить
           </button>
         </form>
+        {pickMutation.isPending ? (
+          <span className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
+            Окно выбора папки открыто поверх остальных окон — выберите каталог или закройте его.
+          </span>
+        ) : null}
         {errorMessage ? (
           <div className="card" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', padding: 10 }}>
             {errorMessage}
           </div>
         ) : null}
-        <div className="between" style={{ alignItems: 'center' }}>
-          <span className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
-            Отсутствующие каталоги игнорируются при сканировании.
-          </span>
-          <div className="row gap-8">
-            <button className="btn" disabled={!isDirty || saveMutation.isPending} onClick={handleReset} type="button">
-              Отменить
-            </button>
-            <button
-              className="btn btn--primary"
-              disabled={!isDirty || saveMutation.isPending}
-              onClick={handleSave}
-              type="button"
-            >
-              {saveMutation.isPending ? 'Сохраняем…' : 'Сохранить'}
-            </button>
-          </div>
-        </div>
+        <span className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
+          {saveMutation.isPending
+            ? 'Сохраняем…'
+            : 'Изменения применяются сразу. Отсутствующие каталоги игнорируются при сканировании.'}
+        </span>
       </div>
     </section>
   );

@@ -43,10 +43,11 @@ function startContinueChatReplyJob(
     command,
   });
 
-  registry.runChatReplyJob(job.id, async ({ signal }) => {
+  registry.runChatReplyJob(job.id, async ({ publishDelta, signal }) => {
     const response = await completeChatReplyContinuationForSession(command, session, {
       ...(dependencies.chatCompletionClient ? { chatCompletionClient: dependencies.chatCompletionClient } : {}),
       now: dependencies.now,
+      onDelta: publishDelta,
       signal,
     });
 
@@ -87,10 +88,11 @@ export async function startChatReplyGenerationJob(
       command,
     });
 
-    dependencies.generationJobRegistry.runChatReplyJob(answerJob.id, async ({ signal }) => {
+    dependencies.generationJobRegistry.runChatReplyJob(answerJob.id, async ({ publishDelta, signal }) => {
       const response = await completeChatReplyForSession(command, session, {
         ...(dependencies.chatCompletionClient ? { chatCompletionClient: dependencies.chatCompletionClient } : {}),
         now,
+        onDelta: publishDelta,
         signal,
       });
 
@@ -116,10 +118,11 @@ export async function startChatReplyGenerationJob(
     throw error;
   }
 
-  dependencies.generationJobRegistry.runChatReplyJob(job.id, async ({ signal }) => {
+  dependencies.generationJobRegistry.runChatReplyJob(job.id, async ({ publishDelta, signal }) => {
     const response = await completeChatReplyForSession(command, sessionAfterUserMessage, {
       ...(dependencies.chatCompletionClient ? { chatCompletionClient: dependencies.chatCompletionClient } : {}),
       now,
+      onDelta: publishDelta,
       signal,
     });
 

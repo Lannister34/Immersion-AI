@@ -12,7 +12,8 @@ All data is stored locally. No cloud dependencies, no telemetry.
 - **AI Generation** — generate characters, lorebooks, scenarios, chat titles, and more using your LLM
 - **Flexible Configuration** — per-chat sampler settings, system prompts, generation presets
 - **Built-in llama-server** — start/stop, model selection, GPU layers, context size
-- **External API** — connect to any OpenAI-compatible server (LM Studio, KoboldCpp, llama-server)
+- **External API** — connect to any OpenAI-compatible server (LM Studio, KoboldCpp, llama-server) or to the OpenAI and Anthropic clouds
+- **Use it as a backend** — an OpenAI-compatible endpoint lets other tools (ComfyUI, scripts) generate through Immersion
 
 ## Requirements
 
@@ -32,10 +33,64 @@ The web client runs at http://localhost:4788 and talks to the API at http://loca
 
 **Windows:** run `start.bat` — it installs dependencies and opens the app for you.
 
+## Using Immersion as a backend
+
+The API exposes an OpenAI-compatible endpoint, so any OpenAI client can generate through
+the provider Immersion is configured with — a local llama-server, LM Studio, OpenAI or Claude:
+
+```
+POST http://127.0.0.1:4787/v1/chat/completions
+GET  http://127.0.0.1:4787/v1/models
+```
+
+```
+curl http://127.0.0.1:4787/v1/chat/completions   -H 'Content-Type: application/json'   -d '{"messages":[{"role":"user","content":"Hello"}],"stream":true}'
+```
+
+The request carries the whole conversation: nothing is written to your chats. Sampler values
+come from the active preset unless the request overrides `temperature`, `top_p`,
+`presence_penalty` or `max_tokens`. `model` is passed to the provider as-is, except that an
+empty name and the placeholders `default`, `immersion`, `immersion-ai`, `gpt-3.5-turbo` and
+`gpt-4` select the model Immersion is configured with. Streaming and image parts work.
+
+Other fields — OpenAI's own `seed` and `stop` as well as server extensions such as
+`enable_thinking` and `chat_template_kwargs` — are forwarded unchanged to local
+OpenAI-compatible servers only. The OpenAI and Anthropic clouds receive none of them, since
+those APIs reject extension fields they do not know. Tool calls and `n > 1`
+are reported as errors instead of being silently ignored. When a reasoning model spends the
+whole budget on thinking, the answer comes back with `finish_reason: "length"` and the
+thinking in `reasoning_content`, not as an error.
+
+### Managing the provider
+
+The provider is switched over the same API, without opening the web UI:
+
+```
+GET   /api/providers/settings   # mode, active provider, configs (returns the stored key)
+PATCH /api/providers/settings   # change only the fields you send
+POST  /api/providers/models     # list a provider's models without saving anything
+GET   /api/runtime/overview     # built-in llama-server: status, models, directories
+POST  /api/runtime/start        # start the built-in server with a model
+POST  /api/runtime/stop
+```
+
+`start` takes `modelPath`, `port`, `gpuLayers`, `contextSize`, `flashAttention`, `threads`
+and an optional `mmprojPath` — the multimodal projector passed to llama-server as
+`--mmproj`, which is what turns a VL model into a model that actually sees images.
+
+```
+curl -X PATCH http://127.0.0.1:4787/api/providers/settings   -H 'Content-Type: application/json'   -d '{"mode":"external","activeProvider":"anthropic","config":{"apiKey":"sk-ant-…","model":"claude-sonnet-4-5"}}'
+```
+
+`config` applies to the provider that becomes active; an empty `apiKey` clears the stored key.
+
+The API listens on 127.0.0.1 and has no authentication. Keep it on loopback, or put a
+reverse proxy in front of it before exposing it to a network.
+
 ## TODO
 
 - [ ] Instruct templates (ChatML, Alpaca, Llama 3, Mistral)
-- [ ] Multi-provider support (OpenAI, Anthropic, Ollama, OpenRouter)
+- [ ] More providers (Ollama, OpenRouter)
 - [ ] Many more features
 
 ## License
@@ -58,7 +113,8 @@ LLM-фронтенд для ролевых чатов и творческого 
 - **AI-генерация** — генерация персонажей, лорбуков, сценариев, заголовков чатов и другого с помощью LLM
 - **Гибкая настройка** — параметры сэмплера для каждого чата, системные промпты, пресеты генерации
 - **Встроенный llama-server** — запуск/остановка, выбор модели, GPU-слои, размер контекста
-- **Внешний API** — подключение к любому OpenAI-совместимому серверу (LM Studio, KoboldCpp, llama-server)
+- **Внешний API** — подключение к любому OpenAI-совместимому серверу (LM Studio, KoboldCpp, llama-server), а также к облакам OpenAI и Anthropic
+- **Работа бэкендом** — OpenAI-совместимый эндпоинт позволяет генерировать через Immersion из других программ (ComfyUI, скрипты)
 
 ## Требования
 
@@ -78,10 +134,65 @@ npm run dev:web
 
 **Windows:** запустите `start.bat` — он поставит зависимости и откроет приложение.
 
+## Immersion как бэкенд
+
+API отдаёт OpenAI-совместимый эндпоинт: любой OpenAI-клиент может генерировать через
+провайдера, настроенного в Immersion, — локальный llama-server, LM Studio, OpenAI или Claude:
+
+```
+POST http://127.0.0.1:4787/v1/chat/completions
+GET  http://127.0.0.1:4787/v1/models
+```
+
+```
+curl http://127.0.0.1:4787/v1/chat/completions   -H 'Content-Type: application/json'   -d '{"messages":[{"role":"user","content":"Привет"}],"stream":true}'
+```
+
+Вся история приходит в запросе, в ваши чаты ничего не пишется. Параметры сэмплера берутся
+из активного пресета, если запрос не задал `temperature`, `top_p`, `presence_penalty` или
+`max_tokens`. `model` уходит провайдеру как есть, но пустое имя и заглушки `default`,
+`immersion`, `immersion-ai`, `gpt-3.5-turbo` и `gpt-4` заменяются моделью из настроек
+Immersion. Стриминг и картинки работают.
+
+Остальные поля — собственные поля OpenAI `seed` и `stop`, а также расширения серверов вроде
+`enable_thinking` и `chat_template_kwargs` — уходят без изменений только локальным
+OpenAI-совместимым серверам. Облакам OpenAI и Anthropic они не отправляются: эти API
+отвечают 400 на незнакомые поля-расширения. Вызов инструментов и
+`n > 1` возвращают ошибку, а не молчаливую подмену. Если модель-рассуждатель потратила весь
+лимит на размышления, ответ приходит с `finish_reason: "length"` и мыслями в
+`reasoning_content` — это не ошибка.
+
+### Управление провайдером
+
+Провайдер переключается тем же API, без захода в веб-интерфейс:
+
+```
+GET   /api/providers/settings   # режим, активный провайдер, конфиги (отдаёт и ключ)
+PATCH /api/providers/settings   # меняет только присланные поля
+POST  /api/providers/models     # список моделей провайдера, ничего не сохраняя
+GET   /api/runtime/overview     # встроенный llama-server: статус, модели, каталоги
+POST  /api/runtime/start        # запустить встроенный сервер с моделью
+POST  /api/runtime/stop
+```
+
+`start` принимает `modelPath`, `port`, `gpuLayers`, `contextSize`, `flashAttention`,
+`threads` и необязательный `mmprojPath` — мультимодальный проектор, который уходит
+llama-server как `--mmproj`; без него VL-модель запускается текстовой и картинок не видит.
+
+```
+curl -X PATCH http://127.0.0.1:4787/api/providers/settings   -H 'Content-Type: application/json'   -d '{"mode":"external","activeProvider":"anthropic","config":{"apiKey":"sk-ant-…","model":"claude-sonnet-4-5"}}'
+```
+
+`config` применяется к провайдеру, который становится активным; пустой `apiKey` снимает
+сохранённый ключ.
+
+API слушает 127.0.0.1 и не проверяет авторизацию. Держите его на loopback либо ставьте
+перед ним обратный прокси, прежде чем открывать в сеть.
+
 ## TODO
 
 - [ ] Instruct-шаблоны (ChatML, Alpaca, Llama 3, Mistral)
-- [ ] Мульти-провайдеры (OpenAI, Anthropic, Ollama, OpenRouter)
+- [ ] Больше провайдеров (Ollama, OpenRouter)
 - [ ] Многие другие функции
 
 ## Лицензия

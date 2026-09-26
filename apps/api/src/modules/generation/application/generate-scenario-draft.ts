@@ -4,7 +4,7 @@ import {
   GenerateScenarioDraftResponseSchema,
 } from '@immersion/contracts/generation';
 
-import { OpenAiCompatibleChatCompletionsClient } from '../infrastructure/openai-compatible-chat-completions-client.js';
+import { createChatCompletionClient } from '../infrastructure/chat-completion-client-factory.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import {
   buildGenderHint,
@@ -60,17 +60,18 @@ function buildScenarioDraftPrompt(concept: string, name: string | undefined, con
 Верни JSON-объект с такими полями:
 {
   "name": "Короткое, ёмкое название сценария",
-  "content": "Подробный текст сценария, описывающий СИТУАЦИЮ (3-5 абзацев): место действия, обстоятельства, что происходит, почему {{user}} и {{char}} здесь, какой конфликт или напряжение существует. НЕ описывай кто такой {{char}} — только что {{char}} ДЕЛАЕТ в сцене. Пример: '{{user}} заходит в старую таверну на окраине города. За стойкой {{char}} протирает бокалы, бросая настороженные взгляды на дверь...' — используй {{user}} и {{char}} буквально.",
+  "content": "Подробный текст сценария, описывающий СИТУАЦИЮ (3-5 абзацев): место действия, обстоятельства, что происходит, почему {{user}} и {{char}} здесь, какой конфликт или напряжение существует. НЕ описывай кто такой {{char}} — только что {{char}} ДЕЛАЕТ в сцене. Пример записи плейсхолдеров (иллюстрирует ТОЛЬКО формат {{user}}/{{char}}, а НЕ распределение ролей — роли всегда бери из концепции): '{{user}} заходит в старую таверну на окраине города. За стойкой {{char}} протирает бокалы, бросая настороженные взгляды на дверь...' — используй {{user}} и {{char}} буквально.",
   "firstMessage": "Вступительное сообщение сцены от лица {{char}}: действия в *звёздочках*, при желании речь. Задай сцену и пригласи {{user}} к взаимодействию. Используй {{user}} и {{char}} как буквальные плейсхолдеры.",
   "tags": ["тег1", "тег2", "тег3"]
 }
 
 ПРАВИЛА:
 1. Пиши {{user}} и {{char}} как буквальные шаблонные плейсхолдеры — они будут заменены при выполнении
-2. НИКОГДА не заменяй {{user}} или {{char}} настоящими именами, местоимениями вроде "вы/ты" или словами "пользователь/персонаж"
-3. НЕ описывай внешность, характер, предысторию или роль {{char}} — это уже есть в карточке персонажа. Описывай только что {{char}} ДЕЛАЕТ в сцене
-4. ${genderHint}Используй соответствующие русские грамматические окончания для {{user}} (например: "{{user}} подошёл" для мужского, "{{user}} подошла" для женского)
-5. ${context.languageSentence} Будь креативен и конкретен.`;
+2. КРИТИЧНО: если в концепции роли {{user}} и {{char}} уже распределены — сохрани их в точности. НЕ меняй местами, кто из них приходит/посетитель/подчинённый, а кто принимает/хозяин/старший. Если по концепции приходит {{char}}, а принимает {{user}} — так и пиши, даже если привычнее было бы наоборот
+3. НИКОГДА не заменяй {{user}} или {{char}} настоящими именами, местоимениями вроде "вы/ты" или словами "пользователь/персонаж"
+4. НЕ описывай, кто такой {{char}} — внешность, характер, предысторию (это уже есть в карточке персонажа). Описывай только что {{char}} ДЕЛАЕТ в сцене
+5. ${genderHint}Используй соответствующие русские грамматические окончания для {{user}} (например: "{{user}} подошёл" для мужского, "{{user}} подошла" для женского)
+6. ${context.languageSentence} Будь креативен и конкретен.`;
   }
 
   return `Create a detailed roleplay scenario based on this concept: ${concept}${playerContextBlock}${nameLine}
@@ -85,10 +86,11 @@ Return a JSON object with these fields:
 
 RULES:
 1. Write {{user}} and {{char}} as literal template placeholders — they will be substituted at runtime
-2. NEVER replace {{user}} or {{char}} with actual names, pronouns, or "user/character"
-3. Do NOT describe {{char}}'s appearance, personality, backstory, or role — that is already in the character card. Only describe what {{char}} is DOING in the scene
-4. ${genderHint}Use appropriate grammatical endings for {{user}}
-5. ${context.languageSentence} Be creative and specific.`;
+2. CRITICAL: if the concept already assigns roles to {{user}} and {{char}}, preserve them exactly. Do NOT swap who arrives/visits/defers and who receives/hosts/is in charge. If the concept has {{char}} arriving and {{user}} receiving, write it that way even if the reverse feels more conventional
+3. NEVER replace {{user}} or {{char}} with actual names, pronouns, or "user/character"
+4. Do NOT describe who {{char}} is — appearance, personality, backstory (that is already in the character card). Only describe what {{char}} is DOING in the scene
+5. ${genderHint}Use appropriate grammatical endings for {{user}}
+6. ${context.languageSentence} Be creative and specific.`;
 }
 
 export async function generateScenarioDraft(
@@ -96,7 +98,7 @@ export async function generateScenarioDraft(
   dependencies: GenerateScenarioDraftDependencies = {},
 ): Promise<GenerateScenarioDraftResponse> {
   const command = GenerateScenarioDraftCommandSchema.parse(input);
-  const chatCompletionClient = dependencies.chatCompletionClient ?? new OpenAiCompatibleChatCompletionsClient();
+  const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
   const context = await resolveDraftGenerationContext();
   const completion = await chatCompletionClient.completeChat({
     endpoint: context.endpoint,

@@ -80,6 +80,7 @@ export function TemplateTextarea({
           {'\n'}
         </div>
         <textarea
+          autoComplete="off"
           className="textarea tpl-field__input"
           disabled={disabled}
           id={id}

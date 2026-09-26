@@ -5,7 +5,7 @@ import {
   GenerateScenarioFirstMessageResponseSchema,
 } from '@immersion/contracts/generation';
 
-import { OpenAiCompatibleChatCompletionsClient } from '../infrastructure/openai-compatible-chat-completions-client.js';
+import { createChatCompletionClient } from '../infrastructure/chat-completion-client-factory.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import {
   buildGenderHint,
@@ -53,6 +53,7 @@ function buildScenarioFirstMessagePrompt(
     return `${contextBlock}${playerContextBlock}
 
 Напиши вступительное ролевое сообщение от лица {{char}} для этой сцены. Включи действия {{char}} (в *звёздочках*) и при желании речь. Задай сцену и пригласи к взаимодействию.
+Роли {{user}} и {{char}} бери строго из концепции и текста сцены — не меняй их местами. Если по концепции {{char}} приходит к {{user}}, то и первым говорит пришедший {{char}}, а не наоборот.
 
 ${genderHint}Используй соответствующие русские грамматические окончания. ${context.languageSentence}
 Используй {{user}} и {{char}} как буквальные плейсхолдеры — они будут заменены при выполнении.`;
@@ -65,6 +66,7 @@ ${genderHint}Используй соответствующие русские г
   return `${contextBlock}${playerContextBlock}
 
 Write an opening roleplay message from {{char}}'s perspective for this scene. Include {{char}}'s actions (in *asterisks*) and optionally speech. Set the scene and invite interaction.
+Take the {{user}} and {{char}} roles strictly from the concept and scene text — do not swap them. If the concept has {{char}} coming to {{user}}, the opening is spoken by the arriving {{char}}, not the reverse.
 
 ${genderHint}Use appropriate grammatical forms. ${context.languageSentence}
 Use {{user}} and {{char}} as literal placeholders — they will be substituted at runtime.`;
@@ -75,7 +77,7 @@ export async function generateScenarioFirstMessage(
   dependencies: GenerateScenarioFirstMessageDependencies = {},
 ): Promise<GenerateScenarioFirstMessageResponse> {
   const command = GenerateScenarioFirstMessageCommandSchema.parse(input);
-  const chatCompletionClient = dependencies.chatCompletionClient ?? new OpenAiCompatibleChatCompletionsClient();
+  const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
   const context = await resolveDraftGenerationContext();
   const completion = await chatCompletionClient.completeChat({
     endpoint: context.endpoint,

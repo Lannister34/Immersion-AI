@@ -88,6 +88,7 @@ interface SmokeUserSettingsFixture {
   activePresetId?: string;
   modelPresetMap?: Record<string, string>;
   responseLanguage?: string;
+  streamingEnabled?: boolean;
   systemPromptTemplate?: string;
   userName?: string;
   userPersona?: string;
@@ -98,6 +99,11 @@ interface SmokeUserSettingsFixture {
       url?: string;
     };
     koboldcpp?: {
+      model?: string;
+      url?: string;
+    };
+    openai?: {
+      apiKey?: string;
       model?: string;
       url?: string;
     };
@@ -452,6 +458,37 @@ describe('generation routes', () => {
     await app.close();
   });
 
+  it('blocks generation readiness when a cloud provider has no API key', async () => {
+    await writeProviderSettings({
+      activeProvider: 'openai',
+      backendMode: 'external',
+      providerConfigs: {
+        openai: {
+          model: 'gpt-4o',
+          url: 'https://api.openai.com/v1',
+        },
+      },
+    });
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/generation/readiness',
+    });
+    const payload = GenerationReadinessResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(payload).toMatchObject({
+      issue: {
+        code: 'external_provider_api_key_missing',
+        message: 'API-ключ провайдера не задан. Укажите его на странице API.',
+      },
+      mode: 'external',
+      status: 'blocked',
+    });
+
+    await app.close();
+  });
+
   it('blocks generation readiness when builtin runtime is not running', async () => {
     await writeProviderSettings({
       backendMode: 'builtin',
@@ -470,6 +507,62 @@ describe('generation routes', () => {
     expect(payload.runtime).not.toBeNull();
 
     await app.close();
+  });
+
+  it('leaves vision unknown while the built-in runtime is stopped, since there is nothing to ask', async () => {
+    await writeProviderSettings({
+      backendMode: 'builtin',
+    });
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/generation/readiness',
+    });
+    const payload = GenerationReadinessResponseSchema.parse(response.json());
+
+    expect(payload.status).toBe('blocked');
+    expect(payload.visionSupport).toBe('unknown');
+
+    await app.close();
+  });
+
+  it('reports built-in vision by the --mmproj launch recorded for the running server, not by the model file', async () => {
+    await writeProviderSettings({ backendMode: 'builtin' });
+    const modelPath = path.join(temporaryDataRoot, 'qwen-vl.gguf');
+    await fs.writeFile(modelPath, 'gguf', 'utf8');
+    const fetchSpy = vi.fn<typeof fetch>();
+    globalThis.fetch = fetchSpy;
+
+    async function leaveServerRunningFromPreviousApiProcess(mmprojPath: string | null) {
+      await fs.writeFile(
+        path.join(temporaryDataRoot, '.llm-server.json'),
+        JSON.stringify({ mmprojPath, model: 'qwen-vl.gguf', modelPath, pid: process.pid, port: 5001 }),
+        'utf8',
+      );
+    }
+
+    async function readVisionSupport() {
+      const app = buildApiApp();
+      const response = await app.inject({ method: 'GET', url: '/api/generation/readiness' });
+      const payload = GenerationReadinessResponseSchema.parse(response.json());
+      await app.close();
+
+      return payload;
+    }
+
+    await leaveServerRunningFromPreviousApiProcess(null);
+    const withoutProjector = await readVisionSupport();
+
+    expect(withoutProjector.status).toBe('ready');
+    expect(withoutProjector.visionSupport).toBe('unsupported');
+
+    await leaveServerRunningFromPreviousApiProcess(path.join(temporaryDataRoot, 'mmproj-qwen-vl.gguf'));
+    const withProjector = await readVisionSupport();
+
+    expect(withProjector.visionSupport).toBe('supported');
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    await fs.rm(path.join(temporaryDataRoot, '.llm-server.json'), { force: true });
   });
 
   it('keeps prompt preview available when builtin generation is blocked', async () => {
@@ -620,6 +713,96 @@ describe('generation routes', () => {
     await app.close();
   });
 
+  it('streams a job reply when streaming is enabled and stores the joined text', async () => {
+    const chunks = ['Пер', 'вый ', 'кусок.'];
+    const requests: ProviderRequestRecord[] = [];
+
+    globalThis.fetch = vi.fn<typeof fetch>(async (input, init) => {
+      requests.push({
+        authorization: new Headers(init?.headers).get('authorization'),
+        body: typeof init?.body === 'string' ? JSON.parse(init.body) : null,
+        url: input instanceof Request ? input.url : input.toString(),
+      });
+
+      const body = [
+        ...chunks.map((delta) => `data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`),
+        'data: [DONE]\n\n',
+      ].join('');
+
+      return new Response(body, { headers: { 'Content-Type': 'text/event-stream' }, status: 200 });
+    });
+
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: { chatId: chat.id, message: 'Расскажи что-нибудь.', mode: 'reply' },
+    });
+    const payload = StartChatReplyGenerationJobResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(202);
+
+    await waitForGenerationJobStatus(app, payload.job.id, 'completed');
+
+    expect(requests[0]?.body).toMatchObject({ stream: true });
+
+    const sessionResponse = await app.inject({ method: 'GET', url: `/api/chats/${chat.id}` });
+    const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
+
+    expect(getMessagesByRole(sessionPayload.messages)).toEqual([
+      { role: 'user', content: 'Расскажи что-нибудь.' },
+      { role: 'assistant', content: 'Первый кусок.' },
+    ]);
+
+    await app.close();
+  });
+
+  it('asks the provider for a whole reply when the profile turns streaming off', async () => {
+    await writeProviderSettings({ streamingEnabled: false });
+    const providerRequests = mockProviderSuccess('Целый ответ.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: { chatId: chat.id, message: 'Расскажи что-нибудь.', mode: 'reply' },
+    });
+    const payload = StartChatReplyGenerationJobResponseSchema.parse(response.json());
+
+    await waitForGenerationJobStatus(app, payload.job.id, 'completed');
+
+    expect(getProviderRequestBody(providerRequests[0])).toMatchObject({ stream: false });
+
+    await app.close();
+  });
+
+  it('keeps the model reasoning out of the reply and stores it beside the message', async () => {
+    mockProviderSuccess('<think>Сначала прикину тон.</think>Привет! Чем помочь?');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply',
+      payload: { chatId: chat.id, message: 'Привет.' },
+    });
+    const payload = ChatReplyGenerationResponseSchema.parse(response.json());
+    const assistantMessage = payload.session.messages.at(-1);
+
+    expect(response.statusCode).toBe(200);
+    expect(assistantMessage?.content).toBe('Привет! Чем помочь?');
+    expect(assistantMessage?.reasoning).toBe('Сначала прикину тон.');
+
+    const sessionResponse = await app.inject({ method: 'GET', url: `/api/chats/${chat.id}` });
+    const stored = GetChatSessionResponseSchema.parse(sessionResponse.json()).messages.at(-1);
+
+    expect(stored?.content).toBe('Привет! Чем помочь?');
+    expect(stored?.reasoning).toBe('Сначала прикину тон.');
+
+    await app.close();
+  });
+
   it('sends an attached image to the provider as an OpenAI image part', async () => {
     const providerRequests = mockProviderSuccess('Вижу градиент.');
     const app = buildApiApp();
@@ -660,7 +843,7 @@ describe('generation routes', () => {
     await app.close();
   });
 
-  it('calls the active provider and persists the user message with the assistant reply', async () => {
+  it('calls the active provider without streaming and persists the user message with the assistant reply', async () => {
     const providerRequests = mockProviderSuccess('Assistant reply from provider.');
     const app = buildApiApp();
     const chat = await createChat(app);
@@ -2044,6 +2227,47 @@ describe('generation routes', () => {
         content: 'Keep this while provider is offline.',
       },
     ]);
+
+    await app.close();
+  });
+
+  it('refuses a cloud provider without a key or a model before calling it', async () => {
+    const providerRequests = mockProviderSuccess('Should not be called.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+
+    await writeProviderSettings({
+      activeProvider: 'openai',
+      backendMode: 'external',
+      providerConfigs: { openai: { model: 'gpt-4o', url: 'https://api.openai.com/v1' } },
+    });
+    const withoutKey = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply',
+      payload: { chatId: chat.id, message: 'Привет.' },
+    });
+
+    expect(withoutKey.statusCode).toBe(409);
+    expect(ChatReplyGenerationErrorResponseSchema.parse(withoutKey.json())).toMatchObject({
+      code: 'generation_provider_unavailable',
+      message: expect.stringContaining('API-ключ'),
+    });
+
+    await writeProviderSettings({
+      providerConfigs: { openai: { apiKey: 'sk-test', url: 'https://api.openai.com/v1' } },
+    });
+    const withoutModel = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply',
+      payload: { chatId: chat.id, message: 'Ещё раз.' },
+    });
+
+    expect(withoutModel.statusCode).toBe(409);
+    expect(ChatReplyGenerationErrorResponseSchema.parse(withoutModel.json())).toMatchObject({
+      code: 'generation_provider_unavailable',
+      message: expect.stringContaining('Модель'),
+    });
+    expect(providerRequests).toHaveLength(0);
 
     await app.close();
   });

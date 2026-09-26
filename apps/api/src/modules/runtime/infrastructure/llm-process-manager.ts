@@ -49,6 +49,7 @@ function readLogFileTail(): string[] {
 type RuntimeLifecycleStatus = RuntimeStatusSnapshot['status'];
 
 export interface LlmStartConfig extends Omit<RuntimeConfigCommand, 'modelsDirs'> {
+  mmprojPath?: string | undefined;
   modelPath: string;
 }
 
@@ -57,6 +58,7 @@ interface PidFileData {
   port: number;
   model: string;
   modelPath: string;
+  mmprojPath?: string | null;
 }
 
 interface RuntimeBinaryLocation {
@@ -188,6 +190,7 @@ const MAX_LOG_LINES = 100;
  */
 export class LlmProcessManager {
   private childProcess: ChildProcess | null = null;
+  private visionProjectorPath: string | null = null;
   private healthPollTimer: ReturnType<typeof setInterval> | null = null;
   private startTimeout: ReturnType<typeof setTimeout> | null = null;
   private logStream: fs.WriteStream | null = null;
@@ -239,6 +242,14 @@ export class LlmProcessManager {
     };
   }
 
+  getVisionProjectorPath(): string | null {
+    if (this.getState().status !== 'running') {
+      return null;
+    }
+
+    return this.visionProjectorPath ?? readPidFile()?.mmprojPath ?? null;
+  }
+
   getLogs() {
     // Буфер живёт в памяти API. Если процесс запускала предыдущая версия API
     // (tsx watch перезапускается на каждой правке), читаем хвост файла — иначе
@@ -266,6 +277,7 @@ export class LlmProcessManager {
     }
 
     this.logBuffer.length = 0;
+    this.visionProjectorPath = config.mmprojPath ?? null;
     this.setStateStatus('starting', {
       model: path.basename(config.modelPath),
       modelPath: config.modelPath,
@@ -286,6 +298,10 @@ export class LlmProcessManager {
       '--port',
       String(config.port),
     ];
+
+    if (config.mmprojPath) {
+      args.push('--mmproj', config.mmprojPath);
+    }
 
     if (config.flashAttention) {
       args.push('-fa', 'on');
@@ -312,6 +328,7 @@ export class LlmProcessManager {
         port: config.port,
         model: this.state.model ?? path.basename(config.modelPath),
         modelPath: config.modelPath,
+        mmprojPath: config.mmprojPath ?? null,
       });
     }
 
@@ -384,6 +401,7 @@ export class LlmProcessManager {
       return;
     }
 
+    this.visionProjectorPath = pidFile.mmprojPath ?? null;
     this.setStateStatus('starting', {
       model: pidFile.model,
       modelPath: pidFile.modelPath,

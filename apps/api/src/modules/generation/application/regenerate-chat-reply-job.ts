@@ -76,10 +76,11 @@ export async function regenerateChatReplyJob(
   });
   const sessionAfterTruncate = truncatedSession;
 
-  dependencies.generationJobRegistry.runChatReplyJob(job.id, async ({ signal }) => {
+  dependencies.generationJobRegistry.runChatReplyJob(job.id, async ({ publishDelta, signal }) => {
     const response = await completeChatReplyForSession(startCommand, sessionAfterTruncate, {
       ...(dependencies.chatCompletionClient ? { chatCompletionClient: dependencies.chatCompletionClient } : {}),
       now,
+      onDelta: publishDelta,
       signal,
     });
 

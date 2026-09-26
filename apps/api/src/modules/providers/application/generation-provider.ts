@@ -1,4 +1,7 @@
+import type { ProviderApiKind } from '@immersion/contracts/providers';
 import { z } from 'zod';
+import { getProviderApiKind } from '../domain/provider-catalog.js';
+import { findCloudProviderReadinessIssue, resolveProviderModel } from '../domain/provider-readiness.js';
 import { DEFAULT_OPENAI_COMPATIBLE_MODEL } from '../domain/provider-settings.js';
 import { runtimeEndpointAdapter } from '../infrastructure/runtime-endpoint-adapter.js';
 import { getProviderSettings } from './get-provider-settings.js';
@@ -13,6 +16,7 @@ export class GenerationProviderUnavailableError extends Error {
 
 export interface GenerationProviderEndpoint {
   apiKey: string | null;
+  apiKind: ProviderApiKind;
   baseUrl: string;
   model: string;
 }
@@ -41,10 +45,18 @@ export function normalizeGenerationProviderBaseUrl(value: string) {
   }
 }
 
-export function resolveChatCompletionsUrl(endpoint: GenerationProviderEndpoint) {
-  const normalized = normalizeGenerationProviderBaseUrl(endpoint.baseUrl);
+export function resolveVersionedUrl(baseUrl: string, path: string): string {
+  const normalized = normalizeGenerationProviderBaseUrl(baseUrl);
 
-  return normalized.endsWith('/v1') ? `${normalized}/chat/completions` : `${normalized}/v1/chat/completions`;
+  return normalized.endsWith('/v1') ? `${normalized}/${path}` : `${normalized}/v1/${path}`;
+}
+
+export function resolveChatCompletionsUrl(endpoint: GenerationProviderEndpoint) {
+  return resolveVersionedUrl(endpoint.baseUrl, 'chat/completions');
+}
+
+export function resolveAnthropicMessagesUrl(endpoint: GenerationProviderEndpoint) {
+  return resolveVersionedUrl(endpoint.baseUrl, 'messages');
 }
 
 export async function resolveGenerationProviderEndpoint(
@@ -61,6 +73,7 @@ export async function resolveGenerationProviderEndpoint(
 
     return {
       apiKey: null,
+      apiKind: 'openai-compatible',
       baseUrl: runtimeEndpoint.baseUrl,
       model: runtimeEndpoint.model?.trim() || DEFAULT_OPENAI_COMPATIBLE_MODEL,
     };
@@ -75,9 +88,23 @@ export async function resolveGenerationProviderEndpoint(
     })
     .parse(config);
 
+  const provider = settings.activeProvider;
+  const issue = findCloudProviderReadinessIssue(provider, config);
+
+  if (issue) {
+    throw new GenerationProviderUnavailableError(issue.message);
+  }
+
+  const model = resolveProviderModel(provider, config);
+
+  if (!model) {
+    throw new Error(`Provider ${provider} passed the readiness rule without a model.`);
+  }
+
   return {
-    apiKey: parsedConfig.apiKey ?? null,
+    apiKey: parsedConfig.apiKey?.trim() || null,
+    apiKind: getProviderApiKind(provider),
     baseUrl: parsedConfig.url,
-    model: parsedConfig.model?.trim() || DEFAULT_OPENAI_COMPATIBLE_MODEL,
+    model,
   };
 }

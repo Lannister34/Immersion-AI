@@ -12,7 +12,6 @@ const settings: SettingsOverviewResponse = {
     systemPromptTemplate: '',
     thinkingEnabled: true,
     messageFormatting: { actionsItalic: true, quotesHighlighted: false },
-    uiLanguage: 'ru',
     userName: 'Tester',
     userPersona: '',
   },
@@ -89,6 +88,7 @@ function userMessage(id: string, content: string): ChatSessionDto['messages'][nu
     content,
     createdAt: '2026-01-01T00:00:00.000Z',
     id,
+    reasoning: null,
     role: 'user',
   };
 }

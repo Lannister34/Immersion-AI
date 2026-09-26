@@ -14,7 +14,6 @@ interface ProfileFormState {
   userName: string;
   userPersona: string;
   systemPromptTemplate: string;
-  uiLanguage: 'ru' | 'en';
   responseLanguage: 'ru' | 'en' | 'none';
   streamingEnabled: boolean;
   thinkingEnabled: boolean;
@@ -27,7 +26,6 @@ function profileToFormState(profile: SettingsOverviewResponse['profile']): Profi
     userName: profile.userName,
     userPersona: profile.userPersona,
     systemPromptTemplate: profile.systemPromptTemplate,
-    uiLanguage: profile.uiLanguage,
     responseLanguage: profile.responseLanguage,
     streamingEnabled: profile.streamingEnabled,
     thinkingEnabled: profile.thinkingEnabled,
@@ -41,7 +39,6 @@ function profileFormsEqual(left: ProfileFormState, right: ProfileFormState): boo
     left.userName === right.userName &&
     left.userPersona === right.userPersona &&
     left.systemPromptTemplate === right.systemPromptTemplate &&
-    left.uiLanguage === right.uiLanguage &&
     left.responseLanguage === right.responseLanguage &&
     left.streamingEnabled === right.streamingEnabled &&
     left.thinkingEnabled === right.thinkingEnabled &&
@@ -55,7 +52,6 @@ function profileFormToCommand(form: ProfileFormState): UpdateSettingsProfileComm
     userName: form.userName.trim(),
     userPersona: form.userPersona,
     systemPromptTemplate: form.systemPromptTemplate,
-    uiLanguage: form.uiLanguage,
     responseLanguage: form.responseLanguage,
     streamingEnabled: form.streamingEnabled,
     thinkingEnabled: form.thinkingEnabled,
@@ -150,18 +146,6 @@ export function ProfileCard({ data }: ProfileCardProps) {
         </div>
         <div className="divider" />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div className="field">
-            <label htmlFor="profile-ui-language">Язык интерфейса</label>
-            <select
-              className="input"
-              id="profile-ui-language"
-              onChange={(event) => setField('uiLanguage', event.currentTarget.value as ProfileFormState['uiLanguage'])}
-              value={form.uiLanguage}
-            >
-              <option value="ru">RU</option>
-              <option value="en">EN</option>
-            </select>
-          </div>
           <div className="field">
             <label htmlFor="profile-response-language">Язык ответа модели</label>
             <select

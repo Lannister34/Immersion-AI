@@ -33,7 +33,6 @@ describe('settings profile routes', () => {
         userName: 'Old',
         userPersona: 'Old persona',
         systemPromptTemplate: '',
-        uiLanguage: 'ru',
         responseLanguage: 'ru',
         streamingEnabled: true,
         thinkingEnabled: true,
@@ -50,7 +49,6 @@ describe('settings profile routes', () => {
         userName: '  New name  ',
         userPersona: 'New persona description',
         systemPromptTemplate: 'Reply as {{char}}.',
-        uiLanguage: 'en',
         responseLanguage: 'en',
         streamingEnabled: false,
         thinkingEnabled: false,
@@ -63,7 +61,6 @@ describe('settings profile routes', () => {
     expect(putPayload.profile.userName).toBe('New name');
     expect(putPayload.profile.userPersona).toBe('New persona description');
     expect(putPayload.profile.systemPromptTemplate).toBe('Reply as {{char}}.');
-    expect(putPayload.profile.uiLanguage).toBe('en');
     expect(putPayload.profile.responseLanguage).toBe('en');
     expect(putPayload.profile.streamingEnabled).toBe(false);
     expect(putPayload.profile.thinkingEnabled).toBe(false);
@@ -72,7 +69,6 @@ describe('settings profile routes', () => {
     const overview = SettingsOverviewResponseSchema.parse(overviewResponse.json());
     expect(overview.profile.userName).toBe('New name');
     expect(overview.profile.userPersona).toBe('New persona description');
-    expect(overview.profile.uiLanguage).toBe('en');
 
     const persisted = JSON.parse(
       await fs.readFile(path.join(temporaryDataRoot, 'user-settings.json'), 'utf8'),
@@ -116,7 +112,6 @@ describe('settings profile routes', () => {
         userName: 'Renamed',
         userPersona: '',
         systemPromptTemplate: '',
-        uiLanguage: 'ru',
         responseLanguage: 'ru',
         streamingEnabled: true,
         thinkingEnabled: true,
@@ -145,7 +140,6 @@ describe('settings profile routes', () => {
         userName: '   ',
         userPersona: '',
         systemPromptTemplate: '',
-        uiLanguage: 'ru',
         responseLanguage: 'ru',
         streamingEnabled: true,
         thinkingEnabled: true,

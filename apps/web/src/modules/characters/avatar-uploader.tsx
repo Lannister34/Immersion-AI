@@ -9,6 +9,7 @@ import { TrashIcon } from '../../shared/ui/icons';
 import { deleteCharacterAvatar, uploadCharacterAvatar } from './api/character-avatar';
 import { characterDetailQueryKey } from './queries/character-detail-query';
 import { characterListQueryKey } from './queries/character-list-query';
+import { findFirstImageFile } from './view-models/clipboard-image';
 
 const MAX_AVATAR_BYTES = 8 * 1024 * 1024;
 
@@ -94,6 +95,9 @@ export function CharacterAvatarUploader({
     uploadMutation.mutate(file);
   };
 
+  const submitFileRef = useRef(submitFile);
+  submitFileRef.current = submitFile;
+
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = '';
@@ -110,6 +114,21 @@ export function CharacterAvatarUploader({
   const handleDragLeave = () => {
     setDragActive(false);
   };
+
+  useEffect(() => {
+    const submitPastedImage = (event: ClipboardEvent) => {
+      const file = findFirstImageFile(event.clipboardData?.files ?? []);
+
+      if (file) {
+        event.preventDefault();
+        submitFileRef.current(file);
+      }
+    };
+
+    document.addEventListener('paste', submitPastedImage);
+
+    return () => document.removeEventListener('paste', submitPastedImage);
+  }, []);
 
   const handleDrop = (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
@@ -168,7 +187,7 @@ export function CharacterAvatarUploader({
       <div className="muted" style={{ fontSize: 'var(--fz-2xs)', marginTop: 8 }}>
         {isUnsaved && pendingFile
           ? 'Аватар загрузится вместе с карточкой.'
-          : 'Нажмите на квадрат или перетащите файл — PNG, JPEG или WebP до 8 МБ.'}
+          : 'Нажмите на квадрат, перетащите файл или вставьте из буфера — PNG, JPEG или WebP до 8 МБ.'}
       </div>
       {isUnsaved && pendingFile ? (
         <button

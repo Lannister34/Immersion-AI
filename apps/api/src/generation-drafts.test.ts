@@ -12,6 +12,7 @@ import {
   GenerateScenarioFirstMessageResponseSchema,
 } from '@immersion/contracts/generation';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import { buildApiApp } from './app.js';
 
@@ -167,6 +168,13 @@ describe('generation draft routes', () => {
       ),
       'utf8',
     );
+  }
+
+  async function writeResponseLanguage(responseLanguage: string) {
+    const settingsPath = path.join(temporaryDataRoot, 'user-settings.json');
+    const settings = z.record(z.string(), z.unknown()).parse(JSON.parse(await fs.readFile(settingsPath, 'utf8')));
+
+    await fs.writeFile(settingsPath, JSON.stringify({ ...settings, responseLanguage }, null, 2), 'utf8');
   }
 
   function getProviderRequestBody(request: ProviderRequestRecord | undefined): ProviderRequestBodyRecord {
@@ -680,6 +688,41 @@ describe('generation draft routes', () => {
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({ code: 'generation_provider_unavailable' });
       expect(providerRequests).toHaveLength(0);
+
+      await app.close();
+    });
+  });
+
+  describe('scenario prompts and the roles a concept assigns', () => {
+    it.each([
+      [
+        'ru',
+        'сохрани их в точности. НЕ меняй местами',
+        'бери строго из концепции и текста сцены — не меняй их местами',
+      ],
+      ['en', 'preserve them exactly. Do NOT swap', 'strictly from the concept and scene text — do not swap them'],
+    ])('tell the model in %s not to swap {{user}} and {{char}}', async (language, draftRule, greetingRule) => {
+      await writeResponseLanguage(language);
+      const app = buildApiApp();
+      const concept = '{{char}} приходит на приём к {{user}}';
+
+      const draftRequests = mockProviderSuccess(fenced({ name: 'Приём', content: '{{char}} входит.', tags: [] }));
+      const draftResponse = await app.inject({ method: 'POST', url: '/api/generation/scenario', payload: { concept } });
+      const greetingRequests = mockProviderSuccess('*{{char}} стучит в дверь.*');
+      const greetingResponse = await app.inject({
+        method: 'POST',
+        url: '/api/generation/scenario-first-message',
+        payload: { concept },
+      });
+
+      expect(draftResponse.statusCode).toBe(200);
+      expect(greetingResponse.statusCode).toBe(200);
+      const submitted = (requests: ProviderRequestRecord[]) =>
+        getProviderRequestBody(requests[0])
+          .messages?.map((message) => message.content)
+          .join('\n') ?? '';
+      expect(submitted(draftRequests)).toContain(draftRule);
+      expect(submitted(greetingRequests)).toContain(greetingRule);
 
       await app.close();
     });

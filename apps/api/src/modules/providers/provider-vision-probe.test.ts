@@ -77,6 +77,24 @@ describe('ProviderVisionProbe', () => {
     await expect(probe.getVisionSupport(TARGET)).resolves.toBe('unknown');
   });
 
+  it('answers for cloud providers by model name, without asking them', async () => {
+    const calls: string[] = [];
+    const probe = buildProbe({}, calls);
+    const anthropic = { baseUrl: 'https://api.anthropic.com/v1', provider: 'anthropic' as const };
+    const openai = { baseUrl: 'https://api.openai.com/v1', provider: 'openai' as const };
+
+    await expect(probe.getVisionSupport({ ...anthropic, model: 'claude-sonnet-4-5' })).resolves.toBe('supported');
+    await expect(probe.getVisionSupport({ ...openai, model: 'gpt-4o' })).resolves.toBe('supported');
+    await expect(probe.getVisionSupport({ ...openai, model: 'gpt-3.5-turbo' })).resolves.toBe('unsupported');
+    expect(calls).toEqual([]);
+  });
+
+  it('still probes the server when the provider is a local OpenAI-compatible one', async () => {
+    const probe = buildProbe({ 'http://127.0.0.1:5001/props': { modalities: { vision: true } } });
+
+    await expect(probe.getVisionSupport({ ...TARGET, provider: 'custom' })).resolves.toBe('supported');
+  });
+
   it('caches a known answer instead of probing on every readiness poll', async () => {
     const calls: string[] = [];
     const probe = buildProbe({ 'http://127.0.0.1:5001/props': { modalities: { vision: true } } }, calls);
@@ -85,6 +103,27 @@ describe('ProviderVisionProbe', () => {
     await probe.getVisionSupport(TARGET);
 
     expect(calls).toEqual(['http://127.0.0.1:5001/props']);
+  });
+
+  it('asks again once a known answer is a minute old, since a foreign server can be restarted with other flags', async () => {
+    const calls: string[] = [];
+    let nowMs = 0;
+    const probe = new ProviderVisionProbe({
+      fetchJson: async (url) => {
+        calls.push(url);
+
+        return { modalities: { vision: true } };
+      },
+      now: () => nowMs,
+    });
+
+    await probe.getVisionSupport(TARGET);
+    nowMs = 59_999;
+    await probe.getVisionSupport(TARGET);
+    nowMs = 60_000;
+    await probe.getVisionSupport(TARGET);
+
+    expect(calls).toEqual(['http://127.0.0.1:5001/props', 'http://127.0.0.1:5001/props']);
   });
 
   it('probes again for another model on the same endpoint', async () => {

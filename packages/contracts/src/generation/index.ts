@@ -21,6 +21,8 @@ export const GenerationReadinessIssueCodeSchema = z.enum([
   'builtin_runtime_not_running',
   'builtin_runtime_starting',
   'builtin_runtime_stopping',
+  'external_provider_api_key_missing',
+  'external_provider_model_missing',
   'external_provider_url_invalid',
   'external_provider_url_missing',
 ]);
@@ -380,7 +382,16 @@ export const GenerationJobResponseSchema = z.object({
 });
 export type GenerationJobResponse = z.infer<typeof GenerationJobResponseSchema>;
 
+export const ReplyChannelSchema = z.enum(['reasoning', 'reply']);
+export type ReplyChannel = z.infer<typeof ReplyChannelSchema>;
+
 export const GenerationJobEventSchema = z.discriminatedUnion('type', [
+  z.object({
+    channel: ReplyChannelSchema,
+    delta: z.string(),
+    job: GenerationJobDtoSchema,
+    type: z.literal('chat.reply.delta'),
+  }),
   z.object({
     job: GenerationJobDtoSchema,
     type: z.literal('generation.job.snapshot'),

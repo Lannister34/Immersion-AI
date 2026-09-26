@@ -12,6 +12,10 @@ export async function startRuntime(input: unknown) {
     throw new Error(`Model not found: ${command.modelPath}`);
   }
 
+  if (command.mmprojPath && !fs.existsSync(command.mmprojPath)) {
+    throw new Error(`Multimodal projector not found: ${command.mmprojPath}`);
+  }
+
   const manager = getLlmProcessManager();
   const engine = manager.getEngineInfo();
 
