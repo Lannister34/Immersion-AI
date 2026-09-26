@@ -621,7 +621,8 @@ function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFo
             </datalist>
             {availableModels.length > 0 ? (
               <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-                Провайдер вернул {availableModels.length} моделей — они подсказываются в поле.
+                Провайдер вернул {pluralRu(availableModels.length, ['модель', 'модели', 'моделей'])} — они
+                подсказываются в поле.
               </span>
             ) : null}
           </div>

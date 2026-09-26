@@ -285,6 +285,7 @@ test('drops the fetched model list when another provider is selected', async ({ 
   await page.locator('#provider-type').selectOption('custom');
   await page.getByRole('button', { name: 'Список моделей' }).click();
   await expect(page.locator('#provider-models option')).toHaveCount(2);
+  await expect(page.getByText('Провайдер вернул 2 модели — они подсказываются в поле.')).toBeVisible();
 
   await page.locator('#provider-type').selectOption('koboldcpp');
   await expect(page.locator('#provider-models option')).toHaveCount(0);
