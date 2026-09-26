@@ -9,6 +9,7 @@ import { TrashIcon } from '../../shared/ui/icons';
 import { deleteCharacterAvatar, uploadCharacterAvatar } from './api/character-avatar';
 import { characterDetailQueryKey } from './queries/character-detail-query';
 import { characterListQueryKey } from './queries/character-list-query';
+import { findFirstImageFile } from './view-models/clipboard-image';
 
 const MAX_AVATAR_BYTES = 8 * 1024 * 1024;
 
@@ -116,9 +117,7 @@ export function CharacterAvatarUploader({
 
   useEffect(() => {
     const submitPastedImage = (event: ClipboardEvent) => {
-      const file = Array.from(event.clipboardData?.files ?? []).find((candidate) =>
-        candidate.type.startsWith('image/'),
-      );
+      const file = findFirstImageFile(event.clipboardData?.files ?? []);
 
       if (file) {
         event.preventDefault();

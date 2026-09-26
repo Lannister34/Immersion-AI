@@ -9,6 +9,7 @@ import {
   useSetActiveSamplerPreset,
   useUpdateSamplerPreset,
 } from '../mutations/use-sampler-preset-mutations';
+import { DEFAULT_SAMPLER_VALUES, resetSamplerToDefaults } from '../view-models/sampler-defaults';
 import { NumberField } from './number-field';
 
 export interface SamplerCardProps {
@@ -32,19 +33,6 @@ function presetToForm(preset: SettingsOverviewResponse['sampler']['presets'][num
     topP: preset.topP,
   };
 }
-
-const DEFAULT_SAMPLER_VALUES = {
-  contextTrimStrategy: 'trim_middle',
-  maxContextLength: 8192,
-  maxTokens: 600,
-  minP: 0.02,
-  presencePenalty: 0,
-  repeatPenalty: 1.05,
-  repeatPenaltyRange: 2048,
-  temperature: 1,
-  topK: 0,
-  topP: 1,
-} satisfies Omit<SamplerFormState, 'name'>;
 
 function emptyForm(): SamplerFormState {
   return {
@@ -355,7 +343,7 @@ export function SamplerCard({ data }: SamplerCardProps) {
             <button
               className="btn btn--xs"
               disabled={createMutation.isPending || updateMutation.isPending}
-              onClick={() => setForm((current) => ({ ...DEFAULT_SAMPLER_VALUES, name: current.name }))}
+              onClick={() => setForm(resetSamplerToDefaults)}
               title="Вернуть параметры к значениям по умолчанию; название остаётся"
               type="button"
             >

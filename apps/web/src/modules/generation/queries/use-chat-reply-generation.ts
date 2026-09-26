@@ -1,7 +1,7 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 import type { ListGenerationJobsResponse, StartChatReplyGenerationJobResponse } from '@immersion/contracts/generation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useReducer } from 'react';
 import { chatListQueryKey } from '../../chats/queries/chat-list-query';
 import { chatSessionQueryKey } from '../../chats/queries/chat-session-query';
 import { appendOptimisticUserMessage } from '../../chats/view-models/optimistic-chat-session';
@@ -13,6 +13,7 @@ import {
   isActiveGenerationJob,
   upsertGenerationJob,
 } from '../view-models/generation-job-state';
+import { EMPTY_STREAMED_REPLY, reduceStreamedReply } from '../view-models/streamed-reply';
 import { chatReplyPromptPreviewQueryBaseKey } from './chat-reply-prompt-preview-query';
 import { chatGenerationJobsQueryKey, chatGenerationJobsQueryOptions } from './generation-jobs-query';
 import { generationReadinessQueryKey } from './generation-readiness-query';
@@ -35,21 +36,14 @@ function createOptimisticMessageId() {
 
 export function useChatReplyGeneration(chatId: string) {
   const queryClient = useQueryClient();
-  const [streamedReply, setStreamedReply] = useState('');
-  const [streamedReasoning, setStreamedReasoning] = useState('');
+  const [streamed, dispatchStreamed] = useReducer(reduceStreamedReply, EMPTY_STREAMED_REPLY);
   const generationJobsQuery = useQuery(chatGenerationJobsQueryOptions(chatId));
   const latestGenerationJob = getLatestGenerationJob(generationJobsQuery.data?.items);
   const activeGenerationJob = generationJobsQuery.data?.items.find(isActiveGenerationJob);
 
   useGenerationJobEvents(chatId, activeGenerationJob?.id, {
-    onReplyDelta: (delta, channel) => {
-      const append = channel === 'reasoning' ? setStreamedReasoning : setStreamedReply;
-      append((current) => current + delta);
-    },
-    onReplyFinished: () => {
-      setStreamedReply('');
-      setStreamedReasoning('');
-    },
+    onReplyDelta: (delta, channel) => dispatchStreamed({ channel, delta, type: 'delta' }),
+    onReplyFinished: () => dispatchStreamed({ type: 'finished' }),
   });
 
   const applyStartedJob = async (response: StartChatReplyGenerationJobResponse) => {
@@ -161,8 +155,8 @@ export function useChatReplyGeneration(chatId: string) {
 
   return {
     activeJob: activeGenerationJob,
-    streamedReasoning: activeGenerationJob ? streamedReasoning : '',
-    streamedReply: activeGenerationJob ? streamedReply : '',
+    streamedReasoning: activeGenerationJob ? streamed.reasoning : '',
+    streamedReply: activeGenerationJob ? streamed.reply : '',
     answerLast: () => answerGenerationMutation.mutateAsync(),
     cancel: () => {
       if (activeGenerationJob) {
