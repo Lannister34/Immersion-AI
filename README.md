@@ -49,12 +49,14 @@ curl http://127.0.0.1:4787/v1/chat/completions   -H 'Content-Type: application/j
 
 The request carries the whole conversation: nothing is written to your chats. Sampler values
 come from the active preset unless the request overrides `temperature`, `top_p`,
-`presence_penalty` or `max_tokens`; `model` is passed to the provider as-is. Streaming and
-image parts work.
+`presence_penalty` or `max_tokens`. `model` is passed to the provider as-is, except that an
+empty name and the placeholders `default`, `immersion`, `immersion-ai`, `gpt-3.5-turbo` and
+`gpt-4` select the model Immersion is configured with. Streaming and image parts work.
 
-Fields outside the OpenAI contract — `enable_thinking`, `chat_template_kwargs`, `seed`,
-`stop` — are forwarded to local OpenAI-compatible servers unchanged; the OpenAI and
-Anthropic clouds reject unknown fields, so they are dropped there. Tool calls and `n > 1`
+Other fields — OpenAI's own `seed` and `stop` as well as server extensions such as
+`enable_thinking` and `chat_template_kwargs` — are forwarded unchanged to local
+OpenAI-compatible servers only. The OpenAI and Anthropic clouds receive none of them, since
+those APIs reject extension fields they do not know. Tool calls and `n > 1`
 are reported as errors instead of being silently ignored. When a reasoning model spends the
 whole budget on thinking, the answer comes back with `finish_reason: "length"` and the
 thinking in `reasoning_content`, not as an error.
@@ -148,11 +150,14 @@ curl http://127.0.0.1:4787/v1/chat/completions   -H 'Content-Type: application/j
 
 Вся история приходит в запросе, в ваши чаты ничего не пишется. Параметры сэмплера берутся
 из активного пресета, если запрос не задал `temperature`, `top_p`, `presence_penalty` или
-`max_tokens`; `model` уходит провайдеру как есть. Стриминг и картинки работают.
+`max_tokens`. `model` уходит провайдеру как есть, но пустое имя и заглушки `default`,
+`immersion`, `immersion-ai`, `gpt-3.5-turbo` и `gpt-4` заменяются моделью из настроек
+Immersion. Стриминг и картинки работают.
 
-Поля вне контракта OpenAI — `enable_thinking`, `chat_template_kwargs`, `seed`, `stop` —
-уходят локальным OpenAI-совместимым серверам без изменений; облака OpenAI и Anthropic
-отвечают 400 на незнакомое, поэтому им такие поля не отправляются. Вызов инструментов и
+Остальные поля — собственные поля OpenAI `seed` и `stop`, а также расширения серверов вроде
+`enable_thinking` и `chat_template_kwargs` — уходят без изменений только локальным
+OpenAI-совместимым серверам. Облакам OpenAI и Anthropic они не отправляются: эти API
+отвечают 400 на незнакомые поля-расширения. Вызов инструментов и
 `n > 1` возвращают ошибку, а не молчаливую подмену. Если модель-рассуждатель потратила весь
 лимит на размышления, ответ приходит с `finish_reason: "length"` и мыслями в
 `reasoning_content` — это не ошибка.
