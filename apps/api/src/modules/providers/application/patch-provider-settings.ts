@@ -32,20 +32,19 @@ function mergeConfig(current: ProviderConfig, patch: PatchProviderSettingsComman
 
 export async function patchProviderSettings(input: unknown, repository = new ProviderSettingsRepository()) {
   const command = PatchProviderSettingsCommandSchema.parse(input);
-  const current = await repository.read();
-  const activeProvider = command.activeProvider ?? current.activeProvider;
-  const currentConfig = current.providerConfigs[activeProvider] ?? createDefaultProviderConfig(activeProvider);
+  const updated = await repository.update((current) => {
+    const activeProvider = command.activeProvider ?? current.activeProvider;
+    const currentConfig = current.providerConfigs[activeProvider] ?? createDefaultProviderConfig(activeProvider);
 
-  const next = UpdateProviderSettingsCommandSchema.parse({
-    activeProvider,
-    mode: command.mode ?? current.mode,
-    providerConfigs: {
-      ...current.providerConfigs,
-      [activeProvider]: mergeConfig(currentConfig, command.config),
-    },
+    return UpdateProviderSettingsCommandSchema.parse({
+      activeProvider,
+      mode: command.mode ?? current.mode,
+      providerConfigs: {
+        ...current.providerConfigs,
+        [activeProvider]: mergeConfig(currentConfig, command.config),
+      },
+    });
   });
 
-  await repository.write(next);
-
-  return toProviderSettingsSnapshot(await repository.read());
+  return toProviderSettingsSnapshot(updated);
 }

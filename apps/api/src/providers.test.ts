@@ -461,6 +461,28 @@ describe('provider settings routes', () => {
     await app.close();
   });
 
+  it('keeps both of two concurrent patches that change different fields', async () => {
+    await writeUserSettings({
+      backendMode: 'external',
+      activeProvider: 'custom',
+      providerConfigs: { custom: { url: 'http://127.0.0.1:6001', model: 'old-model' } },
+    });
+    const app = buildApiApp();
+
+    const responses = await Promise.all([
+      app.inject({ method: 'PATCH', url: '/api/providers/settings', payload: { config: { model: 'model-A' } } }),
+      app.inject({ method: 'PATCH', url: '/api/providers/settings', payload: { config: { apiKey: 'sk-B' } } }),
+    ]);
+    const stored: unknown = JSON.parse(await fs.readFile(path.join(dataRoot, 'user-settings.json'), 'utf8'));
+
+    expect(responses.map((response) => response.statusCode)).toEqual([200, 200]);
+    expect(stored).toMatchObject({
+      providerConfigs: { custom: { apiKey: 'sk-B', model: 'model-A', url: 'http://127.0.0.1:6001' } },
+    });
+
+    await app.close();
+  });
+
   it('switches the provider, applies the config to the one that becomes active and leaves the previous one untouched', async () => {
     await writeUserSettings({
       backendMode: 'builtin',
