@@ -18,6 +18,17 @@ interface CapturedProviderRequest {
 
 const JsonObjectSchema = z.record(z.string(), z.unknown());
 const ProviderMessagesSchema = z.array(z.looseObject({ content: z.unknown(), role: z.string() }));
+const StreamChunkSchema = z.looseObject({
+  choices: z.array(
+    z.looseObject({
+      delta: z.looseObject({
+        content: z.string().optional(),
+        reasoning_content: z.string().optional(),
+        role: z.string().optional(),
+      }),
+    }),
+  ),
+});
 
 function messagesOf(request: CapturedProviderRequest | undefined) {
   return ProviderMessagesSchema.parse(request?.body.messages ?? []);
@@ -410,6 +421,29 @@ describe('OpenAI-compatible endpoint', () => {
     expect(chunks.map((chunk) => chunk.choices[0].delta.reasoning_content ?? '').join('')).toBe('Всё ушло сюда');
     expect(chunks.map((chunk) => chunk.choices[0].delta.content ?? '').join('')).toBe('');
     expect(chunks.at(-1).choices[0].finish_reason).toBe('length');
+
+    await app.close();
+  });
+
+  it('streams the reasoning of a provider that answered the stream request with plain JSON', async () => {
+    mockProvider(JSON.stringify({ choices: [{ message: { content: '<think>Взвешиваю</think>Ответ.' } }] }));
+    const app = buildApiApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      payload: { messages: [{ content: 'Привет.', role: 'user' }], stream: true },
+      url: '/v1/chat/completions',
+    });
+    const deltas = dataLinesOf(response.body)
+      .filter((line) => line !== '[DONE]')
+      .map((line) => StreamChunkSchema.parse(JSON.parse(line)).choices[0]?.delta);
+
+    expect(deltas).toEqual([
+      { content: '', role: 'assistant' },
+      { reasoning_content: 'Взвешиваю' },
+      { content: 'Ответ.' },
+      {},
+    ]);
 
     await app.close();
   });

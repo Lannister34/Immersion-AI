@@ -230,6 +230,10 @@ export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
 
       ensureStream(result.model);
 
+      if (deltaCount === 0 && result.reasoning) {
+        writeChunk(result.model, { reasoning_content: result.reasoning });
+      }
+
       if (deltaCount === 0 && result.content) {
         writeChunk(result.model, { content: result.content });
       }
