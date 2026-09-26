@@ -1,5 +1,5 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
-import type { GenerationJobDto, ListGenerationJobsResponse } from '@immersion/contracts/generation';
+import type { GenerationJobDto, ListGenerationJobsResponse, ReplyChannel } from '@immersion/contracts/generation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
@@ -11,7 +11,7 @@ import { chatReplyPromptPreviewQueryBaseKey } from './chat-reply-prompt-preview-
 import { chatGenerationJobsQueryKey } from './generation-jobs-query';
 
 export interface GenerationJobEventHandlers {
-  onReplyDelta?: (delta: string, channel: 'reasoning' | 'reply') => void;
+  onReplyDelta?: (delta: string, channel: ReplyChannel) => void;
   onReplyFinished?: () => void;
 }
 

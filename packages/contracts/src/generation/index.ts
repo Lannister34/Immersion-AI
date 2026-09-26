@@ -382,9 +382,12 @@ export const GenerationJobResponseSchema = z.object({
 });
 export type GenerationJobResponse = z.infer<typeof GenerationJobResponseSchema>;
 
+export const ReplyChannelSchema = z.enum(['reasoning', 'reply']);
+export type ReplyChannel = z.infer<typeof ReplyChannelSchema>;
+
 export const GenerationJobEventSchema = z.discriminatedUnion('type', [
   z.object({
-    channel: z.enum(['reasoning', 'reply']),
+    channel: ReplyChannelSchema,
     delta: z.string(),
     job: GenerationJobDtoSchema,
     type: z.literal('chat.reply.delta'),
