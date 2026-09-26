@@ -12,6 +12,7 @@ import {
   GenerateScenarioFirstMessageResponseSchema,
 } from '@immersion/contracts/generation';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import { buildApiApp } from './app.js';
 
@@ -171,7 +172,7 @@ describe('generation draft routes', () => {
 
   async function writeResponseLanguage(responseLanguage: string) {
     const settingsPath = path.join(temporaryDataRoot, 'user-settings.json');
-    const settings = JSON.parse(await fs.readFile(settingsPath, 'utf8')) as SmokeUserSettingsFixture;
+    const settings = z.record(z.string(), z.unknown()).parse(JSON.parse(await fs.readFile(settingsPath, 'utf8')));
 
     await fs.writeFile(settingsPath, JSON.stringify({ ...settings, responseLanguage }, null, 2), 'utf8');
   }

@@ -745,7 +745,7 @@ describe('generation routes', () => {
 
     await waitForGenerationJobStatus(app, payload.job.id, 'completed');
 
-    expect((requests[0]?.body as { stream: boolean }).stream).toBe(true);
+    expect(requests[0]?.body).toMatchObject({ stream: true });
 
     const sessionResponse = await app.inject({ method: 'GET', url: `/api/chats/${chat.id}` });
     const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());

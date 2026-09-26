@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { z } from 'zod';
 
 import { buildApiApp } from './app.js';
 
@@ -15,8 +16,11 @@ interface CapturedProviderRequest {
   url: string;
 }
 
+const JsonObjectSchema = z.record(z.string(), z.unknown());
+const ProviderMessagesSchema = z.array(z.looseObject({ content: z.unknown(), role: z.string() }));
+
 function messagesOf(request: CapturedProviderRequest | undefined) {
-  return (request?.body.messages ?? []) as Array<{ content: unknown; role: string }>;
+  return ProviderMessagesSchema.parse(request?.body.messages ?? []);
 }
 
 describe('OpenAI-compatible endpoint', () => {
@@ -31,7 +35,7 @@ describe('OpenAI-compatible endpoint', () => {
     process.env.IMMERSION_DATA_ROOT = temporaryDataRoot;
 
     const settingsPath = path.join(temporaryDataRoot, 'user-settings.json');
-    const settings = JSON.parse(await fs.readFile(settingsPath, 'utf8')) as Record<string, unknown>;
+    const settings = JsonObjectSchema.parse(JSON.parse(await fs.readFile(settingsPath, 'utf8')));
     settings.backendMode = 'external';
     settings.activeProvider = 'custom';
     settings.providerConfigs = { custom: { model: 'fixture-model', url: 'http://127.0.0.1:6007' } };
@@ -56,7 +60,7 @@ describe('OpenAI-compatible endpoint', () => {
 
     globalThis.fetch = vi.fn<typeof fetch>(async (input, init) => {
       requests.push({
-        body: typeof init?.body === 'string' ? JSON.parse(init.body) : {},
+        body: typeof init?.body === 'string' ? JsonObjectSchema.parse(JSON.parse(init.body)) : {},
         url: input instanceof Request ? input.url : input.toString(),
       });
 
@@ -72,7 +76,7 @@ describe('OpenAI-compatible endpoint', () => {
 
   async function updateSettings(patch: Record<string, unknown>) {
     const settingsPath = path.join(temporaryDataRoot, 'user-settings.json');
-    const settings = JSON.parse(await fs.readFile(settingsPath, 'utf8')) as Record<string, unknown>;
+    const settings = JsonObjectSchema.parse(JSON.parse(await fs.readFile(settingsPath, 'utf8')));
     await fs.writeFile(settingsPath, JSON.stringify({ ...settings, ...patch }, null, 2), 'utf8');
   }
 

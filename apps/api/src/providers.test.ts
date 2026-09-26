@@ -452,11 +452,8 @@ describe('provider settings routes', () => {
     expect(snapshot.mode).toBe('external');
     expect(snapshot.providerConfigs.koboldcpp?.url).toBe('http://127.0.0.1:5001');
 
-    const stored = JSON.parse(await fs.readFile(path.join(dataRoot, 'user-settings.json'), 'utf8')) as Record<
-      string,
-      unknown
-    >;
-    expect(stored.userName).toBe('Misha');
+    const stored: unknown = JSON.parse(await fs.readFile(path.join(dataRoot, 'user-settings.json'), 'utf8'));
+    expect(stored).toMatchObject({ userName: 'Misha' });
 
     await app.close();
   });
