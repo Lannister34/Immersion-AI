@@ -359,6 +359,33 @@ describe('OpenAI-compatible endpoint', () => {
     await app.close();
   });
 
+  it('ends a stream that produced only reasoning with finish_reason length, as the plain reply does', async () => {
+    mockProvider(
+      [
+        `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'Всё ушло ' } }] })}\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'сюда' } }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ].join(''),
+      'text/event-stream',
+    );
+    const app = buildApiApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      payload: { max_tokens: 8, messages: [{ content: 'Привет.', role: 'user' }], stream: true },
+      url: '/v1/chat/completions',
+    });
+    const chunks = dataLinesOf(response.body)
+      .filter((line) => line !== '[DONE]')
+      .map((line) => JSON.parse(line));
+
+    expect(chunks.map((chunk) => chunk.choices[0].delta.reasoning_content ?? '').join('')).toBe('Всё ушло сюда');
+    expect(chunks.map((chunk) => chunk.choices[0].delta.content ?? '').join('')).toBe('');
+    expect(chunks.at(-1).choices[0].finish_reason).toBe('length');
+
+    await app.close();
+  });
+
   it('streams a single chunk when the provider answers without streaming', async () => {
     mockProvider(jsonCompletion('Целиком.'));
     const app = buildApiApp();

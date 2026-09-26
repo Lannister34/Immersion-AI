@@ -10,7 +10,10 @@ import {
   resolveGenerationProviderEndpoint,
   testProviderConnection,
 } from '../../../providers/index.js';
-import { createOpenAiChatCompletion } from '../../application/create-chat-completion.js';
+import {
+  createOpenAiChatCompletion,
+  type OpenAiChatCompletionResult,
+} from '../../application/create-chat-completion.js';
 import { OpenAiChatCompletionRequestSchema, UnsupportedOpenAiFeatureError } from '../../domain/openai-contract.js';
 
 interface OpenAiErrorBody {
@@ -66,6 +69,10 @@ function toOpenAiError(error: unknown): { body: OpenAiErrorBody; statusCode: num
     },
     statusCode: 500,
   };
+}
+
+function toFinishReason(result: OpenAiChatCompletionResult): 'length' | 'stop' {
+  return result.content ? 'stop' : 'length';
 }
 
 function writeSseData(stream: ServerResponse, payload: unknown) {
@@ -130,7 +137,7 @@ export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
         return {
           choices: [
             {
-              finish_reason: result.content ? 'stop' : 'length',
+              finish_reason: toFinishReason(result),
               index: 0,
               message: {
                 content: result.content,
@@ -196,7 +203,7 @@ export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
         writeChunk({ content: result.content });
       }
 
-      writeChunk({}, result.content || deltaCount > 0 ? 'stop' : 'length');
+      writeChunk({}, toFinishReason(result));
       reply.raw.write('data: [DONE]\n\n');
       reply.raw.end();
 
