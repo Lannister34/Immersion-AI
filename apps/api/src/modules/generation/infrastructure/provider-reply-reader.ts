@@ -55,24 +55,29 @@ async function readProviderStream(
     handleData(trimmed.slice('data:'.length).trim(), sink);
   };
 
-  while (true) {
-    const { done, value } = await reader.read();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
 
-    if (done) {
-      break;
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split(/\r?\n/u);
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        handleLine(line);
+      }
     }
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split(/\r?\n/u);
-    buffer = lines.pop() ?? '';
-
-    for (const line of lines) {
-      handleLine(line);
+    if (buffer.trim().length > 0) {
+      handleLine(buffer);
     }
-  }
-
-  if (buffer.trim().length > 0) {
-    handleLine(buffer);
+  } catch (error) {
+    await Promise.allSettled([reader.cancel()]);
+    throw error;
   }
 
   emit(splitter.flush());

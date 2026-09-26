@@ -214,6 +214,46 @@ describe('OpenAiCompatibleChatCompletionsClient streaming', () => {
     expect(deltas).toEqual(['Half a rep']);
   });
 
+  it('cancels the provider stream when a chunk fails, so the server stops generating', async () => {
+    let canceled = false;
+    globalThis.fetch = vi.fn<typeof fetch>(async () => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ error: 'out of memory' })}\n\n`));
+        },
+        cancel() {
+          canceled = true;
+        },
+      });
+
+      return new Response(stream, { headers: { 'Content-Type': 'text/event-stream' }, status: 200 });
+    });
+
+    await expect(
+      new OpenAiCompatibleChatCompletionsClient().completeChat({ ...BASE_REQUEST, onDelta: () => undefined }),
+    ).rejects.toThrow(/out of memory/u);
+    expect(canceled).toBe(true);
+  });
+
+  it('reports the provider error even when cancelling the stream fails as well', async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async () => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ error: 'out of memory' })}\n\n`));
+        },
+        cancel() {
+          throw new Error('cancel failed');
+        },
+      });
+
+      return new Response(stream, { headers: { 'Content-Type': 'text/event-stream' }, status: 200 });
+    });
+
+    await expect(
+      new OpenAiCompatibleChatCompletionsClient().completeChat({ ...BASE_REQUEST, onDelta: () => undefined }),
+    ).rejects.toThrow(/out of memory/u);
+  });
+
   it('fails on an in-band error given as a bare string', async () => {
     mockFetch(`data: ${JSON.stringify({ error: 'upstream closed the connection' })}\n\n`, 'text/event-stream');
 
