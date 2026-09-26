@@ -13,8 +13,8 @@ import {
 import { getProviderSettings } from '../../providers/application/get-provider-settings.js';
 import { findCloudProviderReadinessIssue } from '../../providers/index.js';
 import { getProviderVisionProbe } from '../../providers/infrastructure/provider-vision-probe.js';
-import { getRunningRuntimeEndpoint } from '../../runtime/application/get-running-runtime-endpoint.js';
 import { getRuntimeOverview } from '../../runtime/application/get-runtime-overview.js';
+import { getRunningRuntimeEndpoint } from '../../runtime/index.js';
 
 function toRuntimeSummary(runtime: RuntimeOverviewResponse) {
   return {

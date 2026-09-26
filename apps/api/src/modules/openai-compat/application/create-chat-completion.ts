@@ -1,12 +1,13 @@
 import type { ReplyChannel } from '@immersion/domain/generation';
 
-import type { ChatCompletionClient } from '../../generation/application/chat-completion-client.js';
-import { createChatCompletionClient } from '../../generation/infrastructure/chat-completion-client-factory.js';
-import { getProviderTokenCounter } from '../../generation/infrastructure/provider-token-counter.js';
-import type { ChatReplyPromptMessage } from '../../prompting/application/build-chat-reply-prompt.js';
-import { resolveGenerationProviderEndpoint } from '../../providers/application/generation-provider.js';
-import { resolveSamplerPresetForModel } from '../../settings/application/active-sampler-preset.js';
-import { getSettingsOverview } from '../../settings/application/get-settings-overview.js';
+import {
+  type ChatCompletionClient,
+  createChatCompletionClient,
+  getProviderTokenCounter,
+} from '../../generation/index.js';
+import type { ChatReplyPromptMessage } from '../../prompting/index.js';
+import { resolveGenerationProviderEndpoint } from '../../providers/index.js';
+import { getSettingsOverview, resolveSamplerPresetForModel } from '../../settings/index.js';
 import {
   assertSupportedRequest,
   normalizeOpenAiMessages,

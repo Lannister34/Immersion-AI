@@ -2,6 +2,7 @@ export const providersModuleId = 'providers' as const;
 
 export {
   GenerationProviderUnavailableError,
+  resolveAnthropicMessagesUrl,
   resolveGenerationProviderEndpoint,
 } from './application/generation-provider.js';
 export { getProviderSettings } from './application/get-provider-settings.js';

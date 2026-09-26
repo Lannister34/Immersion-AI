@@ -1,8 +1,7 @@
 import type { ReplyChannel } from '@immersion/domain/generation';
 import { z } from 'zod';
 
-import { resolveAnthropicMessagesUrl } from '../../providers/application/generation-provider.js';
-import { buildAnthropicAuthHeaders } from '../../providers/index.js';
+import { buildAnthropicAuthHeaders, resolveAnthropicMessagesUrl } from '../../providers/index.js';
 import type {
   ChatCompletionClient,
   ChatCompletionRequest,

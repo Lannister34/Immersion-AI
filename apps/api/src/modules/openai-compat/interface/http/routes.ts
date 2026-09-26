@@ -4,7 +4,7 @@ import type { ServerResponse } from 'node:http';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { z } from 'zod';
 
-import { ProviderGenerationError } from '../../../generation/application/generation-errors.js';
+import { ProviderGenerationError } from '../../../generation/index.js';
 import {
   GenerationProviderUnavailableError,
   resolveGenerationProviderEndpoint,
