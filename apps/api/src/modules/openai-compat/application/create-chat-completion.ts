@@ -44,7 +44,7 @@ const PLACEHOLDER_MODEL_NAMES = new Set(['', 'default', 'immersion', 'immersion-
 
 export interface OpenAiChatCompletionDependencies {
   chatCompletionClient?: ChatCompletionClient;
-  onDelta?: (delta: string, channel: ReplyChannel) => void;
+  onDelta?: (delta: string, channel: ReplyChannel, model: string) => void;
   signal?: AbortSignal;
 }
 
@@ -92,6 +92,7 @@ export async function createOpenAiChatCompletion(
   const settings = getSettingsOverview();
   const preset = resolveSamplerPresetForModel(settings, model);
   const client = dependencies.chatCompletionClient ?? createChatCompletionClient();
+  const { onDelta } = dependencies;
 
   const serverExtensions = collectServerExtensions(request);
   const completion = await client.completeChat({
@@ -99,7 +100,7 @@ export async function createOpenAiChatCompletion(
     endpoint: { ...providerEndpoint, model },
     maxTokens: request.max_completion_tokens ?? request.max_tokens ?? preset.maxTokens,
     messages,
-    ...(dependencies.onDelta ? { onDelta: dependencies.onDelta } : {}),
+    ...(onDelta ? { onDelta: (delta: string, channel: ReplyChannel) => onDelta(delta, channel, model) } : {}),
     sampling: {
       minP: preset.minP,
       presencePenalty: request.presence_penalty ?? preset.presencePenalty,

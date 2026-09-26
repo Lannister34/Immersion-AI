@@ -197,40 +197,44 @@ export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
         }
       });
 
-      const writeChunk = (delta: OpenAiChatCompletionDelta, finishReason: OpenAiFinishReason | null = null) => {
-        writeSseData(reply.raw, toChatCompletionChunk(identity, command.model ?? 'immersion', delta, finishReason));
+      const writeChunk = (
+        model: string,
+        delta: OpenAiChatCompletionDelta,
+        finishReason: OpenAiFinishReason | null = null,
+      ) => {
+        writeSseData(reply.raw, toChatCompletionChunk(identity, model, delta, finishReason));
       };
 
-      const ensureStream = () => {
+      const ensureStream = (model: string) => {
         if (streamOpened) {
           return;
         }
 
         openStream(reply);
         streamOpened = true;
-        writeChunk({ content: '', role: 'assistant' });
+        writeChunk(model, { content: '', role: 'assistant' });
       };
 
       const result = await createOpenAiChatCompletion(command, {
-        onDelta: (delta, channel) => {
+        onDelta: (delta, channel, model) => {
           if (controller.signal.aborted || !reply.raw.writable) {
             return;
           }
 
-          ensureStream();
+          ensureStream(model);
           deltaCount += 1;
-          writeChunk(channel === 'reasoning' ? { reasoning_content: delta } : { content: delta });
+          writeChunk(model, channel === 'reasoning' ? { reasoning_content: delta } : { content: delta });
         },
         signal: controller.signal,
       });
 
-      ensureStream();
+      ensureStream(result.model);
 
       if (deltaCount === 0 && result.content) {
-        writeChunk({ content: result.content });
+        writeChunk(result.model, { content: result.content });
       }
 
-      writeChunk({}, toFinishReason(result));
+      writeChunk(result.model, {}, toFinishReason(result));
       reply.raw.write('data: [DONE]\n\n');
       reply.raw.end();
 

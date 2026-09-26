@@ -410,6 +410,28 @@ describe('OpenAI-compatible endpoint', () => {
     await app.close();
   });
 
+  it('names the resolved model in every streamed chunk, as the plain reply does', async () => {
+    mockProvider(
+      [`data: ${JSON.stringify({ choices: [{ delta: { content: 'Привет.' } }] })}\n\n`, 'data: [DONE]\n\n'].join(''),
+      'text/event-stream',
+    );
+    const app = buildApiApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      payload: { messages: [{ content: 'Привет.', role: 'user' }], model: 'immersion', stream: true },
+      url: '/v1/chat/completions',
+    });
+    const models = dataLinesOf(response.body)
+      .filter((line) => line !== '[DONE]')
+      .map((line) => JSON.parse(line).model);
+
+    expect(models.length).toBeGreaterThan(0);
+    expect(new Set(models)).toEqual(new Set(['fixture-model']));
+
+    await app.close();
+  });
+
   it('streams a single chunk when the provider answers without streaming', async () => {
     mockProvider(jsonCompletion('Целиком.'));
     const app = buildApiApp();
