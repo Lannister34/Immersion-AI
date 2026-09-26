@@ -49,7 +49,6 @@ function readLogFileTail(): string[] {
 type RuntimeLifecycleStatus = RuntimeStatusSnapshot['status'];
 
 export interface LlmStartConfig extends Omit<RuntimeConfigCommand, 'modelsDirs'> {
-  /** Путь к mmproj-проектору; без него VL-модель запускается как текстовая. */
   mmprojPath?: string | undefined;
   modelPath: string;
 }
@@ -59,7 +58,6 @@ interface PidFileData {
   port: number;
   model: string;
   modelPath: string;
-  /** Запущен ли процесс с проектором: переживает рестарт API вместе с PID. */
   mmprojPath?: string | null;
 }
 
@@ -192,11 +190,6 @@ const MAX_LOG_LINES = 100;
  */
 export class LlmProcessManager {
   private childProcess: ChildProcess | null = null;
-  /**
-   * Проектор текущего процесса. Зрение — свойство запуска, а не модели: тот же
-   * файл модели без --mmproj картинок не видит, поэтому спрашивать об этом
-   * кого-то ещё не нужно, мы сами его и запускали.
-   */
   private visionProjectorPath: string | null = null;
   private healthPollTimer: ReturnType<typeof setInterval> | null = null;
   private startTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -249,11 +242,6 @@ export class LlmProcessManager {
     };
   }
 
-  /**
-   * Путь к проектору работающего процесса или null. После рестарта API берём
-   * его из PID-файла — иначе переподключение к живому серверу «забывало» бы
-   * про зрение.
-   */
   getVisionProjectorPath(): string | null {
     if (this.getState().status !== 'running') {
       return null;

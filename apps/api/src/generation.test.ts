@@ -88,6 +88,7 @@ interface SmokeUserSettingsFixture {
   activePresetId?: string;
   modelPresetMap?: Record<string, string>;
   responseLanguage?: string;
+  streamingEnabled?: boolean;
   systemPromptTemplate?: string;
   userName?: string;
   userPersona?: string;
@@ -98,6 +99,11 @@ interface SmokeUserSettingsFixture {
       url?: string;
     };
     koboldcpp?: {
+      model?: string;
+      url?: string;
+    };
+    openai?: {
+      apiKey?: string;
       model?: string;
       url?: string;
     };
@@ -472,15 +478,31 @@ describe('generation routes', () => {
     await app.close();
   });
 
-  it('reports vision by how the built-in server was started, not by the model file', async () => {
+  it('leaves vision unknown while the built-in runtime is stopped, since there is nothing to ask', async () => {
+    await writeProviderSettings({
+      backendMode: 'builtin',
+    });
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/generation/readiness',
+    });
+    const payload = GenerationReadinessResponseSchema.parse(response.json());
+
+    expect(payload.status).toBe('blocked');
+    expect(payload.visionSupport).toBe('unknown');
+
+    await app.close();
+  });
+
+  it('reports built-in vision by the --mmproj launch recorded for the running server, not by the model file', async () => {
     await writeProviderSettings({ backendMode: 'builtin' });
     const modelPath = path.join(temporaryDataRoot, 'qwen-vl.gguf');
     await fs.writeFile(modelPath, 'gguf', 'utf8');
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
 
-    // PID текущего процесса заведомо жив: так рантайм выглядит запущенным без
-    // настоящего llama-server, а состояние приходит из PID-файла, как после
-    // рестарта API.
-    async function pretendRunning(mmprojPath: string | null) {
+    async function leaveServerRunningFromPreviousApiProcess(mmprojPath: string | null) {
       await fs.writeFile(
         path.join(temporaryDataRoot, '.llm-server.json'),
         JSON.stringify({ mmprojPath, model: 'qwen-vl.gguf', modelPath, pid: process.pid, port: 5001 }),
@@ -497,16 +519,17 @@ describe('generation routes', () => {
       return payload;
     }
 
-    await pretendRunning(null);
+    await leaveServerRunningFromPreviousApiProcess(null);
     const withoutProjector = await readVisionSupport();
 
     expect(withoutProjector.status).toBe('ready');
     expect(withoutProjector.visionSupport).toBe('unsupported');
 
-    await pretendRunning(path.join(temporaryDataRoot, 'mmproj-qwen-vl.gguf'));
+    await leaveServerRunningFromPreviousApiProcess(path.join(temporaryDataRoot, 'mmproj-qwen-vl.gguf'));
     const withProjector = await readVisionSupport();
 
     expect(withProjector.visionSupport).toBe('supported');
+    expect(fetchSpy).not.toHaveBeenCalled();
 
     await fs.rm(path.join(temporaryDataRoot, '.llm-server.json'), { force: true });
   });
@@ -659,7 +682,7 @@ describe('generation routes', () => {
     await app.close();
   });
 
-  it('streams the reply when streaming is enabled and reports deltas to the job', async () => {
+  it('streams a job reply when streaming is enabled and stores the joined text', async () => {
     const chunks = ['Пер', 'вый ', 'кусок.'];
     const requests: ProviderRequestRecord[] = [];
 
@@ -680,7 +703,6 @@ describe('generation routes', () => {
 
     const app = buildApiApp();
     const chat = await createChat(app);
-    // Стриминг живёт в фоновой задаче: синхронной ручке некуда отдавать куски.
     const response = await app.inject({
       method: 'POST',
       url: '/api/generation/chat-reply-jobs',
@@ -692,7 +714,6 @@ describe('generation routes', () => {
 
     await waitForGenerationJobStatus(app, payload.job.id, 'completed');
 
-    // Провайдер получил stream: true, а в транскрипт лёг склеенный ответ.
     expect((requests[0]?.body as { stream: boolean }).stream).toBe(true);
 
     const sessionResponse = await app.inject({ method: 'GET', url: `/api/chats/${chat.id}` });
@@ -702,6 +723,25 @@ describe('generation routes', () => {
       { role: 'user', content: 'Расскажи что-нибудь.' },
       { role: 'assistant', content: 'Первый кусок.' },
     ]);
+
+    await app.close();
+  });
+
+  it('asks the provider for a whole reply when the profile turns streaming off', async () => {
+    await writeProviderSettings({ streamingEnabled: false });
+    const providerRequests = mockProviderSuccess('Целый ответ.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: { chatId: chat.id, message: 'Расскажи что-нибудь.', mode: 'reply' },
+    });
+    const payload = StartChatReplyGenerationJobResponseSchema.parse(response.json());
+
+    await waitForGenerationJobStatus(app, payload.job.id, 'completed');
+
+    expect(getProviderRequestBody(providerRequests[0])).toMatchObject({ stream: false });
 
     await app.close();
   });
@@ -723,7 +763,6 @@ describe('generation routes', () => {
     expect(assistantMessage?.content).toBe('Привет! Чем помочь?');
     expect(assistantMessage?.reasoning).toBe('Сначала прикину тон.');
 
-    // Размышления живут в файле чата отдельным полем и в реплику не попадают.
     const sessionResponse = await app.inject({ method: 'GET', url: `/api/chats/${chat.id}` });
     const stored = GetChatSessionResponseSchema.parse(sessionResponse.json()).messages.at(-1);
 
@@ -773,7 +812,7 @@ describe('generation routes', () => {
     await app.close();
   });
 
-  it('calls the active provider and persists the user message with the assistant reply', async () => {
+  it('calls the active provider without streaming and persists the user message with the assistant reply', async () => {
     const providerRequests = mockProviderSuccess('Assistant reply from provider.');
     const app = buildApiApp();
     const chat = await createChat(app);
@@ -2157,6 +2196,47 @@ describe('generation routes', () => {
         content: 'Keep this while provider is offline.',
       },
     ]);
+
+    await app.close();
+  });
+
+  it('refuses a cloud provider without a key or a model before calling it', async () => {
+    const providerRequests = mockProviderSuccess('Should not be called.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+
+    await writeProviderSettings({
+      activeProvider: 'openai',
+      backendMode: 'external',
+      providerConfigs: { openai: { model: 'gpt-4o', url: 'https://api.openai.com/v1' } },
+    });
+    const withoutKey = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply',
+      payload: { chatId: chat.id, message: 'Привет.' },
+    });
+
+    expect(withoutKey.statusCode).toBe(409);
+    expect(ChatReplyGenerationErrorResponseSchema.parse(withoutKey.json())).toMatchObject({
+      code: 'generation_provider_unavailable',
+      message: expect.stringContaining('API-ключ'),
+    });
+
+    await writeProviderSettings({
+      providerConfigs: { openai: { apiKey: 'sk-test', url: 'https://api.openai.com/v1' } },
+    });
+    const withoutModel = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply',
+      payload: { chatId: chat.id, message: 'Ещё раз.' },
+    });
+
+    expect(withoutModel.statusCode).toBe(409);
+    expect(ChatReplyGenerationErrorResponseSchema.parse(withoutModel.json())).toMatchObject({
+      code: 'generation_provider_unavailable',
+      message: expect.stringContaining('Модель'),
+    });
+    expect(providerRequests).toHaveLength(0);
 
     await app.close();
   });

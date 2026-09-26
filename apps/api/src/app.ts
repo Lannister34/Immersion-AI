@@ -60,8 +60,6 @@ export function buildApiApp() {
   app.register(settingsRoutes, { prefix: '/api/settings' });
   app.register(providersRoutes, { prefix: '/api/providers' });
   app.register(runtimeRoutes, { prefix: '/api/runtime' });
-  // Внешний вход для чужих клиентов: тот же провайдер и те же настройки
-  // сэмплера, но по контракту OpenAI и без нашей истории чатов.
   app.register(openAiCompatRoutes, { prefix: '/v1' });
 
   return app;

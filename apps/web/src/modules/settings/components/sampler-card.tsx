@@ -33,7 +33,6 @@ function presetToForm(preset: SettingsOverviewResponse['sampler']['presets'][num
   };
 }
 
-/** Значения по умолчанию совпадают с пресетом, который backend отдаёт как Default. */
 const DEFAULT_SAMPLER_VALUES = {
   contextTrimStrategy: 'trim_middle',
   maxContextLength: 8192,

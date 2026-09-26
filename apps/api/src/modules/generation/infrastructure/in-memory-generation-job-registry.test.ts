@@ -1,3 +1,5 @@
+import type { ChatSessionDto } from '@immersion/contracts/chats';
+import type { GenerationJobEvent } from '@immersion/contracts/generation';
 import { describe, expect, it } from 'vitest';
 
 import { InMemoryGenerationJobRegistry } from './in-memory-generation-job-registry.js';
@@ -48,5 +50,39 @@ describe('InMemoryGenerationJobRegistry eviction', () => {
     await wait(60);
 
     expect(registry.get(job.id)?.status).toBe('queued');
+  });
+});
+
+describe('InMemoryGenerationJobRegistry deltas', () => {
+  it('stops relaying deltas once the job is canceled, so subscribers end on the canceled status', async () => {
+    const registry = new InMemoryGenerationJobRegistry();
+    const job = registry.createChatReplyJob({
+      chatId: 'chat-4',
+      command: { chatId: 'chat-4', message: 'hi', mode: 'reply' },
+    });
+    const events: GenerationJobEvent[] = [];
+    registry.subscribe(job.id, (event) => events.push(event));
+    let publishReply: (delta: string) => void = () => undefined;
+    let abortRunner: () => void = () => undefined;
+    const runnerStarted = new Promise<void>((resolveStarted) => {
+      registry.runChatReplyJob(job.id, ({ publishDelta }) => {
+        publishReply = (delta) => publishDelta(delta, 'reply');
+        resolveStarted();
+
+        return new Promise<ChatSessionDto>((_resolve, reject) => {
+          abortRunner = () => reject(new DOMException('Generation was canceled.', 'AbortError'));
+        });
+      });
+    });
+
+    await runnerStarted;
+    publishReply('Пер');
+    registry.cancel(job.id);
+    publishReply('вый');
+    abortRunner();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(events.flatMap((event) => (event.type === 'chat.reply.delta' ? [event.delta] : []))).toEqual(['Пер']);
+    expect(events.at(-1)).toMatchObject({ job: { status: 'canceled' }, type: 'generation.job.updated' });
   });
 });

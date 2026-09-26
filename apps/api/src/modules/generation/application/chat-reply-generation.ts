@@ -29,7 +29,6 @@ import {
 } from './generation-errors.js';
 
 export interface ChatReplyGenerationDependencies {
-  /** Куски ответа по мере генерации; без него запрос идёт без стриминга. */
   onDelta?: ((delta: string, channel: ReplyChannel) => void) | undefined;
   chatCompletionClient?: ChatCompletionClient;
   now?: () => Date;
@@ -105,8 +104,6 @@ async function runChatCompletionForSession(
       tokenCounter: getProviderTokenCounter(),
       trailingUserInstruction: buildTrailingInstruction ? buildTrailingInstruction(settings) : null,
     });
-    // Стриминг включается настройкой профиля: без неё ответ приходит целиком,
-    // как раньше, и провайдеру уходит stream: false.
     const streamingDelta = settings.profile.streamingEnabled ? dependencies.onDelta : undefined;
     const completion = await chatCompletionClient.completeChat({
       endpoint,

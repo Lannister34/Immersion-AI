@@ -1,7 +1,6 @@
 export interface RunningRuntimeEndpointInfo {
   baseUrl: string;
   model: string | null;
-  /** Проектор встроенного сервера; null — процесс поднят без зрения. */
   visionProjectorPath: string | null;
 }
 

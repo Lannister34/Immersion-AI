@@ -45,7 +45,7 @@ describe('OpenAiCompatibleChatCompletionsClient request body', () => {
     expect(captured[0]).toMatchObject({ max_tokens: 128, min_p: 0, rep_pen: 1, top_k: 0 });
   });
 
-  it('drops parameters the OpenAI cloud rejects and renames the reply limit', async () => {
+  it('drops parameters the OpenAI cloud rejects and sends the reply limit as max_completion_tokens, which gpt-4o accepts too', async () => {
     const captured = mockFetch(JSON.stringify({ choices: [{ message: { content: 'раз' } }] }), 'application/json');
     await new OpenAiCompatibleChatCompletionsClient().completeChat({
       ...BASE_REQUEST,
@@ -74,6 +74,59 @@ describe('OpenAiCompatibleChatCompletionsClient request body', () => {
     expect(body).not.toHaveProperty('top_p');
     expect(body).not.toHaveProperty('presence_penalty');
   });
+
+  it('sends server extensions to a local server only, since the OpenAI cloud rejects unknown fields', async () => {
+    const local = mockFetch(JSON.stringify({ choices: [{ message: { content: 'раз' } }] }), 'application/json');
+    await new OpenAiCompatibleChatCompletionsClient().completeChat({
+      ...BASE_REQUEST,
+      serverExtensions: { enable_thinking: false },
+    });
+
+    expect(local[0]).toMatchObject({ enable_thinking: false });
+
+    const cloud = mockFetch(JSON.stringify({ choices: [{ message: { content: 'раз' } }] }), 'application/json');
+    await new OpenAiCompatibleChatCompletionsClient().completeChat({
+      ...BASE_REQUEST,
+      endpoint: { ...BASE_REQUEST.endpoint, apiKind: 'openai-cloud', model: 'gpt-4o' },
+      serverExtensions: { enable_thinking: false },
+    });
+
+    expect(cloud[0]).not.toHaveProperty('enable_thinking');
+  });
+
+  it('lets our own fields win over server extensions of the same name', async () => {
+    const captured = mockFetch(JSON.stringify({ choices: [{ message: { content: 'раз' } }] }), 'application/json');
+    await new OpenAiCompatibleChatCompletionsClient().completeChat({
+      ...BASE_REQUEST,
+      serverExtensions: { max_tokens: 1, model: 'other-model', stream: true, top_k: 99 },
+    });
+
+    expect(captured[0]).toMatchObject({ max_tokens: 128, model: 'test-model', stream: false, top_k: 0 });
+  });
+});
+
+describe('OpenAiCompatibleChatCompletionsClient replies', () => {
+  it('fails an empty reply unless the caller allows it, since thinking can use up the whole limit', async () => {
+    const thinkingOnly = JSON.stringify({ choices: [{ message: { content: '<think>Весь лимит ушёл сюда' } }] });
+    const client = new OpenAiCompatibleChatCompletionsClient();
+
+    mockFetch(thinkingOnly, 'application/json');
+    await expect(client.completeChat(BASE_REQUEST)).rejects.toThrow('Provider returned an empty reply.');
+
+    mockFetch(thinkingOnly, 'application/json');
+    await expect(client.completeChat({ ...BASE_REQUEST, allowEmptyContent: true })).resolves.toEqual({
+      content: '',
+      reasoning: 'Весь лимит ушёл сюда',
+    });
+  });
+
+  it('cuts a long provider error body down to its first 500 characters', async () => {
+    globalThis.fetch = vi.fn(async () => new Response('x'.repeat(2000), { status: 500 })) as unknown as typeof fetch;
+
+    await expect(new OpenAiCompatibleChatCompletionsClient().completeChat(BASE_REQUEST)).rejects.toThrow(
+      /^Provider returned HTTP 500: x{500}$/u,
+    );
+  });
 });
 
 describe('OpenAiCompatibleChatCompletionsClient streaming', () => {
@@ -101,7 +154,7 @@ describe('OpenAiCompatibleChatCompletionsClient streaming', () => {
     expect((plain[0] as { stream: boolean }).stream).toBe(false);
   });
 
-  it('falls back to the plain response when the server ignores the stream request', async () => {
+  it('falls back to the plain response when the server answers a stream request with JSON, going by content-type', async () => {
     mockFetch(JSON.stringify({ choices: [{ message: { content: 'Целый ответ.' } }] }), 'application/json');
     const deltas: string[] = [];
     const client = new OpenAiCompatibleChatCompletionsClient();
@@ -137,5 +190,30 @@ describe('OpenAiCompatibleChatCompletionsClient streaming', () => {
 
     expect(deltas).toEqual(['склеено']);
     expect(response.content).toBe('склеено');
+  });
+
+  it('streams the separate reasoning fields of DeepSeek-style servers straight to the reasoning channel', async () => {
+    mockFetch(
+      [
+        `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'Ду' } }] })}\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta: { reasoning: 'маю' } }] })}\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta: { content: 'Ответ.' } }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ].join(''),
+      'text/event-stream',
+    );
+    const deltas: Array<[string, string]> = [];
+
+    const response = await new OpenAiCompatibleChatCompletionsClient().completeChat({
+      ...BASE_REQUEST,
+      onDelta: (delta, channel) => deltas.push([channel, delta]),
+    });
+
+    expect(deltas).toEqual([
+      ['reasoning', 'Ду'],
+      ['reasoning', 'маю'],
+      ['reply', 'Ответ.'],
+    ]);
+    expect(response).toEqual({ content: 'Ответ.', reasoning: 'Думаю' });
   });
 });

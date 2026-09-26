@@ -34,7 +34,6 @@ export interface TestProviderConnectionDependencies {
   timeoutMs?: number;
 }
 
-/** Чей это ответ: подпись у любого результата одна и та же. */
 interface ConnectionSubject {
   activeProvider: ProviderType;
   mode: ProviderMode;
@@ -46,10 +45,6 @@ function buildModelsEndpoint(baseUrl: string) {
   return normalized.endsWith('/v1') ? `${normalized}/models` : `${normalized}/v1/models`;
 }
 
-/**
- * Каталог моделей у обоих диалектов лежит по /v1/models и отвечает списком в
- * поле data — различаются только заголовки авторизации.
- */
 function buildHeaders(apiKind: ProviderApiKind, apiKey: string | null) {
   if (apiKind === 'anthropic') {
     return {
@@ -171,10 +166,6 @@ async function fetchProviderModels(
   );
 }
 
-/**
- * Спрашивает каталог моделей по переданным данным, а не по сохранённым: форма
- * настроек должна показать список до того, как пользователь сохранит ключ.
- */
 export async function probeProviderModels(
   command: ProviderModelsProbeCommand,
   dependencies: TestProviderConnectionDependencies = {},

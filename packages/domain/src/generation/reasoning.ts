@@ -7,7 +7,6 @@ export interface ReplyChunk {
 
 const OPEN_TAGS = ['<think>', '<thinking>'] as const;
 const CLOSE_TAGS = ['</think>', '</thinking>'] as const;
-/** Самый длинный тег: столько символов держим в буфере, чтобы не разрезать его пополам. */
 const MAX_TAG_LENGTH = Math.max(...[...OPEN_TAGS, ...CLOSE_TAGS].map((tag) => tag.length));
 
 function findTag(text: string, tags: readonly string[]): { index: number; tag: string } | null {
@@ -24,8 +23,7 @@ function findTag(text: string, tags: readonly string[]): { index: number; tag: s
   return found;
 }
 
-/** Может ли хвост оказаться началом одного из тегов — тогда его рано отдавать. */
-function tailMightStartTag(text: string, tags: readonly string[]): number {
+function partialTagTailLength(text: string, tags: readonly string[]): number {
   for (let keep = Math.min(MAX_TAG_LENGTH - 1, text.length); keep > 0; keep -= 1) {
     const tail = text.slice(text.length - keep);
 
@@ -37,15 +35,6 @@ function tailMightStartTag(text: string, tags: readonly string[]): number {
   return 0;
 }
 
-/**
- * Делит ответ модели на размышления и собственно реплику. Модели-рассуждатели
- * оборачивают ход мысли в <think>…</think>, и в транскрипт он попадать не
- * должен: это черновик, а не то, что сказал персонаж.
- *
- * Разделитель потоковый: текст приходит кусками произвольной длины, и тег
- * легко разрезается между ними — поэтому подозрительный хвост придерживается
- * до следующего куска.
- */
 export function createReplySplitter() {
   let buffer = '';
   let insideReasoning = false;
@@ -59,7 +48,7 @@ export function createReplySplitter() {
         const close = findTag(buffer, CLOSE_TAGS);
 
         if (!close) {
-          const keep = tailMightStartTag(buffer, CLOSE_TAGS);
+          const keep = partialTagTailLength(buffer, CLOSE_TAGS);
           const ready = buffer.slice(0, buffer.length - keep);
           buffer = buffer.slice(buffer.length - keep);
 
@@ -82,7 +71,7 @@ export function createReplySplitter() {
       const open = findTag(buffer, OPEN_TAGS);
 
       if (!open) {
-        const keep = tailMightStartTag(buffer, OPEN_TAGS);
+        const keep = partialTagTailLength(buffer, OPEN_TAGS);
         const ready = buffer.slice(0, buffer.length - keep);
         buffer = buffer.slice(buffer.length - keep);
 
@@ -109,8 +98,6 @@ export function createReplySplitter() {
       return [];
     }
 
-    // Незакрытый <think> в конце ответа — тоже размышление: модель не успела
-    // закрыть тег, и выдавать это за реплику персонажа нельзя.
     const chunk: ReplyChunk = { channel: insideReasoning ? 'reasoning' : 'reply', text: buffer };
     buffer = '';
 
@@ -125,7 +112,6 @@ export interface SplitReply {
   reasoning: string;
 }
 
-/** Разовое деление целого ответа — тот же разделитель, но без потока. */
 export function splitReply(text: string): SplitReply {
   const splitter = createReplySplitter();
   const chunks = [...splitter.push(text), ...splitter.flush()];

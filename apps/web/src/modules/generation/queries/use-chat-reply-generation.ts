@@ -35,8 +35,6 @@ function createOptimisticMessageId() {
 
 export function useChatReplyGeneration(chatId: string) {
   const queryClient = useQueryClient();
-  // Живой ответ держим в состоянии, а не в кэше сессии: транскрипт принадлежит
-  // backend, и дописывать в него незавершённый текст значило бы врать кэшу.
   const [streamedReply, setStreamedReply] = useState('');
   const [streamedReasoning, setStreamedReasoning] = useState('');
   const generationJobsQuery = useQuery(chatGenerationJobsQueryOptions(chatId));
@@ -163,9 +161,7 @@ export function useChatReplyGeneration(chatId: string) {
 
   return {
     activeJob: activeGenerationJob,
-    /** Ход мысли, пришедший потоком; пусто — модель не рассуждает вслух. */
     streamedReasoning: activeGenerationJob ? streamedReasoning : '',
-    /** Текст ответа, пришедший потоком; пусто — стриминга нет или он завершён. */
     streamedReply: activeGenerationJob ? streamedReply : '',
     answerLast: () => answerGenerationMutation.mutateAsync(),
     cancel: () => {

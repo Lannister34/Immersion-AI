@@ -6,11 +6,6 @@ import type {
 import { AnthropicMessagesClient } from './anthropic-messages-client.js';
 import { OpenAiCompatibleChatCompletionsClient } from './openai-compatible-chat-completions-client.js';
 
-/**
- * Диалект выбирается по конкретному запросу, а не при создании клиента:
- * пользователь переключает провайдера в настройках между двумя генерациями,
- * и вызывающему коду знать об этом незачем.
- */
 class RoutingChatCompletionsClient implements ChatCompletionClient {
   private readonly anthropic = new AnthropicMessagesClient();
   private readonly openAiCompatible = new OpenAiCompatibleChatCompletionsClient();

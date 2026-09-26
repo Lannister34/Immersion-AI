@@ -461,7 +461,7 @@ describe('provider settings routes', () => {
     await app.close();
   });
 
-  it('switches the provider and applies the config to the one that becomes active', async () => {
+  it('switches the provider, applies the config to the one that becomes active and leaves the previous one untouched', async () => {
     await writeUserSettings({
       backendMode: 'builtin',
       activeProvider: 'custom',
@@ -487,8 +487,7 @@ describe('provider settings routes', () => {
       model: 'claude-sonnet-4-5',
       url: 'https://api.anthropic.com/v1',
     });
-    // Конфиг прежнего провайдера остаётся нетронутым.
-    expect(snapshot.providerConfigs.custom).toMatchObject({ model: 'local-model' });
+    expect(snapshot.providerConfigs.custom).toEqual({ model: 'local-model', url: 'http://127.0.0.1:6001' });
 
     await app.close();
   });
@@ -514,6 +513,27 @@ describe('provider settings routes', () => {
       payload: { config: { apiKey: '' } },
     });
     expect(ProviderSettingsSnapshotSchema.parse(cleared.json()).providerConfigs.openai?.apiKey).toBeUndefined();
+
+    await app.close();
+  });
+
+  it('lists models with the key typed into the form, not the stored one, so the list comes before saving', async () => {
+    await writeUserSettings({
+      backendMode: 'external',
+      activeProvider: 'openai',
+      providerConfigs: { openai: { url: 'https://api.openai.com/v1', apiKey: 'sk-stored', model: 'gpt-4o' } },
+    });
+    const requests = mockProviderModelsResponse({ data: [{ id: 'gpt-4o-mini' }] });
+    const app = buildApiApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/providers/models',
+      payload: { apiKey: 'sk-typed', provider: 'openai', url: 'https://api.openai.com/v1' },
+    });
+
+    expect(ProviderConnectionResponseSchema.parse(response.json()).models).toEqual([{ id: 'gpt-4o-mini' }]);
+    expect(requests).toEqual([{ authorization: 'Bearer sk-typed', url: 'https://api.openai.com/v1/models' }]);
 
     await app.close();
   });

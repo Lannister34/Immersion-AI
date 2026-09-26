@@ -21,7 +21,6 @@ interface OpenAiErrorBody {
   };
 }
 
-/** Ошибку отдаём в формате OpenAI: клиенты читают именно error.message. */
 function toOpenAiError(error: unknown): { body: OpenAiErrorBody; statusCode: number } {
   if (error instanceof UnsupportedOpenAiFeatureError) {
     return {
@@ -73,6 +72,14 @@ function writeSseData(stream: ServerResponse, payload: unknown) {
   stream.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
+async function findConfiguredModel(): Promise<string | null> {
+  try {
+    return (await resolveGenerationProviderEndpoint()).model;
+  } catch {
+    return null;
+  }
+}
+
 function openStream(reply: FastifyReply) {
   reply.hijack();
   reply.raw.writeHead(200, {
@@ -90,11 +97,10 @@ export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
     const models = connection.models.map((model) => model.id);
 
     if (models.length === 0) {
-      // Провайдер не отдал каталог — показываем хотя бы настроенную модель.
-      try {
-        models.push((await resolveGenerationProviderEndpoint()).model);
-      } catch {
-        // Провайдер не настроен: пустой список честнее выдуманного.
+      const configuredModel = await findConfiguredModel();
+
+      if (configuredModel !== null) {
+        models.push(configuredModel);
       }
     }
 
@@ -120,8 +126,6 @@ export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
         return {
           choices: [
             {
-              // Пустой текст при непустых размышлениях означает, что лимит ушёл
-              // на них: это обрыв по длине, а не нормальное завершение.
               finish_reason: result.content ? 'stop' : 'length',
               index: 0,
               message: {
@@ -143,10 +147,6 @@ export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
         };
       }
 
-      // Обрыв соединения гасит генерацию: держать провайдера ради потока,
-      // который уже некому читать, незачем. Слушаем именно ответ: у POST поток
-      // запроса закрывается сразу после чтения тела, и по нему отмена сработала
-      // бы до начала генерации.
       reply.raw.on('close', () => {
         if (!reply.raw.writableEnded) {
           controller.abort();
@@ -163,8 +163,6 @@ export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
         });
       };
 
-      // Заголовки пишем только когда генерация точно началась: пока их нет,
-      // ошибка провайдера уходит клиенту обычным JSON, а не битым потоком.
       const ensureStream = () => {
         if (streamOpened) {
           return;
@@ -190,7 +188,6 @@ export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
 
       ensureStream();
 
-      // Провайдер без стриминга отдаёт ответ целиком — превращаем его в один кусок.
       if (deltaCount === 0 && result.content) {
         writeChunk({ content: result.content });
       }
@@ -208,7 +205,6 @@ export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(mapped.statusCode).send(mapped.body);
       }
 
-      // Поток уже начат: статус не поменять, поэтому ошибку кладём в него.
       writeSseData(reply.raw, mapped.body);
       reply.raw.write('data: [DONE]\n\n');
       reply.raw.end();

@@ -1542,7 +1542,6 @@ select:disabled {
   object-fit: cover;
 }
 
-/* Ход мысли модели-рассуждателя: рядом с ответом, но не как реплика. */
 .reasoning {
   margin-bottom: 6px;
   max-width: 560px;

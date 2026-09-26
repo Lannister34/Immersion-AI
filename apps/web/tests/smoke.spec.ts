@@ -64,14 +64,15 @@ test('shows the LLM-runtime page with the LLM-runtime heading and mode switcher'
   await expect(page.getByRole('button', { name: 'Скопировать' })).toBeVisible();
 });
 
-test('adds a models directory through the params card on /server', async ({ page }) => {
+test('adds and removes a models directory on /server without a save step, keeping each change across reloads', async ({
+  page,
+}) => {
   await page.goto('/server');
   await page.getByRole('button', { name: 'Встроенный' }).click();
 
   await page.getByRole('button', { name: 'Параметры' }).click();
   await expect(page.getByRole('heading', { name: 'Каталоги моделей' })).toBeVisible();
 
-  // Карточка применяет изменения сразу: отдельной кнопки «Сохранить» нет.
   const addedConfig = page.waitForResponse(
     (response) => response.url().includes('/api/runtime/config') && response.request().method() === 'PUT',
   );
@@ -84,7 +85,6 @@ test('adds a models directory through the params card on /server', async ({ page
   // Каталог из фикстуры существует, добавленный — нет: ровно один бейдж «не найден».
   await expect(page.getByText('не найден', { exact: true })).toHaveCount(1);
 
-  // Перезагрузка — единственная честная проверка того, что каталог лёг на диск.
   await page.reload();
   await page.getByRole('button', { name: 'Параметры' }).click();
   await expect(page.getByText('C:\\smoke-models-extra')).toBeVisible();
@@ -253,13 +253,12 @@ test('creates a character together with the avatar picked before the first save'
 test('offers the cloud providers with their defaults and refuses a model list without a key', async ({ page }) => {
   await page.goto('/server');
 
-  // Фикстура стартует во внешнем режиме — форма провайдера уже на экране.
+  await expect(page.locator('#provider-type')).toBeVisible();
   await page.locator('#provider-type').selectOption('anthropic');
   await expect(page.locator('#provider-url')).toHaveValue('https://api.anthropic.com/v1');
   await expect(page.locator('#provider-model')).toHaveAttribute('placeholder', 'claude-sonnet-4-5');
   await expect(page.locator('#provider-api-key')).toHaveAttribute('placeholder', 'sk-ant-…');
 
-  // Без ключа список моделей запрашивать не у кого: провайдера не трогаем.
   await page.getByRole('button', { name: 'Список моделей' }).click();
   await expect(page.getByText('API-ключ провайдера не задан — список моделей запросить не у кого.')).toBeVisible();
 

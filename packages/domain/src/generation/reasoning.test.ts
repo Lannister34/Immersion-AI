@@ -53,7 +53,6 @@ describe('createReplySplitter', () => {
   });
 
   it('does not leak a tag split across two chunks', () => {
-    // Кусок оборвался посреди «<think>»: отдать его как текст ответа нельзя.
     expect(streamThrough(['Начало <thi', 'nk>скрытое</think> конец'])).toEqual([
       { channel: 'reply', text: 'Начало ' },
       { channel: 'reasoning', text: 'скрытое' },
@@ -61,11 +60,10 @@ describe('createReplySplitter', () => {
     ]);
   });
 
-  it('holds back a tail that could still become a tag', () => {
+  it('holds back a tail that could still become a tag until flush releases it as reply text', () => {
     const splitter = createReplySplitter();
 
     expect(splitter.push('Ответ <thi')).toEqual([{ channel: 'reply', text: 'Ответ ' }]);
-    // Хвост оказался обычным текстом — он выходит только на завершении.
     expect(splitter.flush()).toEqual([{ channel: 'reply', text: '<thi' }]);
   });
 });

@@ -20,13 +20,6 @@ function quoteAppleScript(value: string): string {
   return value.replace(/(["\\])/gu, '\\$1');
 }
 
-/**
- * Диалог, открытый фоновым процессом, появляется ПОЗАДИ окна браузера: право
- * вывести окно вперёд Windows даёт только процессу, владеющему фокусом. Поэтому
- * заводим невидимое окно-владельца, силой отдаём ему передний план через
- * AttachThreadInput и уже от него открываем модальный диалог — модальное окно
- * потока, который стал активным, выходит вперёд само.
- */
 const FOREGROUND_HELPER = `
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -100,15 +93,6 @@ async function pickOnLinux(initialPath: string): Promise<string | null> {
   return stdout.trim() || null;
 }
 
-/**
- * Системный диалог выбора каталога. Приложение локальное и открывается на той
- * же машине, где идёт браузер, поэтому диалог операционной системы — самый
- * короткий путь к длинному пути с моделями. Где диалога нет, честно говорим об
- * этом: ручной ввод остаётся рабочим вариантом.
- *
- * Отмену пользователем отличаем от ошибки: обе ветки возвращают null, потому
- * что и zenity, и osascript выходят с ненулевым кодом при отмене.
- */
 export async function pickNativeDirectory(initialPath = ''): Promise<string | null> {
   try {
     if (process.platform === 'win32') {
@@ -123,7 +107,6 @@ export async function pickNativeDirectory(initialPath = ''): Promise<string | nu
       return await pickOnLinux(initialPath);
     }
   } catch (error) {
-    // Диалог отменили или инструмента нет — второе отличаем по коду запуска.
     if (typeof error === 'object' && error !== null && (error as NodeJS.ErrnoException).code === 'ENOENT') {
       throw new PathPickerUnsupportedError();
     }

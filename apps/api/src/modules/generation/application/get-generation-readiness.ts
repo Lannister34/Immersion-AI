@@ -190,20 +190,10 @@ function getExternalReadiness(settings: ProviderSettingsSnapshot): GenerationRea
   return ready(settings);
 }
 
-/**
- * Зрение — свойство запущенного процесса, а не файла модели: одна и та же
- * модель без --mmproj картинок не видит. Встроенный сервер запускали мы сами,
- * поэтому там отвечаем по факту запуска, ничего не опрашивая и не кэшируя.
- */
 export function resolveBuiltinVisionSupport(visionProjectorPath: string | null): VisionSupport {
   return visionProjectorPath ? 'supported' : 'unsupported';
 }
 
-/**
- * Поддержку изображений выясняем только когда генерация уже готова: у
- * остановленного рантайма спрашивать нечего. Внешний сервер — чужой процесс,
- * его спрашиваем по HTTP, и ответ кэшируется в пробе.
- */
 async function withVisionSupport(readiness: GenerationReadinessResponse): Promise<GenerationReadinessResponse> {
   if (readiness.status !== 'ready') {
     return readiness;

@@ -61,8 +61,6 @@ export const providersRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  // Точечное изменение для внешних клиентов: сменить модель или провайдера,
-  // не вычитывая и не переписывая настройки целиком.
   app.patch('/settings', async (request, reply) => {
     try {
       return await patchProviderSettings(request.body);

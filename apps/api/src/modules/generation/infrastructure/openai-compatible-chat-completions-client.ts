@@ -17,7 +17,6 @@ const OpenAiCompatibleStreamChunkSchema = z.object({
         delta: z
           .object({
             content: z.string().nullable().optional(),
-            // DeepSeek и совместимые отдают ход мысли отдельным полем.
             reasoning: z.string().nullable().optional(),
             reasoning_content: z.string().nullable().optional(),
           })
@@ -68,11 +67,6 @@ function buildHeaders(apiKey: string | null) {
   };
 }
 
-/**
- * Разбирает поток OpenAI: строки `data: {...}` с кусками ответа и завершающим
- * `[DONE]`. Куски отдаём наружу по мере поступления и одновременно копим —
- * в транскрипт всё равно ложится целый ответ.
- */
 async function readStreamedContent(
   response: Response,
   onDelta: (delta: string, channel: ReplyChannel) => void,
@@ -116,8 +110,6 @@ async function readStreamedContent(
     }
 
     const delta = parsed.data.choices[0]?.delta;
-    // Отдельное поле размышлений в теги не заворачивается: отдаём его каналом
-    // напрямую, минуя разделитель.
     const reasoningDelta = delta?.reasoning_content ?? delta?.reasoning ?? '';
 
     if (reasoningDelta.length > 0) {
@@ -156,15 +148,8 @@ async function readStreamedContent(
   return { content: collected.reply.trim(), reasoning: collected.reasoning.trim() };
 }
 
-/** Модели-рассуждатели OpenAI берут только значения сэмплеров по умолчанию. */
 const OPENAI_REASONING_MODEL_PATTERNS = [/^o\d/u, /^gpt-5/u];
 
-/**
- * Локальные серверы принимают весь набор Kobold-сэмплеров и молча игнорируют
- * лишнее, а облако OpenAI на каждый незнакомый параметр отвечает 400 — там
- * отправляем только то, что описано в их контракте. Лимит ответа тоже назван
- * иначе: max_completion_tokens работает и на новых моделях, и на gpt-4o.
- */
 function buildGenerationPayload(request: ChatCompletionRequest) {
   if (request.endpoint.apiKind !== 'openai-cloud') {
     return {
@@ -193,17 +178,12 @@ function buildGenerationPayload(request: ChatCompletionRequest) {
   };
 }
 
-/**
- * Локальные серверы принимают собственные расширения, и клиенту важно, чтобы они
- * дошли: без enable_thinking: false Qwen3 тратит весь лимит на размышления.
- * Облаку OpenAI то же самое отправлять нельзя — оно отвечает 400.
- */
-function buildProviderOptions(request: ChatCompletionRequest) {
-  if (request.endpoint.apiKind !== 'openai-compatible' || !request.providerOptions) {
+function buildServerExtensions(request: ChatCompletionRequest) {
+  if (request.endpoint.apiKind !== 'openai-compatible' || !request.serverExtensions) {
     return {};
   }
 
-  return request.providerOptions;
+  return request.serverExtensions;
 }
 
 export class OpenAiCompatibleChatCompletionsClient implements ChatCompletionClient {
@@ -216,8 +196,7 @@ export class OpenAiCompatibleChatCompletionsClient implements ChatCompletionClie
         method: 'POST',
         headers: buildHeaders(request.endpoint.apiKey),
         body: JSON.stringify({
-          // Расширения идут первыми: наши поля не должны ими перекрываться.
-          ...buildProviderOptions(request),
+          ...buildServerExtensions(request),
           model: request.endpoint.model,
           messages: request.messages.map(buildMessagePayload),
           stream: streaming,
@@ -239,8 +218,6 @@ export class OpenAiCompatibleChatCompletionsClient implements ChatCompletionClie
       );
     }
 
-    // Просить поток и получить обычный JSON — нормальный ответ сервера, который
-    // стриминг не умеет. Решает content-type, а не наш запрос.
     const isEventStream = (response.headers.get('content-type') ?? '').includes('text/event-stream');
 
     if (streaming && isEventStream && request.onDelta) {

@@ -19,8 +19,6 @@ interface ModelDirsCardProps {
 
 export function ModelDirsCard({ dirsStatus, serverConfig }: ModelDirsCardProps) {
   const queryClient = useQueryClient();
-  // Список показываем прямо из ответа сервера: черновика, который можно забыть
-  // сохранить и потерять при фоновом опросе, здесь больше нет.
   const dirs = serverConfig.modelsDirs;
   const [newDir, setNewDir] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -58,11 +56,9 @@ export function ModelDirsCard({ dirsStatus, serverConfig }: ModelDirsCardProps) 
     setNewDir('');
   };
 
-  // Приложение локальное: диалог открывается на той же машине, где браузер.
   const pickMutation = useMutation({
     mutationFn: () => pickRuntimeDirectory({ initialPath: newDir.trim() }),
     onSuccess: (response) => {
-      // Отмену диалога отличаем от выбора: null — пользователь закрыл окно.
       if (response.path) {
         addDir(response.path);
       }

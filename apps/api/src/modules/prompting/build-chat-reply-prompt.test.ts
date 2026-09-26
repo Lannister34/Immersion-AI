@@ -214,6 +214,42 @@ describe('buildChatReplyPrompt', () => {
     ]);
   });
 
+  it('leaves the stored reasoning of earlier replies out of the prompt', () => {
+    const prompt = buildChatReplyPrompt({
+      samplerPreset: defaultSamplerPreset,
+      session: buildSession([
+        {
+          attachments: [],
+          content: 'Привет.',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          id: 'm1',
+          reasoning: null,
+          role: 'user',
+        },
+        {
+          attachments: [],
+          content: 'Здравствуй.',
+          createdAt: '2026-01-01T00:00:01.000Z',
+          id: 'm2',
+          reasoning: 'Прикину тон ответа.',
+          role: 'assistant',
+        },
+        {
+          attachments: [],
+          content: 'Как дела?',
+          createdAt: '2026-01-01T00:00:02.000Z',
+          id: 'm3',
+          reasoning: null,
+          role: 'user',
+        },
+      ]),
+      settings,
+    });
+
+    expect(prompt).toContainEqual(expect.objectContaining({ content: 'Здравствуй.', role: 'assistant' }));
+    expect(JSON.stringify(prompt)).not.toContain('Прикину тон ответа.');
+  });
+
   it('trims old transcript messages with trim_start when context budget is exceeded', () => {
     const prompt = buildChatReplyPrompt({
       samplerPreset: {

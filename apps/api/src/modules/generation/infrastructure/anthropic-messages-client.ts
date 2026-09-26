@@ -10,11 +10,8 @@ import type {
 import { ProviderGenerationError } from '../application/generation-errors.js';
 import { buildRequestSignal, isAbortError, readProviderErrorText } from './provider-http.js';
 
-/** Версия API фиксируется заголовком: Anthropic не считает её частью URL. */
 const ANTHROPIC_VERSION = '2023-06-01';
 
-// Блоки ответа разбираем по типу, а не по форме: незнакомые виды (tool_use,
-// redacted_thinking) обязаны проходить схему молча, а не ронять генерацию.
 const AnthropicContentBlockSchema = z.object({
   text: z.string().optional(),
   thinking: z.string().optional(),
@@ -37,11 +34,6 @@ interface AnthropicImageSource {
   type: 'base64';
 }
 
-/**
- * Anthropic принимает картинку разобранной на тип и байты, а не одной строкой
- * data-URL. Чужой формат ссылки молча не отправляем: лучше пропустить картинку,
- * чем получить 400 на весь запрос.
- */
 function parseDataUrl(dataUrl: string): AnthropicImageSource | null {
   const match = /^data:(?<mediaType>[^;,]+);base64,(?<data>.+)$/su.exec(dataUrl);
   const mediaType = match?.groups?.mediaType;
@@ -70,13 +62,6 @@ function buildMessageContent(message: ChatCompletionRequest['messages'][number])
   return [...images, ...(message.content.trim().length > 0 ? [{ text: message.content, type: 'text' as const }] : [])];
 }
 
-/**
- * Anthropic держит системный текст отдельным полем, а диалог требует строго
- * чередующихся ролей, начиная с пользователя. Промпт мы собираем в общем
- * OpenAI-подобном виде, поэтому здесь его перекладываем: системные сообщения
- * склеиваем, соседние одинаковые роли объединяем, а разговор, начинающийся с
- * реплики персонажа, открываем коротким служебным ходом пользователя.
- */
 export function buildAnthropicPayload(messages: ChatCompletionRequest['messages']) {
   const system = messages
     .filter((message) => message.role === 'system')
@@ -114,11 +99,6 @@ export function buildAnthropicPayload(messages: ChatCompletionRequest['messages'
   return { conversation, system };
 }
 
-/**
- * Anthropic ограничивает temperature единицей и не принимает штрафы за
- * повторы: параметры, которых в API нет, просто не отправляем, а выходящие за
- * диапазон — подрезаем. Молчаливая подмена лучше, чем 400 на каждой генерации.
- */
 function buildSamplingPayload(sampling: ChatCompletionRequest['sampling']) {
   return {
     temperature: Math.min(Math.max(sampling.temperature, 0), 1),
@@ -152,12 +132,6 @@ function readResponseBlocks(payload: z.infer<typeof AnthropicMessageResponseSche
   return { content: parts.reply.join('').trim(), reasoning: parts.reasoning.join('').trim() };
 }
 
-/**
- * Поток Anthropic — те же строки `data: {...}`, но с типом события внутри и без
- * завершающего `[DONE]`. Текст приходит кусками content_block_delta, мысли —
- * отдельным типом дельты; тег <think> в тексте всё равно пропускаем через
- * разделитель: локальные прокси иногда отдают его и в этом формате.
- */
 async function readStreamedContent(
   response: Response,
   onDelta: (delta: string, channel: ReplyChannel) => void,

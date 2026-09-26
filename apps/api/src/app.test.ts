@@ -101,7 +101,7 @@ describe('buildApiApp', () => {
     await app.close();
   });
 
-  it('serves the providers overview contract from canonical files', async () => {
+  it('serves the providers overview from canonical files with a config for every catalog provider, cloud ones included', async () => {
     const app = buildApiApp();
     const response = await app.inject({
       method: 'GET',
@@ -112,7 +112,6 @@ describe('buildApiApp', () => {
     expect(response.statusCode).toBe(200);
     expect(overview.activeProvider).toBe('custom');
     expect(overview.backendMode).toBe('external');
-    // Каталог отдаёт конфиг на каждого известного провайдера, включая облачные.
     expect(overview.providerConfigs.map((config) => config.provider).sort()).toEqual([
       'anthropic',
       'custom',

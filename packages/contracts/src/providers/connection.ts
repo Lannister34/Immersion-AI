@@ -27,7 +27,6 @@ export const ProviderModelSummarySchema = z.object({
 });
 export type ProviderModelSummary = z.infer<typeof ProviderModelSummarySchema>;
 
-/** Запрос каталога моделей по ещё не сохранённым данным формы настроек. */
 export const ProviderModelsProbeCommandSchema = z.object({
   apiKey: z.string().max(500).optional(),
   provider: ProviderTypeSchema,

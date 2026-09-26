@@ -15,7 +15,6 @@ export class GenerationProviderUnavailableError extends Error {
 
 export interface GenerationProviderEndpoint {
   apiKey: string | null;
-  /** Диалект API: от него зависит и путь, и формат запроса. */
   apiKind: ProviderApiKind;
   baseUrl: string;
   model: string;
@@ -45,7 +44,6 @@ export function normalizeGenerationProviderBaseUrl(value: string) {
   }
 }
 
-/** Базовый URL уже может заканчиваться на /v1 — второй раз его не добавляем. */
 function resolveVersionedUrl(baseUrl: string, path: string) {
   const normalized = normalizeGenerationProviderBaseUrl(baseUrl);
 
@@ -91,9 +89,6 @@ export async function resolveGenerationProviderEndpoint(
 
   const provider = settings.activeProvider;
   const apiKey = parsedConfig.apiKey?.trim() || null;
-  // У облачных провайдеров нет ни модели по умолчанию, ни анонимного доступа:
-  // молча подставлять «local-model» или уходить без ключа — это гарантированная
-  // ошибка провайдера вместо понятного сообщения.
   const model = parsedConfig.model?.trim() || getProviderDefaultModel(provider);
 
   if (isProviderApiKeyRequired(provider) && !apiKey) {

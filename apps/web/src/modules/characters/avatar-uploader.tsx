@@ -114,10 +114,8 @@ export function CharacterAvatarUploader({
     setDragActive(false);
   };
 
-  // Ctrl+V на карточке: скриншот или скопированная картинка попадает в аватар
-  // без сохранения на диск. Слушаем документ, пока карточка на экране.
   useEffect(() => {
-    const onPaste = (event: ClipboardEvent) => {
+    const submitPastedImage = (event: ClipboardEvent) => {
       const file = Array.from(event.clipboardData?.files ?? []).find((candidate) =>
         candidate.type.startsWith('image/'),
       );
@@ -128,9 +126,9 @@ export function CharacterAvatarUploader({
       }
     };
 
-    document.addEventListener('paste', onPaste);
+    document.addEventListener('paste', submitPastedImage);
 
-    return () => document.removeEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', submitPastedImage);
   }, []);
 
   const handleDrop = (event: DragEvent<HTMLElement>) => {

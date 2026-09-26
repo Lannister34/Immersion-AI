@@ -20,7 +20,6 @@ function mergeConfig(current: ProviderConfig, patch: PatchProviderSettingsComman
   }
 
   if (patch?.apiKey !== undefined) {
-    // Пустая строка — намеренное «убрать ключ», а не «оставь как было».
     if (patch.apiKey.trim().length > 0) {
       next.apiKey = patch.apiKey.trim();
     } else {
@@ -31,12 +30,6 @@ function mergeConfig(current: ProviderConfig, patch: PatchProviderSettingsComman
   return next;
 }
 
-/**
- * Меняет только присланные поля. Конфиг правится у того провайдера, который
- * станет активным после запроса, — так «переключись на Anthropic и поставь
- * модель X» остаётся одним вызовом, а настройки остальных провайдеров не
- * трогаются.
- */
 export async function patchProviderSettings(input: unknown, repository = new ProviderSettingsRepository()) {
   const command = PatchProviderSettingsCommandSchema.parse(input);
   const current = await repository.read();

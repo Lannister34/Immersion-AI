@@ -8,20 +8,17 @@ export type RuntimeConfigCommand = z.infer<typeof RuntimeConfigCommandSchema>;
 export const RuntimeStartCommandSchema = RuntimeConfigCommandSchema.omit({
   modelsDirs: true,
 }).extend({
-  /** Мультимодальный проектор (--mmproj): без него VL-модель не видит картинок. */
   mmprojPath: z.string().min(1).optional(),
   modelPath: z.string().min(1),
 });
 export type RuntimeStartCommand = z.infer<typeof RuntimeStartCommandSchema>;
 
-/** Системный диалог выбора каталога с моделями. */
 export const PickRuntimeDirectoryCommandSchema = z.object({
   initialPath: z.string().max(4096).optional(),
 });
 export type PickRuntimeDirectoryCommand = z.infer<typeof PickRuntimeDirectoryCommandSchema>;
 
 export const PickRuntimeDirectoryResponseSchema = z.object({
-  /** null — пользователь закрыл диалог, ничего не выбрав. */
   path: z.string().nullable(),
 });
 export type PickRuntimeDirectoryResponse = z.infer<typeof PickRuntimeDirectoryResponseSchema>;

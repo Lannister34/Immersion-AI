@@ -420,10 +420,6 @@ function getFieldDefault(definition: ProviderDefinition | undefined, key: string
   return definition?.fields.find((field) => field.key === key)?.defaultValue ?? '';
 }
 
-/**
- * Пустой конфиг заполняем значениями каталога: у облачных провайдеров адрес
- * известен заранее, и заставлять набирать его руками незачем.
- */
 function configToFormState(
   config: ProviderConfig | undefined,
   definition: ProviderDefinition | undefined,
@@ -464,8 +460,6 @@ function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFo
   const [form, setForm] = useState<ProviderFormState>(baseline);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  // Каталог моделей спрашиваем по тому, что набрано в форме: ждать сохранения
-  // ключа ради списка моделей — лишний шаг.
   const modelsMutation = useMutation({
     mutationFn: probeProviderModels,
     onSuccess: (response) => {

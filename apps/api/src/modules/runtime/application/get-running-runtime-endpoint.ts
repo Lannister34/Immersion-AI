@@ -6,7 +6,6 @@ import { getRuntimeOverview } from './get-runtime-overview.js';
 export interface RunningRuntimeEndpoint {
   baseUrl: string;
   model: string | null;
-  /** Проектор, с которым поднят процесс; null — картинки он не примет. */
   visionProjectorPath: string | null;
 }
 

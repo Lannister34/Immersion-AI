@@ -10,7 +10,6 @@ import type { ReplyChannel } from '@immersion/domain/generation';
 export type GenerationJobEventSubscriber = (event: GenerationJobEvent) => void;
 
 export interface ChatReplyGenerationJobRunnerInput {
-  /** Публикует кусок ответа подписчикам задачи. */
   publishDelta: (delta: string, channel: ReplyChannel) => void;
   signal: AbortSignal;
 }

@@ -11,9 +11,7 @@ import { chatReplyPromptPreviewQueryBaseKey } from './chat-reply-prompt-preview-
 import { chatGenerationJobsQueryKey } from './generation-jobs-query';
 
 export interface GenerationJobEventHandlers {
-  /** Кусок ответа модели при включённом стриминге. */
   onReplyDelta?: (delta: string, channel: 'reasoning' | 'reply') => void;
-  /** Ответ дописан или задача завершилась: живой буфер больше не нужен. */
   onReplyFinished?: () => void;
 }
 
@@ -23,8 +21,6 @@ export function useGenerationJobEvents(
   handlers: GenerationJobEventHandlers = {},
 ) {
   const queryClient = useQueryClient();
-  // Колбэки держим в ref: пересоздавать подписку на каждый рендер нельзя,
-  // иначе поток обрывался бы после первого же куска.
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
 

@@ -1,17 +1,5 @@
 import { z } from 'zod';
 
-/**
- * Чужой контракт: это схема OpenAI Chat Completions, по которой к нам приходят
- * сторонние клиенты (ComfyUI, SillyTavern, curl). Поэтому она живёт в модуле,
- * а не в общем словаре contracts — веб её не знает и знать не должен.
- *
- * Неизвестные поля пропускаем молча: клиенты присылают много того, чего мы не
- * поддерживаем, и падать на каждом seed или logit_bias — худшее поведение, чем
- * ответить нормально. Отказываемся только там, где молчание дало бы клиенту
- * заведомо неверный результат.
- */
-// Части разбираем по type, а не по форме: незнакомый вид части (audio, file)
-// обязан пройти схему молча и быть пропущенным, а не уронить весь запрос.
 export const OpenAiContentPartSchema = z.object({
   image_url: z.object({ url: z.string().min(1) }).optional(),
   text: z.string().optional(),
@@ -51,7 +39,6 @@ export class UnsupportedOpenAiFeatureError extends Error {
   }
 }
 
-/** Роль модели: developer — новое имя system, tool и function мы не умеем. */
 export function toPromptRole(role: string): 'assistant' | 'system' | 'user' {
   if (role === 'assistant') {
     return 'assistant';
@@ -99,11 +86,6 @@ function readContentParts(content: OpenAiRequestMessage['content']): { images: s
   return { images, text: texts.join('\n') };
 }
 
-/**
- * Приводит запрос к тому виду, в котором промпт уходит провайдеру: строка
- * текста плюс отдельный список картинок. Пустые сообщения выбрасываем — они
- * ничего не добавляют, а некоторые провайдеры на них ругаются.
- */
 export function normalizeOpenAiMessages(messages: OpenAiRequestMessage[]): NormalizedOpenAiMessage[] {
   const normalized: NormalizedOpenAiMessage[] = [];
 
@@ -125,11 +107,6 @@ export function normalizeOpenAiMessages(messages: OpenAiRequestMessage[]): Norma
   return normalized;
 }
 
-/**
- * То, чего мы не умеем и о чём обязаны сказать вслух: несколько вариантов
- * ответа и вызов инструментов. Промолчать здесь — значит вернуть клиенту не то,
- * что он попросил.
- */
 export function assertSupportedRequest(request: OpenAiChatCompletionRequest): void {
   if (request.n !== undefined && request.n > 1) {
     throw new UnsupportedOpenAiFeatureError('Only one choice per request is supported; drop "n" or set it to 1.');

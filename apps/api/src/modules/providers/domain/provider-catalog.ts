@@ -120,15 +120,10 @@ export function getProviderApiKind(type: ProviderType): ProviderApiKind {
   return getProviderDefinition(type).apiKind;
 }
 
-/**
- * Облачные провайдеры платные и адресуются по ключу: без него запрос
- * бессмысленен. Локальные серверы, наоборот, ключа обычно не требуют.
- */
 export function isProviderApiKeyRequired(type: ProviderType): boolean {
   return getProviderDefinition(type).fields.some((field) => field.key === 'apiKey' && field.required);
 }
 
-/** Модель, с которой провайдер работает без настройки; у облачных её нет. */
 export function getProviderDefaultModel(type: ProviderType): string | null {
   return getProviderDefinition(type).fields.find((field) => field.key === 'model')?.defaultValue ?? null;
 }

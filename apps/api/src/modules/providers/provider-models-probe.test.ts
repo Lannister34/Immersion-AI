@@ -33,7 +33,7 @@ describe('provider catalog', () => {
 });
 
 describe('probeProviderModels', () => {
-  it('authenticates Anthropic with x-api-key and the version header', async () => {
+  it('lists Anthropic models from the same /v1/models data list, authenticating with x-api-key and the version header', async () => {
     const { calls, fetcher } = mockFetcher({ data: [{ id: 'claude-sonnet-4-5' }] });
 
     const response = await probeProviderModels(

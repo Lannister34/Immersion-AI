@@ -3,11 +3,6 @@ import { z } from 'zod';
 export const ProviderTypeSchema = z.enum(['koboldcpp', 'custom', 'openai', 'anthropic']);
 export type ProviderType = z.infer<typeof ProviderTypeSchema>;
 
-/**
- * Диалект HTTP-API провайдера. Локальные серверы принимают расширенный набор
- * сэмплеров, облако OpenAI — только свой, а Anthropic говорит по-своему:
- * другой путь, другой заголовок ключа и system отдельным полем.
- */
 export const ProviderApiKindSchema = z.enum(['anthropic', 'openai-cloud', 'openai-compatible']);
 export type ProviderApiKind = z.infer<typeof ProviderApiKindSchema>;
 
@@ -59,17 +54,11 @@ export const UpdateProviderSettingsCommandSchema = z.object({
 });
 export type UpdateProviderSettingsCommand = z.infer<typeof UpdateProviderSettingsCommandSchema>;
 
-/**
- * Точечное изменение: всё, чего нет в запросе, остаётся как было. Нужно
- * внешним клиентам — чтобы сменить модель, не вычитывая и не переписывая
- * настройки всех провайдеров целиком.
- */
 export const PatchProviderSettingsCommandSchema = z
   .object({
     activeProvider: ProviderTypeSchema.optional(),
     config: z
       .object({
-        /** Пустая строка снимает ключ; отсутствие поля оставляет прежний. */
         apiKey: z.string().max(500).optional(),
         model: z.string().trim().min(1).max(200).optional(),
         url: z.string().trim().min(1).max(2000).optional(),

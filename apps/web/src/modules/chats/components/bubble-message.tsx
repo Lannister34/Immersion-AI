@@ -18,9 +18,7 @@ export interface BubbleMessageProps {
   canRegenerate: boolean;
   attachments: ChatMessageAttachmentDto[];
   characterAvatarUrl: string | null;
-  /** Ход мысли модели; null — модель не рассуждала вслух. */
   reasoning: string | null;
-  /** Показывать ли блок размышлений: настройка профиля. */
   showReasoning: boolean;
   chatId: string;
   formatting: MessageFormatting;

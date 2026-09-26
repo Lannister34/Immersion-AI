@@ -384,9 +384,7 @@ export type GenerationJobResponse = z.infer<typeof GenerationJobResponseSchema>;
 
 export const GenerationJobEventSchema = z.discriminatedUnion('type', [
   z.object({
-    /** Куда идёт кусок: в сам ответ или в блок размышлений. */
     channel: z.enum(['reasoning', 'reply']),
-    /** Очередной кусок ответа модели; приходит только при включённом стриминге. */
     delta: z.string(),
     job: GenerationJobDtoSchema,
     type: z.literal('chat.reply.delta'),

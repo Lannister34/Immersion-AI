@@ -264,7 +264,7 @@ describe('runtime control routes', () => {
     await app.close();
   });
 
-  it('rejects model start when the multimodal projector path does not exist', async () => {
+  it('rejects a missing mmproj projector before launch, since llama-server would die after starting and bury the cause in its log', async () => {
     const modelPath = path.join(dataRoot, 'model.gguf');
     await fs.writeFile(modelPath, 'gguf', 'utf8');
     const app = buildApiApp();

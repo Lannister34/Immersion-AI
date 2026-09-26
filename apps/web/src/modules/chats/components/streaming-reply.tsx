@@ -8,10 +8,8 @@ import { ReasoningBlock } from './reasoning-block';
 export interface StreamingReplyProps {
   avatarUrl: string | null;
   formatting: MessageFormatting;
-  /** Ход мысли, приходящий потоком. */
   reasoning: string;
   showReasoning: boolean;
-  /** Начало генерации по данным задачи; null — время неизвестно. */
   startedAt: string | null;
   text: string;
   who: string;
@@ -25,10 +23,6 @@ function formatElapsed(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-/**
- * Ответ, который печатается прямо сейчас. Пока текст не пришёл, показываем
- * индикатор — при выключенном стриминге так и остаётся до конца генерации.
- */
 export function StreamingReply({
   avatarUrl,
   formatting,

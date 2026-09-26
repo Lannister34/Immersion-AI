@@ -70,7 +70,7 @@ describe('buildAnthropicPayload', () => {
     expect(conversation).toEqual([{ content: [{ text: 'Привет.', type: 'text' }], role: 'user' }]);
   });
 
-  it('merges neighbouring messages of the same role', () => {
+  it('merges neighbouring messages of the same role, since Anthropic requires alternating roles', () => {
     const { conversation } = buildAnthropicPayload([
       { content: 'Раз.', role: 'user' },
       { content: 'Два.', role: 'user' },
@@ -84,14 +84,14 @@ describe('buildAnthropicPayload', () => {
     ]);
   });
 
-  it('opens a transcript that starts with the character reply', () => {
+  it('opens a transcript that starts with the character reply with a user turn, since Anthropic wants the user first', () => {
     const { conversation } = buildAnthropicPayload([{ content: 'Здравствуй, путник.', role: 'assistant' }]);
 
     expect(conversation[0]?.role).toBe('user');
     expect(conversation[1]?.role).toBe('assistant');
   });
 
-  it('sends images as base64 blocks instead of data-URL strings', () => {
+  it('sends data-URL images as base64 blocks and drops images linked in any other form', () => {
     const { conversation } = buildAnthropicPayload([
       { content: 'Что тут?', images: ['data:image/png;base64,AAAB', 'https://example.test/a.png'], role: 'user' },
     ]);
@@ -104,7 +104,7 @@ describe('buildAnthropicPayload', () => {
 });
 
 describe('AnthropicMessagesClient', () => {
-  it('posts to /v1/messages with the key and version headers', async () => {
+  it('posts to /v1/messages with the key in x-api-key and the API version in a header, not in the URL', async () => {
     const captured = mockFetch(jsonReply('Здравствуй.'), 'application/json');
     const response = await new AnthropicMessagesClient().completeChat(BASE_REQUEST);
 
@@ -115,7 +115,7 @@ describe('AnthropicMessagesClient', () => {
     expect(response.content).toBe('Здравствуй.');
   });
 
-  it('clamps temperature and drops sampling knobs the API does not accept', async () => {
+  it('clamps temperature to 1 and drops repetition penalties, which the Anthropic API does not accept', async () => {
     const captured = mockFetch(jsonReply('Ага.'), 'application/json');
     await new AnthropicMessagesClient().completeChat(BASE_REQUEST);
 
@@ -133,6 +133,29 @@ describe('AnthropicMessagesClient', () => {
 
     expect(response.content).toBe('Ответ.');
     expect(response.reasoning).toBe('Взвешиваю варианты.');
+  });
+
+  it('passes over content blocks of unknown types, such as tool_use and redacted_thinking, without failing', async () => {
+    mockFetch(
+      JSON.stringify({
+        content: [
+          { data: 'opaque', type: 'redacted_thinking' },
+          { id: 'toolu_1', input: {}, name: 'search', type: 'tool_use' },
+          { text: 'Ответ.', type: 'text' },
+        ],
+      }),
+      'application/json',
+    );
+    const response = await new AnthropicMessagesClient().completeChat(BASE_REQUEST);
+
+    expect(response).toEqual({ content: 'Ответ.', reasoning: '' });
+  });
+
+  it('never forwards server extensions, which the Anthropic API would reject', async () => {
+    const captured = mockFetch(jsonReply('Ага.'), 'application/json');
+    await new AnthropicMessagesClient().completeChat({ ...BASE_REQUEST, serverExtensions: { enable_thinking: false } });
+
+    expect(captured[0]?.body).not.toHaveProperty('enable_thinking');
   });
 
   it('reports streamed text and thinking on their own channels', async () => {
@@ -160,6 +183,29 @@ describe('AnthropicMessagesClient', () => {
     ]);
     expect(response.content).toBe('Привет.');
     expect(response.reasoning).toBe('Думаю…');
+  });
+
+  it('splits a think tag out of streamed text, which local proxies of this format emit', async () => {
+    mockFetch(
+      sseBody([
+        { delta: { text: '<think>Прикидываю</think>', type: 'text_delta' }, type: 'content_block_delta' },
+        { delta: { text: 'Ответ.', type: 'text_delta' }, type: 'content_block_delta' },
+        { type: 'message_stop' },
+      ]),
+      'text/event-stream',
+    );
+    const deltas: Array<[string, string]> = [];
+
+    const response = await new AnthropicMessagesClient().completeChat({
+      ...BASE_REQUEST,
+      onDelta: (delta, channel) => deltas.push([channel, delta]),
+    });
+
+    expect(deltas).toEqual([
+      ['reasoning', 'Прикидываю'],
+      ['reply', 'Ответ.'],
+    ]);
+    expect(response).toEqual({ content: 'Ответ.', reasoning: 'Прикидываю' });
   });
 
   it('fails loudly when the stream reports an error event', async () => {

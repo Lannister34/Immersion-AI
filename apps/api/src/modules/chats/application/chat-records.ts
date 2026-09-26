@@ -13,7 +13,6 @@ export interface ChatMessageRecord {
   content: string;
   createdAt: string;
   id: string;
-  /** Ход мысли модели-рассуждателя; в промпт не возвращается. */
   reasoning: string | null;
   role: ChatMessageRoleRecord;
 }
