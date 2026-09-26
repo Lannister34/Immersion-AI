@@ -1,4 +1,4 @@
-import { createReplySplitter, type ReplyChannel, type ReplyChunk, splitReply } from '@immersion/domain/generation';
+import { splitReply } from '@immersion/domain/generation';
 import { z } from 'zod';
 
 import { resolveChatCompletionsUrl } from '../../providers/application/generation-provider.js';
@@ -9,6 +9,7 @@ import type {
 } from '../application/chat-completion-client.js';
 import { ProviderGenerationError } from '../application/generation-errors.js';
 import { buildRequestSignal, isAbortError, readProviderErrorText } from './provider-http.js';
+import { type ProviderStreamSink, readProviderReply } from './provider-reply-reader.js';
 
 const OpenAiCompatibleStreamChunkSchema = z.object({
   choices: z
@@ -71,96 +72,67 @@ function buildHeaders(apiKey: string | null) {
   };
 }
 
-async function readStreamedContent(
-  response: Response,
-  onDelta: (delta: string, channel: ReplyChannel) => void,
-): Promise<ChatCompletionResponse> {
-  const body = response.body;
-
-  if (!body) {
-    throw new ProviderGenerationError('Provider returned an empty stream.');
+function readOpenAiStreamData(data: string, sink: ProviderStreamSink) {
+  if (data === '[DONE]') {
+    return;
   }
 
-  const decoder = new TextDecoder();
-  const reader = body.getReader();
-  const splitter = createReplySplitter();
-  const collected: Record<ReplyChannel, string> = { reasoning: '', reply: '' };
-  let buffer = '';
+  const chunk: unknown = JSON.parse(data);
+  const streamError = OpenAiCompatibleStreamErrorSchema.safeParse(chunk);
 
-  const emit = (chunks: ReplyChunk[]) => {
-    for (const chunk of chunks) {
-      collected[chunk.channel] += chunk.text;
-      onDelta(chunk.text, chunk.channel);
-    }
+  if (streamError.success) {
+    const { error } = streamError.data;
+
+    throw new ProviderGenerationError(
+      (typeof error === 'string' ? error : error.message) || 'Provider stream reported an error.',
+    );
+  }
+
+  const parsed = OpenAiCompatibleStreamChunkSchema.safeParse(chunk);
+
+  if (!parsed.success) {
+    return;
+  }
+
+  const delta = parsed.data.choices[0]?.delta;
+  const reasoningDelta = delta?.reasoning_content ?? delta?.reasoning ?? '';
+
+  if (reasoningDelta.length > 0) {
+    sink.reasoning(reasoningDelta);
+  }
+
+  const contentDelta = delta?.content ?? '';
+
+  if (contentDelta.length > 0) {
+    sink.reply(contentDelta);
+  }
+}
+
+async function readOpenAiJsonReply(response: Response): Promise<ChatCompletionResponse> {
+  const responseText = await response.text();
+  let payload: z.infer<typeof OpenAiCompatibleChatCompletionResponseSchema>;
+
+  try {
+    payload = OpenAiCompatibleChatCompletionResponseSchema.parse(JSON.parse(responseText));
+  } catch (error) {
+    throw new ProviderGenerationError(
+      error instanceof Error
+        ? `Provider returned an invalid response: ${error.message}`
+        : 'Provider returned an invalid response.',
+    );
+  }
+
+  const message = payload.choices[0]?.message;
+  const split = splitReply(message?.content ?? '');
+  const reasoning = [message?.reasoning_content ?? message?.reasoning ?? '', split.reasoning]
+    .filter((part) => part.trim().length > 0)
+    .join('\n\n')
+    .trim();
+
+  return {
+    content: split.content,
+    reasoning,
   };
-
-  const handleLine = (line: string) => {
-    const trimmed = line.trim();
-
-    if (!trimmed.startsWith('data:')) {
-      return;
-    }
-
-    const payload = trimmed.slice('data:'.length).trim();
-
-    if (payload === '[DONE]') {
-      return;
-    }
-
-    const chunk: unknown = JSON.parse(payload);
-    const streamError = OpenAiCompatibleStreamErrorSchema.safeParse(chunk);
-
-    if (streamError.success) {
-      const { error } = streamError.data;
-
-      throw new ProviderGenerationError(
-        (typeof error === 'string' ? error : error.message) || 'Provider stream reported an error.',
-      );
-    }
-
-    const parsed = OpenAiCompatibleStreamChunkSchema.safeParse(chunk);
-
-    if (!parsed.success) {
-      return;
-    }
-
-    const delta = parsed.data.choices[0]?.delta;
-    const reasoningDelta = delta?.reasoning_content ?? delta?.reasoning ?? '';
-
-    if (reasoningDelta.length > 0) {
-      emit([{ channel: 'reasoning', text: reasoningDelta }]);
-    }
-
-    const contentDelta = delta?.content ?? '';
-
-    if (contentDelta.length > 0) {
-      emit(splitter.push(contentDelta));
-    }
-  };
-
-  while (true) {
-    const { done, value } = await reader.read();
-
-    if (done) {
-      break;
-    }
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split(/\r?\n/u);
-    buffer = lines.pop() ?? '';
-
-    for (const line of lines) {
-      handleLine(line);
-    }
-  }
-
-  if (buffer.trim().length > 0) {
-    handleLine(buffer);
-  }
-
-  emit(splitter.flush());
-
-  return { content: collected.reply.trim(), reasoning: collected.reasoning.trim() };
 }
 
 const OPENAI_REASONING_MODEL_PATTERNS = [/^o\d/u, /^gpt-5/u];
@@ -233,57 +205,9 @@ export class OpenAiCompatibleChatCompletionsClient implements ChatCompletionClie
       );
     }
 
-    const isEventStream = (response.headers.get('content-type') ?? '').includes('text/event-stream');
-
-    if (streaming && isEventStream && request.onDelta) {
-      let streamed: ChatCompletionResponse;
-
-      try {
-        streamed = await readStreamedContent(response, request.onDelta);
-      } catch (error) {
-        if (request.signal?.aborted || isAbortError(error)) {
-          throw error;
-        }
-
-        throw new ProviderGenerationError(
-          error instanceof Error ? `Provider stream failed: ${error.message}` : 'Provider stream failed.',
-        );
-      }
-
-      if (!streamed.content && !request.allowEmptyContent) {
-        throw new ProviderGenerationError('Provider returned an empty reply.');
-      }
-
-      return streamed;
-    }
-
-    const responseText = await response.text();
-    let payload: z.infer<typeof OpenAiCompatibleChatCompletionResponseSchema>;
-
-    try {
-      payload = OpenAiCompatibleChatCompletionResponseSchema.parse(JSON.parse(responseText));
-    } catch (error) {
-      throw new ProviderGenerationError(
-        error instanceof Error
-          ? `Provider returned an invalid response: ${error.message}`
-          : 'Provider returned an invalid response.',
-      );
-    }
-
-    const message = payload.choices[0]?.message;
-    const split = splitReply(message?.content ?? '');
-    const reasoning = [message?.reasoning_content ?? message?.reasoning ?? '', split.reasoning]
-      .filter((part) => part.trim().length > 0)
-      .join('\n\n')
-      .trim();
-
-    if (!split.content && !request.allowEmptyContent) {
-      throw new ProviderGenerationError('Provider returned an empty reply.');
-    }
-
-    return {
-      content: split.content,
-      reasoning,
-    };
+    return readProviderReply(response, request, {
+      readJson: readOpenAiJsonReply,
+      readStreamData: readOpenAiStreamData,
+    });
   }
 }

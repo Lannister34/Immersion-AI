@@ -10,9 +10,10 @@ import {
 } from '@immersion/contracts/providers';
 import { z } from 'zod';
 
+import { buildAnthropicAuthHeaders } from '../domain/anthropic-auth-headers.js';
 import { getProviderApiKind, isProviderApiKeyRequired } from '../domain/provider-catalog.js';
 import { runtimeEndpointAdapter } from '../infrastructure/runtime-endpoint-adapter.js';
-import { normalizeGenerationProviderBaseUrl } from './generation-provider.js';
+import { resolveVersionedUrl } from './generation-provider.js';
 import { getProviderSettings } from './get-provider-settings.js';
 import type { RuntimeEndpointPort } from './runtime-endpoint-port.js';
 
@@ -39,17 +40,10 @@ interface ConnectionSubject {
   mode: ProviderMode;
 }
 
-function buildModelsEndpoint(baseUrl: string) {
-  const normalized = normalizeGenerationProviderBaseUrl(baseUrl);
-
-  return normalized.endsWith('/v1') ? `${normalized}/models` : `${normalized}/v1/models`;
-}
-
 function buildHeaders(apiKind: ProviderApiKind, apiKey: string | null) {
   if (apiKind === 'anthropic') {
     return {
-      ...(apiKey ? { 'x-api-key': apiKey } : {}),
-      'anthropic-version': '2023-06-01',
+      ...buildAnthropicAuthHeaders(apiKey),
       Accept: 'application/json',
     };
   }
@@ -175,7 +169,7 @@ export async function probeProviderModels(
   let endpoint: string;
 
   try {
-    endpoint = buildModelsEndpoint(command.url);
+    endpoint = resolveVersionedUrl(command.url, 'models');
   } catch {
     return createErrorResponse(
       subject,
@@ -211,7 +205,13 @@ export async function testProviderConnection(
       return createErrorResponse(subject, 'builtin_runtime_not_running', 'Встроенный сервер не запущен.', null);
     }
 
-    return fetchProviderModels(subject, buildModelsEndpoint(runtimeBaseUrl), 'openai-compatible', null, dependencies);
+    return fetchProviderModels(
+      subject,
+      resolveVersionedUrl(runtimeBaseUrl, 'models'),
+      'openai-compatible',
+      null,
+      dependencies,
+    );
   }
 
   const providerUrl = getConfiguredExternalUrl(settings);

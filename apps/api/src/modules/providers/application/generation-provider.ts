@@ -45,7 +45,7 @@ export function normalizeGenerationProviderBaseUrl(value: string) {
   }
 }
 
-function resolveVersionedUrl(baseUrl: string, path: string) {
+export function resolveVersionedUrl(baseUrl: string, path: string): string {
   const normalized = normalizeGenerationProviderBaseUrl(baseUrl);
 
   return normalized.endsWith('/v1') ? `${normalized}/${path}` : `${normalized}/v1/${path}`;

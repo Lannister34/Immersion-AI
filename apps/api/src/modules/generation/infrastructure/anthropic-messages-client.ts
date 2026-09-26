@@ -1,7 +1,8 @@
-import { createReplySplitter, type ReplyChannel, type ReplyChunk } from '@immersion/domain/generation';
+import type { ReplyChannel } from '@immersion/domain/generation';
 import { z } from 'zod';
 
 import { resolveAnthropicMessagesUrl } from '../../providers/application/generation-provider.js';
+import { buildAnthropicAuthHeaders } from '../../providers/index.js';
 import type {
   ChatCompletionClient,
   ChatCompletionRequest,
@@ -9,8 +10,7 @@ import type {
 } from '../application/chat-completion-client.js';
 import { ProviderGenerationError } from '../application/generation-errors.js';
 import { buildRequestSignal, isAbortError, readProviderErrorText } from './provider-http.js';
-
-const ANTHROPIC_VERSION = '2023-06-01';
+import { type ProviderStreamSink, readProviderReply } from './provider-reply-reader.js';
 
 const AnthropicContentBlockSchema = z.object({
   text: z.string().optional(),
@@ -108,8 +108,7 @@ function buildSamplingPayload(sampling: ChatCompletionRequest['sampling']) {
 
 function buildHeaders(apiKey: string | null) {
   return {
-    ...(apiKey ? { 'x-api-key': apiKey } : {}),
-    'anthropic-version': ANTHROPIC_VERSION,
+    ...buildAnthropicAuthHeaders(apiKey),
     Accept: 'application/json',
     'Content-Type': 'application/json',
   };
@@ -131,82 +130,44 @@ function readResponseBlocks(payload: z.infer<typeof AnthropicMessageResponseSche
   return { content: parts.reply.join('').trim(), reasoning: parts.reasoning.join('').trim() };
 }
 
-async function readStreamedContent(
-  response: Response,
-  onDelta: (delta: string, channel: ReplyChannel) => void,
-): Promise<ChatCompletionResponse> {
-  const body = response.body;
+function readAnthropicStreamData(data: string, sink: ProviderStreamSink) {
+  const parsed = AnthropicStreamEventSchema.safeParse(JSON.parse(data));
 
-  if (!body) {
-    throw new ProviderGenerationError('Provider returned an empty stream.');
+  if (!parsed.success) {
+    return;
   }
 
-  const decoder = new TextDecoder();
-  const reader = body.getReader();
-  const splitter = createReplySplitter();
-  const collected: Record<ReplyChannel, string> = { reasoning: '', reply: '' };
-  let buffer = '';
+  const event = parsed.data;
 
-  const emit = (chunks: ReplyChunk[]) => {
-    for (const chunk of chunks) {
-      collected[chunk.channel] += chunk.text;
-      onDelta(chunk.text, chunk.channel);
-    }
-  };
-
-  const handleLine = (line: string) => {
-    const trimmed = line.trim();
-
-    if (!trimmed.startsWith('data:')) {
-      return;
-    }
-
-    const parsed = AnthropicStreamEventSchema.safeParse(JSON.parse(trimmed.slice('data:'.length).trim()));
-
-    if (!parsed.success) {
-      return;
-    }
-
-    const event = parsed.data;
-
-    if (event.type === 'error') {
-      throw new ProviderGenerationError(event.error?.message ?? 'Provider stream reported an error.');
-    }
-
-    const delta = event.type === 'content_block_delta' ? event.delta : undefined;
-
-    if (delta?.type === 'thinking_delta' && delta.thinking) {
-      emit([{ channel: 'reasoning', text: delta.thinking }]);
-    }
-
-    if (delta?.type === 'text_delta' && delta.text) {
-      emit(splitter.push(delta.text));
-    }
-  };
-
-  while (true) {
-    const { done, value } = await reader.read();
-
-    if (done) {
-      break;
-    }
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split(/\r?\n/u);
-    buffer = lines.pop() ?? '';
-
-    for (const line of lines) {
-      handleLine(line);
-    }
+  if (event.type === 'error') {
+    throw new ProviderGenerationError(event.error?.message ?? 'Provider stream reported an error.');
   }
 
-  if (buffer.trim().length > 0) {
-    handleLine(buffer);
+  const delta = event.type === 'content_block_delta' ? event.delta : undefined;
+
+  if (delta?.type === 'thinking_delta' && delta.thinking) {
+    sink.reasoning(delta.thinking);
   }
 
-  emit(splitter.flush());
+  if (delta?.type === 'text_delta' && delta.text) {
+    sink.reply(delta.text);
+  }
+}
 
-  return { content: collected.reply.trim(), reasoning: collected.reasoning.trim() };
+async function readAnthropicJsonReply(response: Response): Promise<ChatCompletionResponse> {
+  let payload: z.infer<typeof AnthropicMessageResponseSchema>;
+
+  try {
+    payload = AnthropicMessageResponseSchema.parse(JSON.parse(await response.text()));
+  } catch (error) {
+    throw new ProviderGenerationError(
+      error instanceof Error
+        ? `Provider returned an invalid response: ${error.message}`
+        : 'Provider returned an invalid response.',
+    );
+  }
+
+  return readResponseBlocks(payload);
 }
 
 export class AnthropicMessagesClient implements ChatCompletionClient {
@@ -243,48 +204,9 @@ export class AnthropicMessagesClient implements ChatCompletionClient {
       );
     }
 
-    const isEventStream = (response.headers.get('content-type') ?? '').includes('text/event-stream');
-
-    if (streaming && isEventStream && request.onDelta) {
-      let streamed: ChatCompletionResponse;
-
-      try {
-        streamed = await readStreamedContent(response, request.onDelta);
-      } catch (error) {
-        if (request.signal?.aborted || isAbortError(error)) {
-          throw error;
-        }
-
-        throw new ProviderGenerationError(
-          error instanceof Error ? `Provider stream failed: ${error.message}` : 'Provider stream failed.',
-        );
-      }
-
-      if (!streamed.content && !request.allowEmptyContent) {
-        throw new ProviderGenerationError('Provider returned an empty reply.');
-      }
-
-      return streamed;
-    }
-
-    let payload: z.infer<typeof AnthropicMessageResponseSchema>;
-
-    try {
-      payload = AnthropicMessageResponseSchema.parse(JSON.parse(await response.text()));
-    } catch (error) {
-      throw new ProviderGenerationError(
-        error instanceof Error
-          ? `Provider returned an invalid response: ${error.message}`
-          : 'Provider returned an invalid response.',
-      );
-    }
-
-    const completion = readResponseBlocks(payload);
-
-    if (!completion.content && !request.allowEmptyContent) {
-      throw new ProviderGenerationError('Provider returned an empty reply.');
-    }
-
-    return completion;
+    return readProviderReply(response, request, {
+      readJson: readAnthropicJsonReply,
+      readStreamData: readAnthropicStreamData,
+    });
   }
 }
