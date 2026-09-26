@@ -166,6 +166,30 @@ describe('OpenAI-compatible endpoint', () => {
     await app.close();
   });
 
+  it('refuses a cloud provider without a model with the message readiness reports', async () => {
+    await updateSettings({
+      activeProvider: 'openai',
+      providerConfigs: { openai: { apiKey: 'sk-test', url: 'https://api.openai.com/v1' } },
+    });
+    const providerRequests = mockProvider(jsonCompletion('ок'));
+    const app = buildApiApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      payload: { messages: [{ content: 'Привет.', role: 'user' }] },
+      url: '/v1/chat/completions',
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error).toMatchObject({
+      code: 'provider_unavailable',
+      message: 'Модель провайдера не выбрана. Выберите её на странице API.',
+    });
+    expect(providerRequests).toEqual([]);
+
+    await app.close();
+  });
+
   it('fills usage with an estimate rather than zeros when tokens cannot be counted exactly', async () => {
     mockProvider(jsonCompletion('Короткий ответ.'));
     const app = buildApiApp();

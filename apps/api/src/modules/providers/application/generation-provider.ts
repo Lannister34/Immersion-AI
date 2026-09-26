@@ -1,6 +1,7 @@
 import type { ProviderApiKind } from '@immersion/contracts/providers';
 import { z } from 'zod';
-import { getProviderApiKind, getProviderDefaultModel, isProviderApiKeyRequired } from '../domain/provider-catalog.js';
+import { getProviderApiKind } from '../domain/provider-catalog.js';
+import { findCloudProviderReadinessIssue, resolveProviderModel } from '../domain/provider-readiness.js';
 import { DEFAULT_OPENAI_COMPATIBLE_MODEL } from '../domain/provider-settings.js';
 import { runtimeEndpointAdapter } from '../infrastructure/runtime-endpoint-adapter.js';
 import { getProviderSettings } from './get-provider-settings.js';
@@ -88,19 +89,20 @@ export async function resolveGenerationProviderEndpoint(
     .parse(config);
 
   const provider = settings.activeProvider;
-  const apiKey = parsedConfig.apiKey?.trim() || null;
-  const model = parsedConfig.model?.trim() || getProviderDefaultModel(provider);
+  const issue = findCloudProviderReadinessIssue(provider, config);
 
-  if (isProviderApiKeyRequired(provider) && !apiKey) {
-    throw new GenerationProviderUnavailableError('API-ключ провайдера не задан. Укажите его на странице API.');
+  if (issue) {
+    throw new GenerationProviderUnavailableError(issue.message);
   }
 
+  const model = resolveProviderModel(provider, config);
+
   if (!model) {
-    throw new GenerationProviderUnavailableError('Модель провайдера не выбрана. Выберите её на странице API.');
+    throw new Error(`Provider ${provider} passed the readiness rule without a model.`);
   }
 
   return {
-    apiKey,
+    apiKey: parsedConfig.apiKey?.trim() || null,
     apiKind: getProviderApiKind(provider),
     baseUrl: parsedConfig.url,
     model,

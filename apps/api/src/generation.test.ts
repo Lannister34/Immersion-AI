@@ -458,6 +458,37 @@ describe('generation routes', () => {
     await app.close();
   });
 
+  it('blocks generation readiness when a cloud provider has no API key', async () => {
+    await writeProviderSettings({
+      activeProvider: 'openai',
+      backendMode: 'external',
+      providerConfigs: {
+        openai: {
+          model: 'gpt-4o',
+          url: 'https://api.openai.com/v1',
+        },
+      },
+    });
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/generation/readiness',
+    });
+    const payload = GenerationReadinessResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(payload).toMatchObject({
+      issue: {
+        code: 'external_provider_api_key_missing',
+        message: 'API-ключ провайдера не задан. Укажите его на странице API.',
+      },
+      mode: 'external',
+      status: 'blocked',
+    });
+
+    await app.close();
+  });
+
   it('blocks generation readiness when builtin runtime is not running', async () => {
     await writeProviderSettings({
       backendMode: 'builtin',

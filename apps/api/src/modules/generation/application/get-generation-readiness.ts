@@ -11,7 +11,7 @@ import {
   resolveGenerationProviderEndpoint,
 } from '../../providers/application/generation-provider.js';
 import { getProviderSettings } from '../../providers/application/get-provider-settings.js';
-import { getProviderDefaultModel, isProviderApiKeyRequired } from '../../providers/domain/provider-catalog.js';
+import { findCloudProviderReadinessIssue } from '../../providers/index.js';
 import { getProviderVisionProbe } from '../../providers/infrastructure/provider-vision-probe.js';
 import { getRunningRuntimeEndpoint } from '../../runtime/application/get-running-runtime-endpoint.js';
 import { getRuntimeOverview } from '../../runtime/application/get-runtime-overview.js';
@@ -165,26 +165,10 @@ function getExternalReadiness(settings: ProviderSettingsSnapshot): GenerationRea
     );
   }
 
-  if (isProviderApiKeyRequired(settings.activeProvider) && !config?.apiKey?.trim()) {
-    return blocked(
-      settings,
-      {
-        code: 'external_provider_api_key_missing',
-        message: 'API-ключ провайдера не задан. Укажите его на странице API.',
-      },
-      null,
-    );
-  }
+  const cloudProviderIssue = findCloudProviderReadinessIssue(settings.activeProvider, config);
 
-  if (!config?.model?.trim() && !getProviderDefaultModel(settings.activeProvider)) {
-    return blocked(
-      settings,
-      {
-        code: 'external_provider_model_missing',
-        message: 'Модель провайдера не выбрана. Выберите её на странице API.',
-      },
-      null,
-    );
+  if (cloudProviderIssue) {
+    return blocked(settings, cloudProviderIssue, null);
   }
 
   return ready(settings);
