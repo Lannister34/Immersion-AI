@@ -1,10 +1,11 @@
-import type {
-  ProviderConfig,
-  ProviderDefinition,
-  ProviderMode,
-  ProviderSettingsSnapshot,
-  ProviderType,
-  UpdateProviderSettingsCommand,
+import {
+  type ProviderConfig,
+  type ProviderDefinition,
+  type ProviderMode,
+  type ProviderSettingsSnapshot,
+  type ProviderType,
+  ProviderTypeSchema,
+  type UpdateProviderSettingsCommand,
 } from '@immersion/contracts/providers';
 import type { RuntimeOverviewResponse, RuntimeStartCommand } from '@immersion/contracts/runtime';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -469,7 +470,6 @@ function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFo
     },
   });
   const availableModels = modelsMutation.data?.status === 'ok' ? modelsMutation.data.models : [];
-  const resetModels = modelsMutation.reset;
   const appliedBaselineRef = useRef(baseline);
   const appliedProviderRef = useRef(selectedProvider);
 
@@ -483,11 +483,14 @@ function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFo
     setForm((current) => (providerChanged || formsEqual(current, previousBaseline) ? baseline : current));
     setSavedAt(null);
     setErrorMessage(null);
+  }, [baseline, selectedProvider]);
 
-    if (providerChanged) {
-      resetModels();
+  const selectProvider = (provider: ProviderType) => {
+    if (provider !== selectedProvider) {
+      modelsMutation.reset();
     }
-  }, [baseline, resetModels, selectedProvider]);
+    setSelectedProvider(provider);
+  };
 
   if (!snapshot) {
     return (
@@ -537,7 +540,7 @@ function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFo
           <select
             className="input"
             id="provider-type"
-            onChange={(event) => setSelectedProvider(event.currentTarget.value as ProviderType)}
+            onChange={(event) => selectProvider(ProviderTypeSchema.parse(event.currentTarget.value))}
             value={selectedProvider}
           >
             {snapshot.providerDefinitions.map((entry) => (
@@ -639,7 +642,7 @@ function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFo
             disabled={!isDirty || isSaving}
             onClick={() => {
               setForm(baseline);
-              setSelectedProvider(snapshot.activeProvider);
+              selectProvider(snapshot.activeProvider);
             }}
             type="button"
           >

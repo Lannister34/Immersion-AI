@@ -266,3 +266,26 @@ test('offers the cloud providers with their defaults and refuses a model list wi
   await expect(page.locator('#provider-url')).toHaveValue('https://api.openai.com/v1');
   await expect(page.locator('#provider-model')).toHaveAttribute('placeholder', 'gpt-4o');
 });
+
+test('drops the fetched model list when another provider is selected', async ({ page }) => {
+  await page.route('**/api/providers/models', (route) =>
+    route.fulfill({
+      json: {
+        activeProvider: 'custom',
+        endpoint: 'http://127.0.0.1:5001/v1/models',
+        issue: null,
+        mode: 'external',
+        models: [{ id: 'smoke-model-a' }, { id: 'smoke-model-b' }],
+        status: 'ok',
+      },
+    }),
+  );
+  await page.goto('/server');
+
+  await page.locator('#provider-type').selectOption('custom');
+  await page.getByRole('button', { name: 'Список моделей' }).click();
+  await expect(page.locator('#provider-models option')).toHaveCount(2);
+
+  await page.locator('#provider-type').selectOption('koboldcpp');
+  await expect(page.locator('#provider-models option')).toHaveCount(0);
+});
