@@ -28,22 +28,22 @@ const BASE_REQUEST: Omit<ChatCompletionRequest, 'onDelta'> = {
 
 interface CapturedRequest {
   body: Record<string, unknown>;
-  headers: Record<string, string>;
+  headers: Headers;
   url: string;
 }
 
 function mockFetch(body: string, contentType: string) {
   const captured: CapturedRequest[] = [];
 
-  globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+  globalThis.fetch = vi.fn<typeof fetch>(async (input, init) => {
     captured.push({
       body: typeof init?.body === 'string' ? JSON.parse(init.body) : {},
-      headers: (init?.headers ?? {}) as Record<string, string>,
+      headers: new Headers(init?.headers),
       url: String(input),
     });
 
     return new Response(body, { headers: { 'Content-Type': contentType }, status: 200 });
-  }) as unknown as typeof fetch;
+  });
 
   return captured;
 }
@@ -109,8 +109,8 @@ describe('AnthropicMessagesClient', () => {
     const response = await new AnthropicMessagesClient().completeChat(BASE_REQUEST);
 
     expect(captured[0]?.url).toBe('https://api.anthropic.com/v1/messages');
-    expect(captured[0]?.headers['x-api-key']).toBe('sk-ant-test');
-    expect(captured[0]?.headers['anthropic-version']).toBe('2023-06-01');
+    expect(captured[0]?.headers.get('x-api-key')).toBe('sk-ant-test');
+    expect(captured[0]?.headers.get('anthropic-version')).toBe('2023-06-01');
     expect(captured[0]?.body.system).toBe('Ты — рассказчик.');
     expect(response.content).toBe('Здравствуй.');
   });

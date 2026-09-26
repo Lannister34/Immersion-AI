@@ -24,7 +24,7 @@ describe('createChatCompletionClient', () => {
   it('picks the dialect per request, so one client follows a provider switch between generations', async () => {
     const urls: string[] = [];
 
-    globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
+    globalThis.fetch = vi.fn<typeof fetch>(async (input) => {
       const url = String(input);
       const body = url.endsWith('/messages')
         ? { content: [{ text: 'Claude.', type: 'text' }] }
@@ -32,7 +32,7 @@ describe('createChatCompletionClient', () => {
       urls.push(url);
 
       return new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' }, status: 200 });
-    }) as unknown as typeof fetch;
+    });
     const client = createChatCompletionClient();
 
     const anthropicReply = await client.completeChat(

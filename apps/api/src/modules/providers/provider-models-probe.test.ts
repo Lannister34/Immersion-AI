@@ -3,10 +3,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { probeProviderModels } from './application/test-provider-connection.js';
 import { getProviderApiKind, getProviderDefaultModel, isProviderApiKeyRequired } from './domain/provider-catalog.js';
 
+interface CapturedCall {
+  headers: Headers;
+  url: string;
+}
+
 function mockFetcher(payload: unknown) {
-  const calls: Array<{ headers: Record<string, string>; url: string }> = [];
-  const fetcher = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
-    calls.push({ headers: (init?.headers ?? {}) as Record<string, string>, url: String(url) });
+  const calls: CapturedCall[] = [];
+  const fetcher = vi.fn<typeof fetch>(async (url, init) => {
+    calls.push({ headers: new Headers(init?.headers), url: String(url) });
 
     return new Response(JSON.stringify(payload), {
       headers: { 'Content-Type': 'application/json' },
@@ -14,7 +19,7 @@ function mockFetcher(payload: unknown) {
     });
   });
 
-  return { calls, fetcher: fetcher as unknown as typeof fetch };
+  return { calls, fetcher };
 }
 
 describe('provider catalog', () => {
@@ -42,8 +47,8 @@ describe('probeProviderModels', () => {
     );
 
     expect(calls[0]?.url).toBe('https://api.anthropic.com/v1/models');
-    expect(calls[0]?.headers['x-api-key']).toBe('sk-ant-test');
-    expect(calls[0]?.headers['anthropic-version']).toBe('2023-06-01');
+    expect(calls[0]?.headers.get('x-api-key')).toBe('sk-ant-test');
+    expect(calls[0]?.headers.get('anthropic-version')).toBe('2023-06-01');
     expect(response.models).toEqual([{ id: 'claude-sonnet-4-5' }]);
   });
 
@@ -53,7 +58,7 @@ describe('probeProviderModels', () => {
     await probeProviderModels({ apiKey: 'sk-test', provider: 'openai', url: 'https://api.openai.com' }, { fetcher });
 
     expect(calls[0]?.url).toBe('https://api.openai.com/v1/models');
-    expect(calls[0]?.headers.Authorization).toBe('Bearer sk-test');
+    expect(calls[0]?.headers.get('Authorization')).toBe('Bearer sk-test');
   });
 
   it('does not call a cloud provider without a key', async () => {

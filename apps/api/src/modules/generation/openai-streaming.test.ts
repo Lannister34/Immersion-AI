@@ -20,13 +20,13 @@ const BASE_REQUEST: Omit<ChatCompletionRequest, 'onDelta'> = {
 };
 
 function mockFetch(body: string, contentType: string) {
-  const requests: unknown[] = [];
+  const requests: Array<Record<string, unknown>> = [];
 
-  globalThis.fetch = vi.fn(async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-    requests.push(typeof init?.body === 'string' ? JSON.parse(init.body) : null);
+  globalThis.fetch = vi.fn<typeof fetch>(async (_input, init) => {
+    requests.push(typeof init?.body === 'string' ? JSON.parse(init.body) : {});
 
     return new Response(body, { headers: { 'Content-Type': contentType }, status: 200 });
-  }) as unknown as typeof fetch;
+  });
 
   return requests;
 }
@@ -53,9 +53,9 @@ describe('OpenAiCompatibleChatCompletionsClient request body', () => {
       endpoint: { ...BASE_REQUEST.endpoint, apiKind: 'openai-cloud', model: 'gpt-4o' },
     });
 
-    const body = captured[0] as Record<string, unknown>;
-    expect(body.max_completion_tokens).toBe(128);
-    expect(body.temperature).toBe(1);
+    const body = captured[0];
+    expect(body?.max_completion_tokens).toBe(128);
+    expect(body?.temperature).toBe(1);
     expect(body).not.toHaveProperty('max_tokens');
     expect(body).not.toHaveProperty('min_p');
     expect(body).not.toHaveProperty('rep_pen');
@@ -69,8 +69,8 @@ describe('OpenAiCompatibleChatCompletionsClient request body', () => {
       endpoint: { ...BASE_REQUEST.endpoint, apiKind: 'openai-cloud', model: 'o3-mini' },
     });
 
-    const body = captured[0] as Record<string, unknown>;
-    expect(body.max_completion_tokens).toBe(128);
+    const body = captured[0];
+    expect(body?.max_completion_tokens).toBe(128);
     expect(body).not.toHaveProperty('temperature');
     expect(body).not.toHaveProperty('top_p');
     expect(body).not.toHaveProperty('presence_penalty');
@@ -122,7 +122,7 @@ describe('OpenAiCompatibleChatCompletionsClient replies', () => {
   });
 
   it('cuts a long provider error body down to its first 500 characters', async () => {
-    globalThis.fetch = vi.fn(async () => new Response('x'.repeat(2000), { status: 500 })) as unknown as typeof fetch;
+    globalThis.fetch = vi.fn<typeof fetch>(async () => new Response('x'.repeat(2000), { status: 500 }));
 
     await expect(new OpenAiCompatibleChatCompletionsClient().completeChat(BASE_REQUEST)).rejects.toThrow(
       /^Provider returned HTTP 500: x{500}$/u,
@@ -147,12 +147,12 @@ describe('OpenAiCompatibleChatCompletionsClient streaming', () => {
     const client = new OpenAiCompatibleChatCompletionsClient();
     await client.completeChat({ ...BASE_REQUEST, onDelta: () => undefined });
 
-    expect((streamed[0] as { stream: boolean }).stream).toBe(true);
+    expect(streamed[0]?.stream).toBe(true);
 
     const plain = mockFetch(JSON.stringify({ choices: [{ message: { content: 'раз' } }] }), 'application/json');
     await client.completeChat(BASE_REQUEST);
 
-    expect((plain[0] as { stream: boolean }).stream).toBe(false);
+    expect(plain[0]?.stream).toBe(false);
   });
 
   it('falls back to the plain response when the server answers a stream request with JSON, going by content-type', async () => {
@@ -171,7 +171,7 @@ describe('OpenAiCompatibleChatCompletionsClient streaming', () => {
     const head = chunk.slice(0, 20);
     const tail = chunk.slice(20);
 
-    globalThis.fetch = vi.fn(async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async () => {
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {
           const encoder = new TextEncoder();
@@ -183,7 +183,7 @@ describe('OpenAiCompatibleChatCompletionsClient streaming', () => {
       });
 
       return new Response(stream, { headers: { 'Content-Type': 'text/event-stream' }, status: 200 });
-    }) as unknown as typeof fetch;
+    });
 
     const deltas: string[] = [];
     const client = new OpenAiCompatibleChatCompletionsClient();

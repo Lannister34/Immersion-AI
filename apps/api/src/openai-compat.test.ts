@@ -54,14 +54,14 @@ describe('OpenAI-compatible endpoint', () => {
   function mockProvider(body: string, contentType = 'application/json') {
     const requests: CapturedProviderRequest[] = [];
 
-    globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    globalThis.fetch = vi.fn<typeof fetch>(async (input, init) => {
       requests.push({
         body: typeof init?.body === 'string' ? JSON.parse(init.body) : {},
         url: input instanceof Request ? input.url : input.toString(),
       });
 
       return new Response(body, { headers: { 'Content-Type': contentType }, status: 200 });
-    }) as unknown as typeof fetch;
+    });
 
     return requests;
   }
@@ -430,7 +430,7 @@ describe('OpenAI-compatible endpoint', () => {
   });
 
   it('answers a provider failure before the first chunk with a plain JSON error, not a broken stream', async () => {
-    globalThis.fetch = vi.fn(async () => new Response('upstream down', { status: 500 })) as unknown as typeof fetch;
+    globalThis.fetch = vi.fn<typeof fetch>(async () => new Response('upstream down', { status: 500 }));
     const app = buildApiApp();
 
     const response = await app.inject({
@@ -595,7 +595,7 @@ describe('OpenAI-compatible endpoint', () => {
       markProviderAborted = resolve;
     });
 
-    globalThis.fetch = vi.fn(async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    globalThis.fetch = vi.fn<typeof fetch>(async (_input, init) => {
       const signal = init?.signal;
       const firstChunk = `data: ${JSON.stringify({ choices: [{ delta: { content: 'Первый кусок.' } }] })}\n\n`;
       const stream = new ReadableStream<Uint8Array>({
@@ -613,7 +613,7 @@ describe('OpenAI-compatible endpoint', () => {
       });
 
       return new Response(stream, { headers: { 'Content-Type': 'text/event-stream' }, status: 200 });
-    }) as unknown as typeof fetch;
+    });
     const app = buildApiApp();
     onTestFinished(() => app.close());
     await app.listen({ host: '127.0.0.1', port: 0 });
@@ -638,12 +638,12 @@ describe('OpenAI-compatible endpoint', () => {
   });
 
   it('lists the models the provider reports', async () => {
-    globalThis.fetch = vi.fn(async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async () => {
       return new Response(JSON.stringify({ data: [{ id: 'fixture-model' }, { id: 'another-model' }] }), {
         headers: { 'Content-Type': 'application/json' },
         status: 200,
       });
-    }) as unknown as typeof fetch;
+    });
     const app = buildApiApp();
 
     const response = await app.inject({ method: 'GET', url: '/v1/models' });
@@ -657,7 +657,7 @@ describe('OpenAI-compatible endpoint', () => {
   });
 
   it('lists the configured model when the provider has no model catalog', async () => {
-    globalThis.fetch = vi.fn(async () => new Response('not found', { status: 404 })) as unknown as typeof fetch;
+    globalThis.fetch = vi.fn<typeof fetch>(async () => new Response('not found', { status: 404 }));
     const app = buildApiApp();
 
     const response = await app.inject({ method: 'GET', url: '/v1/models' });
@@ -669,8 +669,8 @@ describe('OpenAI-compatible endpoint', () => {
 
   it('lists no models, rather than an invented one, when no provider can answer', async () => {
     await updateSettings({ backendMode: 'builtin' });
-    const fetchSpy = vi.fn();
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    const fetchSpy = vi.fn<typeof fetch>();
+    globalThis.fetch = fetchSpy;
     const app = buildApiApp();
 
     const response = await app.inject({ method: 'GET', url: '/v1/models' });

@@ -530,8 +530,8 @@ describe('generation routes', () => {
     await writeProviderSettings({ backendMode: 'builtin' });
     const modelPath = path.join(temporaryDataRoot, 'qwen-vl.gguf');
     await fs.writeFile(modelPath, 'gguf', 'utf8');
-    const fetchSpy = vi.fn();
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    const fetchSpy = vi.fn<typeof fetch>();
+    globalThis.fetch = fetchSpy;
 
     async function leaveServerRunningFromPreviousApiProcess(mmprojPath: string | null) {
       await fs.writeFile(
@@ -717,7 +717,7 @@ describe('generation routes', () => {
     const chunks = ['Пер', 'вый ', 'кусок.'];
     const requests: ProviderRequestRecord[] = [];
 
-    globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    globalThis.fetch = vi.fn<typeof fetch>(async (input, init) => {
       requests.push({
         authorization: new Headers(init?.headers).get('authorization'),
         body: typeof init?.body === 'string' ? JSON.parse(init.body) : null,
@@ -730,7 +730,7 @@ describe('generation routes', () => {
       ].join('');
 
       return new Response(body, { headers: { 'Content-Type': 'text/event-stream' }, status: 200 });
-    }) as unknown as typeof fetch;
+    });
 
     const app = buildApiApp();
     const chat = await createChat(app);

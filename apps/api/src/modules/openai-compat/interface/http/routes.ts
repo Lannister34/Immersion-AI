@@ -14,7 +14,14 @@ import {
   createOpenAiChatCompletion,
   type OpenAiChatCompletionResult,
 } from '../../application/create-chat-completion.js';
-import { OpenAiChatCompletionRequestSchema, UnsupportedOpenAiFeatureError } from '../../domain/openai-contract.js';
+import {
+  type OpenAiChatCompletionChunk,
+  type OpenAiChatCompletionDelta,
+  OpenAiChatCompletionRequestSchema,
+  type OpenAiChatCompletionResponse,
+  type OpenAiFinishReason,
+  UnsupportedOpenAiFeatureError,
+} from '../../domain/openai-contract.js';
 
 interface OpenAiErrorBody {
   error: {
@@ -71,11 +78,59 @@ function toOpenAiError(error: unknown): { body: OpenAiErrorBody; statusCode: num
   };
 }
 
-function toFinishReason(result: OpenAiChatCompletionResult): 'length' | 'stop' {
+interface CompletionIdentity {
+  created: number;
+  id: string;
+}
+
+function toFinishReason(result: OpenAiChatCompletionResult): OpenAiFinishReason {
   return result.content ? 'stop' : 'length';
 }
 
-function writeSseData(stream: ServerResponse, payload: unknown) {
+function toChatCompletionResponse(
+  result: OpenAiChatCompletionResult,
+  identity: CompletionIdentity,
+): OpenAiChatCompletionResponse {
+  return {
+    choices: [
+      {
+        finish_reason: toFinishReason(result),
+        index: 0,
+        message: {
+          content: result.content,
+          ...(result.reasoning ? { reasoning_content: result.reasoning } : {}),
+          role: 'assistant',
+        },
+      },
+    ],
+    created: identity.created,
+    id: identity.id,
+    model: result.model,
+    object: 'chat.completion',
+    usage: {
+      completion_tokens: result.usage.completionTokens,
+      prompt_tokens: result.usage.promptTokens,
+      total_tokens: result.usage.promptTokens + result.usage.completionTokens,
+    },
+  };
+}
+
+function toChatCompletionChunk(
+  identity: CompletionIdentity,
+  model: string,
+  delta: OpenAiChatCompletionDelta,
+  finishReason: OpenAiFinishReason | null,
+): OpenAiChatCompletionChunk {
+  return {
+    choices: [{ delta, finish_reason: finishReason, index: 0 }],
+    created: identity.created,
+    id: identity.id,
+    model,
+    object: 'chat.completion.chunk',
+  };
+}
+
+function writeSseData(stream: ServerResponse, payload: OpenAiChatCompletionChunk | OpenAiErrorBody) {
   stream.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
@@ -122,8 +177,7 @@ export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/chat/completions', async (request, reply) => {
-    const id = `chatcmpl-${randomUUID()}`;
-    const created = Math.floor(Date.now() / 1000);
+    const identity: CompletionIdentity = { created: Math.floor(Date.now() / 1000), id: `chatcmpl-${randomUUID()}` };
     const controller = new AbortController();
     let streamOpened = false;
     let deltaCount = 0;
@@ -134,28 +188,7 @@ export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
       if (!command.stream) {
         const result = await createOpenAiChatCompletion(command, { signal: controller.signal });
 
-        return {
-          choices: [
-            {
-              finish_reason: toFinishReason(result),
-              index: 0,
-              message: {
-                content: result.content,
-                ...(result.reasoning ? { reasoning_content: result.reasoning } : {}),
-                role: 'assistant',
-              },
-            },
-          ],
-          created,
-          id,
-          model: result.model,
-          object: 'chat.completion',
-          usage: {
-            completion_tokens: result.usage.completionTokens,
-            prompt_tokens: result.usage.promptTokens,
-            total_tokens: result.usage.promptTokens + result.usage.completionTokens,
-          },
-        };
+        return toChatCompletionResponse(result, identity);
       }
 
       reply.raw.on('close', () => {
@@ -164,14 +197,8 @@ export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
         }
       });
 
-      const writeChunk = (delta: Record<string, unknown>, finishReason: string | null = null) => {
-        writeSseData(reply.raw, {
-          choices: [{ delta, finish_reason: finishReason, index: 0 }],
-          created,
-          id,
-          model: command.model ?? 'immersion',
-          object: 'chat.completion.chunk',
-        });
+      const writeChunk = (delta: OpenAiChatCompletionDelta, finishReason: OpenAiFinishReason | null = null) => {
+        writeSseData(reply.raw, toChatCompletionChunk(identity, command.model ?? 'immersion', delta, finishReason));
       };
 
       const ensureStream = () => {
