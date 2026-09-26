@@ -121,10 +121,20 @@ describe('AnthropicMessagesClient', () => {
 
     expect(captured[0]?.body.temperature).toBe(1);
     expect(captured[0]?.body.top_k).toBe(40);
-    expect(captured[0]?.body.top_p).toBe(0.9);
     expect(captured[0]?.body).not.toHaveProperty('presence_penalty');
     expect(captured[0]?.body).not.toHaveProperty('rep_pen');
     expect(captured[0]?.body).not.toHaveProperty('min_p');
+  });
+
+  it('sends Claude either temperature or top_p, since newer Claude models reject both together', async () => {
+    const captured = mockFetch(jsonReply('Ага.'), 'application/json');
+    await new AnthropicMessagesClient().completeChat({
+      ...BASE_REQUEST,
+      sampling: { ...BASE_REQUEST.sampling, temperature: 0.7, topP: 0.9 },
+    });
+
+    expect(captured[0]?.body.temperature).toBe(0.7);
+    expect(captured[0]?.body).not.toHaveProperty('top_p');
   });
 
   it('keeps thinking blocks out of the reply', async () => {

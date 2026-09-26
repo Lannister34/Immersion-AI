@@ -103,7 +103,6 @@ function buildSamplingPayload(sampling: ChatCompletionRequest['sampling']) {
   return {
     temperature: Math.min(Math.max(sampling.temperature, 0), 1),
     ...(sampling.topK > 0 ? { top_k: Math.round(sampling.topK) } : {}),
-    ...(sampling.topP > 0 && sampling.topP < 1 ? { top_p: sampling.topP } : {}),
   };
 }
 
