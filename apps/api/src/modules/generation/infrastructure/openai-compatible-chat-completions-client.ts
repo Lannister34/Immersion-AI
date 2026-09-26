@@ -26,6 +26,10 @@ const OpenAiCompatibleStreamChunkSchema = z.object({
     .min(1),
 });
 
+const OpenAiCompatibleStreamErrorSchema = z.object({
+  error: z.union([z.string(), z.object({ message: z.string().optional() })]),
+});
+
 const OpenAiCompatibleChatCompletionResponseSchema = z.object({
   choices: z
     .array(
@@ -103,7 +107,18 @@ async function readStreamedContent(
       return;
     }
 
-    const parsed = OpenAiCompatibleStreamChunkSchema.safeParse(JSON.parse(payload));
+    const chunk: unknown = JSON.parse(payload);
+    const streamError = OpenAiCompatibleStreamErrorSchema.safeParse(chunk);
+
+    if (streamError.success) {
+      const { error } = streamError.data;
+
+      throw new ProviderGenerationError(
+        (typeof error === 'string' ? error : error.message) || 'Provider stream reported an error.',
+      );
+    }
+
+    const parsed = OpenAiCompatibleStreamChunkSchema.safeParse(chunk);
 
     if (!parsed.success) {
       return;

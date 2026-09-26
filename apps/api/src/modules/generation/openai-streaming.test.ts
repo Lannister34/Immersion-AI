@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ChatCompletionRequest } from './application/chat-completion-client.js';
+import { ProviderGenerationError } from './application/generation-errors.js';
 import { OpenAiCompatibleChatCompletionsClient } from './infrastructure/openai-compatible-chat-completions-client.js';
 
 const BASE_REQUEST: Omit<ChatCompletionRequest, 'onDelta'> = {
@@ -190,6 +191,35 @@ describe('OpenAiCompatibleChatCompletionsClient streaming', () => {
 
     expect(deltas).toEqual(['склеено']);
     expect(response.content).toBe('склеено');
+  });
+
+  it('fails on an in-band error chunk instead of returning the reply streamed so far', async () => {
+    mockFetch(
+      [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: 'Half a rep' } }] })}\n\n`,
+        `data: ${JSON.stringify({ error: { message: 'CUDA error: out of memory', type: 'server_error' } })}\n\n`,
+        'data: [DONE]\n\n',
+      ].join(''),
+      'text/event-stream',
+    );
+    const deltas: string[] = [];
+
+    const completion = new OpenAiCompatibleChatCompletionsClient().completeChat({
+      ...BASE_REQUEST,
+      onDelta: (delta) => deltas.push(delta),
+    });
+
+    await expect(completion).rejects.toBeInstanceOf(ProviderGenerationError);
+    await expect(completion).rejects.toThrow(/CUDA error: out of memory/u);
+    expect(deltas).toEqual(['Half a rep']);
+  });
+
+  it('fails on an in-band error given as a bare string', async () => {
+    mockFetch(`data: ${JSON.stringify({ error: 'upstream closed the connection' })}\n\n`, 'text/event-stream');
+
+    await expect(
+      new OpenAiCompatibleChatCompletionsClient().completeChat({ ...BASE_REQUEST, onDelta: () => undefined }),
+    ).rejects.toThrow(/upstream closed the connection/u);
   });
 
   it('streams the separate reasoning fields of DeepSeek-style servers straight to the reasoning channel', async () => {
