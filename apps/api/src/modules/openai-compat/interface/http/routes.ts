@@ -8,8 +8,8 @@ import { ProviderGenerationError } from '../../../generation/application/generat
 import {
   GenerationProviderUnavailableError,
   resolveGenerationProviderEndpoint,
-} from '../../../providers/application/generation-provider.js';
-import { testProviderConnection } from '../../../providers/application/test-provider-connection.js';
+  testProviderConnection,
+} from '../../../providers/index.js';
 import { createOpenAiChatCompletion } from '../../application/create-chat-completion.js';
 import { OpenAiChatCompletionRequestSchema, UnsupportedOpenAiFeatureError } from '../../domain/openai-contract.js';
 
@@ -75,8 +75,12 @@ function writeSseData(stream: ServerResponse, payload: unknown) {
 async function findConfiguredModel(): Promise<string | null> {
   try {
     return (await resolveGenerationProviderEndpoint()).model;
-  } catch {
-    return null;
+  } catch (error) {
+    if (error instanceof GenerationProviderUnavailableError) {
+      return null;
+    }
+
+    throw error;
   }
 }
 
