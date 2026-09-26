@@ -220,11 +220,13 @@ export async function testProviderConnection(
     return createErrorResponse(subject, 'provider_url_missing', 'URL внешнего API не настроен.', null);
   }
 
+  const apiKey = getConfiguredExternalApiKey(settings);
+
   return probeProviderModels(
     {
       provider: settings.activeProvider,
       url: providerUrl,
-      ...(getConfiguredExternalApiKey(settings) ? { apiKey: getConfiguredExternalApiKey(settings) ?? '' } : {}),
+      ...(apiKey ? { apiKey } : {}),
     },
     dependencies,
   );
