@@ -9,7 +9,8 @@ import { installRuntime } from '../../application/install-runtime.js';
 import { startRuntime } from '../../application/start-runtime.js';
 import { stopRuntime } from '../../application/stop-runtime.js';
 import { updateRuntimeConfig } from '../../application/update-runtime-config.js';
-import { PathPickerUnsupportedError, pickNativeDirectory } from '../../infrastructure/native-directory-picker.js';
+import { PathPickerUnsupportedError } from '../../infrastructure/directory-picker-invocation.js';
+import { pickNativeDirectory } from '../../infrastructure/native-directory-picker.js';
 
 const toProblem = createToProblem(
   (error) => {

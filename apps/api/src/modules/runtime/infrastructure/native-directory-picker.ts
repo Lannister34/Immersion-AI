@@ -1,135 +1,25 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
+import {
+  buildPickerInvocation,
+  PathPickerUnsupportedError,
+  type PickerInvocation,
+} from './directory-picker-invocation.js';
+import { classifyPickerFailure, isCancelOutput, type PickerFailure } from './directory-picker-outcome.js';
+
 const execFileAsync = promisify(execFile);
 
 const PICKER_TIMEOUT_MS = 5 * 60 * 1000;
-const CANCEL_EXIT_CODE = 1;
 
-export const PICKER_INITIAL_PATH_ENV = 'IMMERSION_PICKER_INITIAL_PATH';
-
-export class PathPickerUnsupportedError extends Error {
-  constructor() {
-    super('Native directory picker is not available on this platform.');
-    this.name = 'PathPickerUnsupportedError';
-  }
-}
-
-export type PickerCancelReport = 'empty-output' | 'exit-code-1';
-
-export interface PickerInvocation {
-  args: string[];
-  cancelReport: PickerCancelReport;
-  command: string;
-  env: NodeJS.ProcessEnv;
-}
-
-const FOREGROUND_HELPER = `
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-public static class ImmersionForeground {
-  [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr hWnd);
-  [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr hWnd);
-  [DllImport("user32.dll")] static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
-  [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
-  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr processId);
-  [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
-  public static void Claim(IntPtr hWnd) {
-    uint foregroundThread = GetWindowThreadProcessId(GetForegroundWindow(), IntPtr.Zero);
-    uint currentThread = GetCurrentThreadId();
-    AttachThreadInput(foregroundThread, currentThread, true);
-    BringWindowToTop(hWnd);
-    SetForegroundWindow(hWnd);
-    AttachThreadInput(foregroundThread, currentThread, false);
-  }
-}
-"@
-$owner = New-Object System.Windows.Forms.Form
-$owner.TopMost = $true
-$owner.ShowInTaskbar = $false
-$owner.FormBorderStyle = 'None'
-$owner.Size = New-Object System.Drawing.Size(1, 1)
-$owner.StartPosition = 'Manual'
-$owner.Location = New-Object System.Drawing.Point(-4000, -4000)
-$owner.Show()
-[ImmersionForeground]::Claim($owner.Handle)
-`;
-
-function withInitialPath(baseEnv: NodeJS.ProcessEnv, initialPath: string): NodeJS.ProcessEnv {
-  const env = { ...baseEnv };
-
-  delete env[PICKER_INITIAL_PATH_ENV];
-
-  if (initialPath) {
-    env[PICKER_INITIAL_PATH_ENV] = initialPath;
-  }
-
-  return env;
-}
-
-export function buildWindowsPickerInvocation(initialPath: string, baseEnv: NodeJS.ProcessEnv): PickerInvocation {
-  const script = [
-    '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
-    "$ErrorActionPreference = 'Stop'",
-    FOREGROUND_HELPER,
-    '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
-    `$initialPath = $env:${PICKER_INITIAL_PATH_ENV}`,
-    'if ($initialPath) { $dialog.SelectedPath = $initialPath }',
-    '$result = $dialog.ShowDialog($owner)',
-    '$owner.Close()',
-    "if ($result -eq 'OK') { $dialog.SelectedPath }",
-  ].join('\n');
+function readFailure(error: unknown): PickerFailure {
+  const code = error instanceof Error && 'code' in error ? error.code : undefined;
+  const stderr = error instanceof Error && 'stderr' in error ? String(error.stderr) : '';
 
   return {
-    args: ['-NoProfile', '-STA', '-Command', script],
-    cancelReport: 'empty-output',
-    command: 'powershell',
-    env: withInitialPath(baseEnv, initialPath),
+    code: typeof code === 'number' || typeof code === 'string' ? code : undefined,
+    stderr,
   };
-}
-
-export function buildMacPickerInvocation(initialPath: string, baseEnv: NodeJS.ProcessEnv): PickerInvocation {
-  const location = initialPath ? ` default location POSIX file (system attribute "${PICKER_INITIAL_PATH_ENV}")` : '';
-
-  return {
-    args: ['-e', `POSIX path of (choose folder${location})`],
-    cancelReport: 'exit-code-1',
-    command: 'osascript',
-    env: withInitialPath(baseEnv, initialPath),
-  };
-}
-
-export function buildLinuxPickerInvocation(initialPath: string, baseEnv: NodeJS.ProcessEnv): PickerInvocation {
-  const args = ['--file-selection', '--directory'];
-
-  if (initialPath) {
-    args.push(`--filename=${initialPath.endsWith('/') ? initialPath : `${initialPath}/`}`);
-  }
-
-  return { args, cancelReport: 'exit-code-1', command: 'zenity', env: baseEnv };
-}
-
-export function buildPickerInvocation(
-  platform: NodeJS.Platform,
-  initialPath: string,
-  baseEnv: NodeJS.ProcessEnv = process.env,
-): PickerInvocation {
-  if (platform === 'win32') {
-    return buildWindowsPickerInvocation(initialPath, baseEnv);
-  }
-
-  if (platform === 'darwin') {
-    return buildMacPickerInvocation(initialPath, baseEnv);
-  }
-
-  if (platform === 'linux') {
-    return buildLinuxPickerInvocation(initialPath, baseEnv);
-  }
-
-  throw new PathPickerUnsupportedError();
 }
 
 async function runPicker(invocation: PickerInvocation): Promise<string | null> {
@@ -142,13 +32,13 @@ async function runPicker(invocation: PickerInvocation): Promise<string | null> {
 
     return stdout;
   } catch (error) {
-    const code = error instanceof Error && 'code' in error ? error.code : undefined;
+    const verdict = classifyPickerFailure(invocation.command, readFailure(error));
 
-    if (code === 'ENOENT') {
+    if (verdict === 'unsupported') {
       throw new PathPickerUnsupportedError();
     }
 
-    if (invocation.cancelReport === 'exit-code-1' && code === CANCEL_EXIT_CODE) {
+    if (verdict === 'cancel') {
       return null;
     }
 
@@ -163,19 +53,15 @@ export async function pickNativeDirectory(
   const invocation = buildPickerInvocation(platform, initialPath);
   const output = await runPicker(invocation);
 
-  if (output === null) {
+  if (output === null || isCancelOutput(invocation.command, output)) {
     return null;
   }
 
   const picked = output.trim();
 
-  if (picked) {
-    return picked;
+  if (!picked) {
+    throw new Error('Directory picker exited without printing a path.');
   }
 
-  if (invocation.cancelReport === 'empty-output') {
-    return null;
-  }
-
-  throw new Error('Directory picker exited without printing a path.');
+  return picked;
 }
