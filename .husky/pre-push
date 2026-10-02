@@ -1,1 +1,30 @@
-npm run verify:prepush
+deleted=0000000000000000000000000000000000000000
+head=$(git rev-parse HEAD) || exit 1
+pushes_commits=no
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [ "$local_sha" = "$deleted" ]; then
+    continue
+  fi
+
+  pushes_commits=yes
+
+  if [ "$(git rev-parse "$local_sha^{commit}")" != "$head" ]; then
+    echo "pre-push: push $local_ref from the worktree that has it checked out; the checks run on the working tree." >&2
+    exit 1
+  fi
+done
+
+if [ "$pushes_commits" = no ]; then
+  exit 0
+fi
+
+status=$(git status --porcelain --untracked-files=normal) || exit 1
+
+if [ -n "$status" ]; then
+  echo "pre-push: commit or stash (git stash -u) your changes first; the checks run on the working tree." >&2
+  exit 1
+fi
+
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR GIT_CONFIG_PARAMETERS
+npm run check:fast
