@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["apps/**/src/**", "packages/**/src/**", "apps/web/tests/**"]
+    "includes": ["apps/**/src/**", "packages/**/src/**", "packages/tooling/test/**", "apps/web/tests/**"]
   },
   "formatter": {
     "enabled": true,

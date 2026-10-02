@@ -24,9 +24,8 @@
     "test": "corepack pnpm -r --if-present test",
     "smoke": "corepack pnpm --filter @immersion/web test:smoke",
     "check": "npm run lint && npm run typecheck && npm run build && npm run test",
+    "check:fast": "npm run lint && npm run typecheck && npm run test",
     "ci": "npm run check && npm run smoke",
-    "ci:clean": "node ./scripts/ci-clean.mjs",
-    "verify:prepush": "node ./scripts/pre-push-verify.mjs",
     "prepare": "husky"
   },
   "devDependencies": {
