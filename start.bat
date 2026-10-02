@@ -21,7 +21,7 @@ if %errorlevel% neq 0 (
 )
 
 echo  [1/2] Installing dependencies...
-call corepack pnpm install --silent
+call corepack pnpm install
 if %errorlevel% neq 0 (
     echo  [ERROR] Install failed
     pause
