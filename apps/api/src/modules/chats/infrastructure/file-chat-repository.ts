@@ -6,6 +6,8 @@ import { ChatGenerationSettingsDtoSchema } from '@immersion/contracts/chats';
 import { writeFileAtomically } from '../../../lib/atomic-file.js';
 import { resolveContainedFilePath } from '../../../lib/contained-path.js';
 import { resolveDataRoot } from '../../../lib/data-root.js';
+import { isErrnoCode } from '../../../lib/errno-code.js';
+import { getSharedApiLogger } from '../../../lib/logger.js';
 import {
   ChatLastMessageChangedError,
   ChatTitleConflictError,
@@ -809,6 +811,7 @@ export class FileChatRepository implements ChatRepository {
       entries
         .filter((entry) => entry.endsWith('.jsonl'))
         .map(async (entry) => {
+          const chatId = path.parse(entry).name;
           try {
             const fileStats = await fs.stat(path.join(resolveChatsDirectory(), entry));
             if (!fileStats.isFile()) {
@@ -816,11 +819,17 @@ export class FileChatRepository implements ChatRepository {
             }
 
             return {
-              chatId: path.parse(entry).name,
+              chatId,
               fileMtimeMs: fileStats.mtimeMs,
               fileSize: fileStats.size,
             } satisfies ChatFileStatRecord;
-          } catch {
+          } catch (error) {
+            if (!isErrnoCode(error, 'ENOENT')) {
+              getSharedApiLogger().warn(
+                { chatId, err: error },
+                'Chat list: failed to read chat file metadata; excluding it from the listing',
+              );
+            }
             return null;
           }
         }),
