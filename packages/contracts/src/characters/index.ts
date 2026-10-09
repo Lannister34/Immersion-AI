@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
+import { base64LengthFor } from '../common/base64-length.js';
 import { createFileIdSchema } from '../common/file-id.js';
+import { IMAGE_UPLOAD_MAX_BYTES } from '../common/upload-limits.js';
 
 export const CharacterIdSchema = createFileIdSchema('Character id');
 export type CharacterId = z.infer<typeof CharacterIdSchema>;
@@ -51,7 +53,7 @@ export const CharacterAvatarMimeTypeSchema = z.enum(['image/png', 'image/jpeg', 
 export type CharacterAvatarMimeType = z.infer<typeof CharacterAvatarMimeTypeSchema>;
 
 export const UploadCharacterAvatarCommandSchema = z.object({
-  contentBase64: z.string().min(1).max(11_200_000),
+  contentBase64: z.string().min(1).max(base64LengthFor(IMAGE_UPLOAD_MAX_BYTES)),
   mimeType: CharacterAvatarMimeTypeSchema,
 });
 export type UploadCharacterAvatarCommand = z.infer<typeof UploadCharacterAvatarCommandSchema>;

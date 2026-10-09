@@ -1,13 +1,12 @@
 import crypto from 'node:crypto';
 
 import { type ImportChatCommand, type ImportChatResponse, ImportChatResponseSchema } from '@immersion/contracts/chats';
+import { CHAT_IMPORT_MAX_BYTES, CHAT_IMPORT_MAX_MEGABYTES } from '@immersion/contracts/common';
 
 import { FileChatRepository, parseChatTranscriptLeniently } from '../infrastructure/file-chat-repository.js';
 import { createDefaultChatGenerationSettings } from './chat-records.js';
 import { toChatSummaryDto } from './chat-session-response.js';
 import { getDefaultUserName } from './default-user-name.js';
-
-export const MAX_CHAT_IMPORT_BYTES = 10 * 1024 * 1024;
 
 const DEFAULT_IMPORTED_CHAT_TITLE = 'Импортированный чат';
 
@@ -20,14 +19,14 @@ export class InvalidChatFileError extends Error {
 
 export class ChatFileTooLargeError extends Error {
   constructor() {
-    super('Uploaded chat file exceeds the 10 MB limit.');
+    super(`Uploaded chat file exceeds the ${CHAT_IMPORT_MAX_MEGABYTES} MB limit.`);
     this.name = 'ChatFileTooLargeError';
   }
 }
 
 export async function importChat(command: ImportChatCommand): Promise<ImportChatResponse> {
   const decoded = Buffer.from(command.contentBase64, 'base64');
-  if (decoded.length > MAX_CHAT_IMPORT_BYTES) {
+  if (decoded.length > CHAT_IMPORT_MAX_BYTES) {
     throw new ChatFileTooLargeError();
   }
 
