@@ -38,7 +38,6 @@ export async function regenerateChatReplyJob(
     throw new ChatNotFoundError(command.chatId);
   }
 
-  // Drop trailing assistant messages until the transcript ends with the prior user message.
   let truncatedSession: ChatSessionDto = session;
   let truncated = false;
   while (truncatedSession.messages.length > 0) {

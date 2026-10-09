@@ -89,7 +89,6 @@ describe('sampler preset routes', () => {
 
   it('POST /sampler/presets disambiguates the generated id when the slug already exists', async () => {
     const app = buildApiApp();
-    // The seeded fixture already has a "default" preset, so the new one collides on the slug.
     const first = await app.inject({
       method: 'POST',
       url: '/api/settings/sampler/presets',
@@ -105,6 +104,20 @@ describe('sampler preset routes', () => {
     });
     expect(second.statusCode).toBe(201);
     expect(SamplerPresetMutationResponseSchema.parse(second.json()).preset.id).toBe('default-3');
+
+    await app.close();
+  });
+
+  it('POST /sampler/presets drops diacritics from the generated id', async () => {
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/settings/sampler/presets',
+      payload: { ...BASE_PRESET, name: 'Crème brûlée' },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(SamplerPresetMutationResponseSchema.parse(response.json()).preset.id).toBe('creme-brulee');
 
     await app.close();
   });

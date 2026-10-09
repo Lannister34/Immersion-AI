@@ -3,7 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 
+import { SaveCharacterCommandSchema } from '@immersion/contracts/characters';
 import {
+  CharacterDraftFieldNameSchema,
   GenerateCharacterAvatarPromptResponseSchema,
   GenerateCharacterDraftResponseSchema,
   GenerateCharacterFieldResponseSchema,
@@ -11,6 +13,7 @@ import {
   GenerateScenarioDraftResponseSchema,
   GenerateScenarioFirstMessageResponseSchema,
 } from '@immersion/contracts/generation';
+import { SaveScenarioCommandSchema } from '@immersion/contracts/scenarios';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -190,7 +193,7 @@ describe('generation draft routes', () => {
   }
 
   describe('POST /api/generation/character', () => {
-    it('generates a character draft from code-fenced provider JSON', async () => {
+    it('generates a character draft from code-fenced provider JSON with the model-bound preset in the profile language', async () => {
       const providerRequests = mockProviderSuccess(
         fenced({
           name: 'Мира',
@@ -230,7 +233,6 @@ describe('generation draft routes', () => {
         url: 'http://127.0.0.1:6006/v1/chat/completions',
       });
       const requestBody = getProviderRequestBody(providerRequests[0]);
-      // smoke-model is bound to smoke-model-preset (temperature 0.44) in the fixture.
       expect(requestBody).toMatchObject({
         max_tokens: 2048,
         stream: false,
@@ -238,7 +240,6 @@ describe('generation draft routes', () => {
       });
       const submittedContent = requestBody.messages?.map((message) => message.content).join('\n') ?? '';
       expect(submittedContent).toContain('Молодая скульпторша из Петербурга');
-      // Fixture profile responseLanguage is 'ru'.
       expect(submittedContent).toContain('Пиши на русском.');
 
       await app.close();
@@ -373,7 +374,7 @@ describe('generation draft routes', () => {
       await app.close();
     });
 
-    it('raises the temperature when regenerating an already filled field', async () => {
+    it('raises the temperature and shows the model the previous value when regenerating an already filled field', async () => {
       const providerRequests = mockProviderSuccess('Совсем другой вариант описания.');
       const app = buildApiApp();
 
@@ -393,7 +394,6 @@ describe('generation draft routes', () => {
       expect(requestBody.temperature).toBe(1.1);
       const submittedContent = requestBody.messages?.map((message) => message.content).join('\n') ?? '';
       expect(submittedContent).toContain('НОВЫЙ, ДРУГОЙ вариант');
-      // Модель должна видеть предыдущий вариант, иначе «не повторяй» невыполнимо.
       expect(submittedContent).toContain('не повторяй его');
       expect(submittedContent).toContain('Старое описание.');
 
@@ -423,23 +423,25 @@ describe('generation draft routes', () => {
       await app.close();
     });
 
-    it('caps generated personality at the character save limit', async () => {
-      mockProviderSuccess(`Черта. ${'очень длинный текст '.repeat(400)}`);
+    it.each(
+      CharacterDraftFieldNameSchema.options,
+    )('caps a generated %s exactly at the character save limit', async (field) => {
+      mockProviderSuccess(`Черта. ${'очень длинный текст '.repeat(1_300)}`);
       const app = buildApiApp();
 
       const response = await app.inject({
         method: 'POST',
         url: '/api/generation/character-field',
         payload: {
-          field: 'personality',
+          field,
           current: {},
         },
       });
 
       expect(response.statusCode).toBe(200);
-      const payload = GenerateCharacterFieldResponseSchema.parse(response.json());
-      // SaveCharacterCommandSchema ограничивает personality 5000 символами.
-      expect(payload.value.length).toBeLessThanOrEqual(5000);
+      const { value } = GenerateCharacterFieldResponseSchema.parse(response.json());
+      expect(SaveCharacterCommandSchema.safeParse({ name: 'Имя', [field]: value }).success).toBe(true);
+      expect(SaveCharacterCommandSchema.safeParse({ name: 'Имя', [field]: `${value}!` }).success).toBe(false);
 
       await app.close();
     });
@@ -542,6 +544,52 @@ describe('generation draft routes', () => {
       await app.close();
     });
 
+    it('asks for the prompt in English even when the profile answers in Russian', async () => {
+      await writeResponseLanguage('ru');
+      const providerRequests = mockProviderSuccess(fenced({ prompt: '1girl, silver hair' }));
+      const app = buildApiApp();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/generation/character-avatar-prompt',
+        payload: {
+          card: {
+            name: 'Лириэль',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const requestBody = getProviderRequestBody(providerRequests[0]);
+      const submittedContent = requestBody.messages?.map((message) => message.content).join('\n') ?? '';
+      expect(submittedContent).toContain('You are an expert at writing Stable Diffusion image generation prompts.');
+      expect(submittedContent).toContain('Generate a Stable Diffusion portrait prompt for this character');
+      expect(submittedContent).not.toContain('Пиши на русском.');
+
+      await app.close();
+    });
+
+    it('reads the prompt from the legacy "positive" key as well', async () => {
+      mockProviderSuccess(fenced({ positive: '1girl, silver hair, soft lighting' }));
+      const app = buildApiApp();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/generation/character-avatar-prompt',
+        payload: {
+          card: {
+            name: 'Лириэль',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const payload = GenerateCharacterAvatarPromptResponseSchema.parse(response.json());
+      expect(payload.prompt).toBe('1girl, silver hair, soft lighting');
+
+      await app.close();
+    });
+
     it('returns 502 provider_generation_failed for unparseable provider output', async () => {
       mockProviderSuccess('Не могу сгенерировать промпт.');
       const app = buildApiApp();
@@ -584,11 +632,10 @@ describe('generation draft routes', () => {
   });
 
   describe('POST /api/generation/scenario', () => {
-    it('generates a scenario draft and restores leaked player names to {{user}}', async () => {
+    it('generates a scenario draft, naming the player for the gender hint and restoring leaked declined names to {{user}}', async () => {
       const providerRequests = mockProviderSuccess(
         fenced({
           name: 'Ночная мастерская',
-          // Модель "проговорилась" именем игрока (Тестер, в косвенном падеже) — оно должно вернуться в {{user}}.
           content: 'Поздний вечер. {{char}} ждёт Тестера у входа в мастерскую.',
           firstMessage: '*{{char}} открывает дверь.* Заходи, Тестер, я уже заждалась.',
           tags: ['слайс-оф-лайф'],
@@ -621,7 +668,6 @@ describe('generation draft routes', () => {
       });
       const submittedContent = requestBody.messages?.map((message) => message.content).join('\n') ?? '';
       expect(submittedContent).toContain('Вечер в мастерской скульптора');
-      // Fixture profile userName drives the gender hint.
       expect(submittedContent).toContain('Тестер');
       expect(submittedContent).toContain('{{user}} и {{char}}');
 
@@ -729,9 +775,8 @@ describe('generation draft routes', () => {
   });
 
   describe('POST /api/generation/scenario-first-message', () => {
-    it('generates a scene greeting as plain text and restores leaked player names to {{user}}', async () => {
+    it('generates a scene greeting as plain text, naming the player for the gender hint and restoring leaked names to {{user}}', async () => {
       const providerRequests = mockProviderSuccess(
-        // Модель "проговорилась" именем игрока — оно должно вернуться в {{user}}.
         '\n*{{char}} машет рукой от мольберта.* Тестер, ты всё-таки пришёл!\n',
       );
       const app = buildApiApp();
@@ -761,8 +806,27 @@ describe('generation draft routes', () => {
       expect(submittedContent).toContain('Вечер в мастерской скульптора');
       expect(submittedContent).toContain('Ночная мастерская');
       expect(submittedContent).toContain('{{char}} ждёт {{user}} у входа в мастерскую.');
-      // Fixture profile userName drives the gender hint.
       expect(submittedContent).toContain('Тестер');
+
+      await app.close();
+    });
+
+    it('caps a generated first message exactly at the scenario save limit', async () => {
+      mockProviderSuccess(`*{{char}} начинает рассказ.* ${'очень длинная история '.repeat(1_200)}`);
+      const app = buildApiApp();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/generation/scenario-first-message',
+        payload: {
+          concept: 'Вечер в мастерской',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const { value } = GenerateScenarioFirstMessageResponseSchema.parse(response.json());
+      expect(SaveScenarioCommandSchema.safeParse({ firstMessage: value, name: 'Сцена' }).success).toBe(true);
+      expect(SaveScenarioCommandSchema.safeParse({ firstMessage: `${value}!`, name: 'Сцена' }).success).toBe(false);
 
       await app.close();
     });

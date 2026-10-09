@@ -21,7 +21,6 @@ export interface GenerateCharacterFieldDependencies {
 }
 
 const CHARACTER_FIELD_MAX_TOKENS = 1024;
-// Лимиты повторяют SaveCharacterCommandSchema: черновик поля обязан проходить сохранение карточки.
 const FIELD_MAX_LENGTHS: Record<CharacterDraftFieldName, number> = {
   description: 20_000,
   exampleDialogue: 20_000,
@@ -30,7 +29,6 @@ const FIELD_MAX_LENGTHS: Record<CharacterDraftFieldName, number> = {
   personality: 5_000,
   scenario: 5_000,
 };
-// При перегенерации поля поднимаем температуру, чтобы получить заметно другой вариант.
 const REGENERATION_MIN_TEMPERATURE = 1.1;
 const PREVIOUS_VALUE_EXCERPT_LENGTH = 2_000;
 
@@ -76,7 +74,6 @@ interface CharacterFieldPromptInput {
 
 function buildCharacterFieldPrompt(input: CharacterFieldPromptInput): string {
   const instruction = FIELD_INSTRUCTIONS[input.field][input.context.language];
-  // «Не повторяй предыдущий вариант» работает только если модель этот вариант видит.
   const previousValue = (input.current[input.field] ?? '').trim().slice(0, PREVIOUS_VALUE_EXCERPT_LENGTH);
 
   if (input.context.language === 'ru') {

@@ -22,13 +22,9 @@ export interface GenerateScenarioFirstMessageDependencies {
   signal?: AbortSignal;
 }
 
-// Как в легаси /ai-generation/first-message: короткое вступление, не полотно.
 const SCENARIO_FIRST_MESSAGE_MAX_TOKENS = 512;
-// Лимит повторяет SaveScenarioCommandSchema.firstMessage: результат обязан проходить сохранение.
 const SCENARIO_FIRST_MESSAGE_MAX_LENGTH = 20_000;
 
-// Портировано из легаси server/src/routes/ai-generation.ts (/first-message);
-// вместо карточки персонажа контекстом служит сам сценарий.
 const SCENARIO_FIRST_MESSAGE_SYSTEM_INSTRUCTION = {
   en: `You are a creative writing assistant for roleplay. Generate an opening message from {{char}}'s perspective to start a roleplay scene.
 MANDATORY: Use the literal placeholders {{user}} and {{char}} — NEVER substitute real names.
@@ -95,7 +91,6 @@ export async function generateScenarioFirstMessage(
     sampling: context.sampling,
     signal: dependencies.signal,
   });
-  // Пост-обработка как в легаси: возвращаем просочившееся имя игрока обратно в {{user}}.
   const value = replaceNamesWithPlaceholders(
     normalizeDraftText(completion.content, SCENARIO_FIRST_MESSAGE_MAX_LENGTH),
     null,

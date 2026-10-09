@@ -46,7 +46,6 @@ function blocked(
     mode: settings.mode,
     runtime: runtime ? toRuntimeSummary(runtime) : null,
     status: 'blocked',
-    // Пока генерация заблокирована, спрашивать модель о картинках не у кого.
     visionSupport: 'unknown',
   });
 }

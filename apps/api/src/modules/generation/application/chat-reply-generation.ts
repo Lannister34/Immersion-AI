@@ -91,8 +91,6 @@ async function runChatCompletionForSession(
     const settings = getSettingsOverview();
     const characterContext = await loadChatPromptContext(session);
     const messageImages = await loadMessageImages(session);
-    // The trailing instruction goes through the plan so it is counted inside
-    // the context budget instead of overflowing an already-full prompt.
     const generationPlan = await resolveChatReplyGenerationPlan({
       character: characterContext.character,
       characterScenarioContent: characterContext.characterScenarioContent,
@@ -122,10 +120,6 @@ async function runChatCompletionForSession(
   }
 }
 
-/**
- * Картинки сообщений читаем один раз на генерацию: провайдер принимает их
- * как data-URL, а держать base64 в транскрипте незачем.
- */
 async function loadMessageImages(session: ChatSessionDto): Promise<ReadonlyMap<string, string[]>> {
   const images = new Map<string, string[]>();
 
@@ -156,8 +150,6 @@ export async function appendUserMessageForChatReply(
   command: StartChatReplyCommand,
   now: () => Date,
 ): Promise<ChatSessionDto> {
-  // Вложения проверяем до записи: id приходит от клиента и мог указывать
-  // на файл, которого в этом чате нет.
   const attachments = await resolveChatAttachments(command.chatId, command.attachmentIds ?? []);
 
   return appendChatMessages(command.chatId, [
@@ -191,7 +183,6 @@ export async function completeChatReplyForSession(
   };
 }
 
-/** Отвечать можно, только когда транскрипт заканчивается непустой репликой пользователя. */
 export function getAnswerableUserMessage(chatId: string, session: ChatSessionDto): ChatMessageDto {
   const lastMessage = session.messages.at(-1);
 

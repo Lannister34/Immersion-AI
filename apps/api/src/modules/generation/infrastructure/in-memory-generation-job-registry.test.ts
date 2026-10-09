@@ -8,7 +8,29 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function countTimersKeepingProcessAlive() {
+  return process.getActiveResourcesInfo().filter((resource) => resource === 'Timeout').length;
+}
+
 describe('InMemoryGenerationJobRegistry eviction', () => {
+  it('does not keep the process alive while a finished job waits for eviction', () => {
+    const registry = new InMemoryGenerationJobRegistry();
+    const job = registry.createChatReplyJob({
+      chatId: 'chat-0',
+      command: { chatId: 'chat-0', message: 'hi', mode: 'reply' },
+    });
+    const timersBeforeFinish = countTimersKeepingProcessAlive();
+
+    registry.fail(job.id, new Error('boom'));
+
+    expect(registry.get(job.id)?.status).toBe('failed');
+    expect(countTimersKeepingProcessAlive()).toBe(timersBeforeFinish);
+
+    const referencedTimer = setTimeout(() => undefined, 60_000);
+    expect(countTimersKeepingProcessAlive()).toBe(timersBeforeFinish + 1);
+    clearTimeout(referencedTimer);
+  });
+
   it('evicts failed jobs after the configured TTL', async () => {
     const registry = new InMemoryGenerationJobRegistry({ finishedJobTtlMs: 20 });
     const job = registry.createChatReplyJob({

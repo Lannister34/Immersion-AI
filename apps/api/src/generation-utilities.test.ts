@@ -344,7 +344,6 @@ describe('generation utility routes', () => {
       const chat = await createChat(app, { title: 'Original title' });
       await seedChatMessages(chat.id);
 
-      // Провайдер «медленный»: пока он отвечает, пользователь переименовывает чат вручную.
       globalThis.fetch = vi.fn(async () => {
         const renameResponse = await app.inject({
           method: 'PATCH',
@@ -400,7 +399,7 @@ describe('generation utility routes', () => {
   });
 
   describe('POST /api/generation/first-message', () => {
-    it('generates and appends the character opening message for an empty character chat', async () => {
+    it('generates and appends the character opening message for an empty character chat with the model-bound preset in the profile language', async () => {
       const charactersDir = path.join(temporaryDataRoot, 'characters');
       await fs.mkdir(charactersDir, { recursive: true });
       await fs.writeFile(
@@ -442,7 +441,6 @@ describe('generation utility routes', () => {
 
       expect(providerRequests).toHaveLength(1);
       const requestBody = getProviderRequestBody(providerRequests[0]);
-      // smoke-model is bound to smoke-model-preset (max_length 777) in the fixture.
       expect(requestBody).toMatchObject({
         max_tokens: 777,
         stream: false,
@@ -453,7 +451,6 @@ describe('generation utility routes', () => {
       const lastMessage = requestBody.messages?.at(-1);
       expect(lastMessage?.role).toBe('user');
       expect(lastMessage?.content).toContain('opening message');
-      // Fixture profile responseLanguage is 'ru'.
       expect(lastMessage?.content).toContain('Write it in Russian.');
 
       await app.close();
@@ -536,7 +533,6 @@ describe('generation utility routes', () => {
       const app = buildApiApp();
       const chat = await createChat(app);
 
-      // Пока провайдер отвечает, в чат успевает попасть сообщение пользователя.
       globalThis.fetch = vi.fn(async () => {
         await appendChatMessages(chat.id, [
           {

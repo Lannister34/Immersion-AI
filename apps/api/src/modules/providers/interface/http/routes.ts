@@ -41,8 +41,6 @@ export const providersRoutes: FastifyPluginAsync = async (app) => {
 
   app.get('/settings', async (_request, reply) => {
     try {
-      // The stored apiKey is returned on purpose: the settings form round-trips it.
-      // The API binds to 127.0.0.1 by default and CORS is limited to local web origins.
       return await getProviderSettings();
     } catch (error) {
       const mapped = toProblem(error);

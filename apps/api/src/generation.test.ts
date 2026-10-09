@@ -603,7 +603,7 @@ describe('generation routes', () => {
     await app.close();
   });
 
-  it('reports approximate token counting in preview when no tokenize-capable provider is available', async () => {
+  it('reports approximate token counting in preview without tokenizing through an external provider', async () => {
     const providerRequests = mockProviderSuccess('Preview must not call provider.');
     const app = buildApiApp();
     const chat = await createChat(app);
@@ -619,7 +619,6 @@ describe('generation routes', () => {
 
     expect(response.statusCode).toBe(200);
     expect(payload.diagnostics.tokenCountMethod).toBe('approximate');
-    // External providers are never tokenized: no provider traffic at all.
     expect(providerRequests).toHaveLength(0);
 
     await app.close();
@@ -803,7 +802,7 @@ describe('generation routes', () => {
     await app.close();
   });
 
-  it('sends an attached image to the provider as an OpenAI image part', async () => {
+  it('sends an attached image and its text as parts of one OpenAI user message', async () => {
     const providerRequests = mockProviderSuccess('Вижу градиент.');
     const app = buildApiApp();
     const chat = await createChat(app);
@@ -833,12 +832,30 @@ describe('generation routes', () => {
         typeof message === 'object' && message !== null && (message as { role?: string }).role === 'user',
     );
 
-    // Текст и картинка уходят частями одного сообщения: так их принимает
-    // OpenAI-совместимый API, включая llama.cpp и LM Studio.
     expect(userMessage?.content).toEqual([
       { text: 'Что на картинке?', type: 'text' },
       { image_url: { url: `data:image/png;base64,${png.toString('base64')}` }, type: 'image_url' },
     ]);
+
+    await app.close();
+  });
+
+  it('refuses an attachment the chat does not have before storing the user message', async () => {
+    const providerRequests = mockProviderSuccess('Не должно вызываться.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply',
+      payload: { attachmentIds: ['missing.png'], chatId: chat.id, message: 'Что на картинке?' },
+    });
+    const sessionResponse = await app.inject({ method: 'GET', url: `/api/chats/${chat.id}` });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'chat_attachment_not_found' });
+    expect(GetChatSessionResponseSchema.parse(sessionResponse.json()).messages).toEqual([]);
+    expect(providerRequests).toHaveLength(0);
 
     await app.close();
   });
@@ -958,7 +975,7 @@ describe('generation routes', () => {
     await app.close();
   });
 
-  it('previews the prompt with character description, personality and per-card scenario for a character chat', async () => {
+  it('previews the prompt with character description, personality, per-card scenario and seeded first message for a character chat', async () => {
     const charactersDir = path.join(temporaryDataRoot, 'characters');
     await fs.mkdir(charactersDir, { recursive: true });
     await fs.writeFile(
@@ -996,7 +1013,6 @@ describe('generation routes', () => {
     expect(systemMessage?.content).toContain('Молодая скульпторша из Петербурга.');
     expect(systemMessage?.content).toContain('Тихая, но острая на язык.');
     expect(systemMessage?.content).toContain('В мастерской вечером, в стенах пахнет глиной.');
-    // Seed first_message also lands in the transcript
     expect(
       preview.request.messages.some(
         (m) => m.role === 'assistant' && m.content.includes('Привет, ты впервые в студии?'),
@@ -1475,7 +1491,7 @@ describe('generation routes', () => {
     await app.close();
   });
 
-  it('continues the last assistant reply by appending to the same message', async () => {
+  it('continues the last assistant reply in place, sending it unchanged with a continue instruction in the profile language', async () => {
     const provider = mockProviderSuccess('Это и делает её прочной.');
     const app = buildApiApp();
     const chat = await createChat(app);
@@ -1507,7 +1523,6 @@ describe('generation routes', () => {
       chatId: chat.id,
       kind: 'chat_reply',
     });
-    // Старт continue-job не добавляет новых сообщений.
     expect(payload.session.messages).toHaveLength(2);
 
     await waitForGenerationJobStatus(app, payload.job.id, 'completed');
@@ -1529,7 +1544,6 @@ describe('generation routes', () => {
     expect(provider).toHaveLength(1);
     const requestBody = getProviderRequestBody(provider[0]);
     const promptMessages = requestBody.messages ?? [];
-    // Транскрипт уходит в промпт как есть, включая продолжаемый ответ.
     expect(
       promptMessages.some(
         (message) =>
@@ -1541,8 +1555,51 @@ describe('generation routes', () => {
     expect(trailingInstruction?.role).toBe('user');
     expect(trailingInstruction?.content).toContain('Continue your previous reply');
     expect(trailingInstruction?.content).toContain('Do not repeat');
-    // Fixture profile responseLanguage is 'ru'.
     expect(trailingInstruction?.content).toContain('Write the continuation in Russian.');
+
+    await app.close();
+  });
+
+  it('counts the continue instruction inside the context budget, trimming older messages to fit it', async () => {
+    const providerRequests = mockProviderSuccess('и это делает её прочной.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    await appendChatMessages(chat.id, [
+      {
+        role: 'user',
+        content: 'OLD_CONTEXT '.repeat(10),
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        role: 'assistant',
+        content: 'PARTIAL_REPLY',
+        createdAt: '2026-01-01T00:00:01.000Z',
+      },
+    ]);
+    await updateChatGenerationSettings(app, chat.id, {
+      additionalInstructions: null,
+      samplerPresetId: null,
+      systemPrompt: null,
+      sampling: {
+        ...EMPTY_CHAT_SAMPLING_OVERRIDES,
+        contextTrimStrategy: 'trim_start',
+        maxContextLength: 74,
+        maxTokens: 24,
+      },
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: { chatId: chat.id, mode: 'continue' },
+    });
+    const payload = StartChatReplyGenerationJobResponseSchema.parse(response.json());
+    await waitForGenerationJobStatus(app, payload.job.id, 'completed');
+    const promptMessages = getProviderRequestBody(providerRequests[0]).messages ?? [];
+
+    expect(promptMessages.map((message) => message.content).join('\n')).not.toContain('OLD_CONTEXT');
+    expect(promptMessages.at(-2)?.content).toBe('PARTIAL_REPLY');
+    expect(promptMessages.at(-1)?.content).toContain('Continue your previous reply');
 
     await app.close();
   });
@@ -1675,7 +1732,26 @@ describe('generation routes', () => {
     await app.close();
   });
 
-  it('fails the continue job without touching the transcript when the chat changes mid-generation', async () => {
+  it.each(['answer', 'continue'] as const)('refuses to %s an empty chat without leaving a job behind', async (mode) => {
+    const providerRequests = mockProviderSuccess('Не должно вызываться.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: { chatId: chat.id, mode },
+    });
+    const jobsResponse = await app.inject({ method: 'GET', url: `/api/generation/jobs?chatId=${chat.id}` });
+
+    expect(response.statusCode).toBe(409);
+    expect(ListGenerationJobsResponseSchema.parse(jobsResponse.json()).items).toEqual([]);
+    expect(providerRequests).toHaveLength(0);
+
+    await app.close();
+  });
+
+  it('fails the continue job without touching the transcript when the user posts a message mid-generation', async () => {
     const app = buildApiApp();
     const chat = await createChat(app);
     await appendChatMessages(chat.id, [
@@ -1691,7 +1767,6 @@ describe('generation routes', () => {
       },
     ]);
 
-    // Пока провайдер отвечает, пользователь успевает дописать своё сообщение.
     globalThis.fetch = vi.fn(async () => {
       await appendChatMessages(chat.id, [
         {
@@ -2090,7 +2165,7 @@ describe('generation routes', () => {
     await app.close();
   });
 
-  it('binds builtin runtime sampler presets by the canonical scanned model name', async () => {
+  it('binds builtin runtime sampler presets by the canonical scanned model name in a single completion request', async () => {
     const nestedModelPath = path.join(temporaryDataRoot, 'models', 'nested', 'secondary.gguf');
     await writeProviderSettings({
       backendMode: 'builtin',
@@ -2112,8 +2187,6 @@ describe('generation routes', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    // Builtin mode may additionally probe the runtime tokenize endpoint;
-    // the completion call itself must stay a single request.
     const completionRequests = providerRequests.filter((request) => request.url.includes('/chat/completions'));
     expect(completionRequests).toHaveLength(1);
     expect(completionRequests[0]).toMatchObject({

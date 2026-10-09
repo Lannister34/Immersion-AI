@@ -33,8 +33,6 @@ export function invalidateRuntimeModelScanCache() {
   modelScanCache = null;
 }
 
-// null означает недоступный каталог (отсутствует или нет прав) — скан
-// деградирует до пустого списка, а overview помечает каталог как отсутствующий.
 async function readDirectoryEntries(directory: string) {
   try {
     return await fs.readdir(directory, { withFileTypes: true });
