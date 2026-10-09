@@ -10,7 +10,6 @@ interface DeleteChatMessageInput {
   now: () => Date;
 }
 
-/** Удаляет одно сообщение, сохраняя остальной транскрипт. */
 export async function deleteChatMessage({
   chatId,
   messageIndex,

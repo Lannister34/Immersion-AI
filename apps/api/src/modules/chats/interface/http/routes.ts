@@ -53,7 +53,6 @@ const ChatMessageRouteParamsSchema = z.object({
   messageIndex: z.coerce.number().int().positive(),
 });
 
-// single — удалить одно сообщение, from-here — обрезать транскрипт с этого места.
 const DeleteChatMessageQuerySchema = z.object({
   mode: z.enum(['single', 'from-here']).default('single'),
 });

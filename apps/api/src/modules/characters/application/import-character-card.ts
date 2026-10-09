@@ -29,7 +29,6 @@ export async function importCharacterCard(input: ImportCharacterCardInput): Prom
 
   const card = extractPngCharacterCard(pngBuffer);
 
-  // Reuse the file repo's createCharacterFile: it picks a non-clashing JSON id.
   const detail = await createCharacterFile({
     description: card.description,
     exampleDialogue: card.exampleDialogue,
@@ -41,8 +40,6 @@ export async function importCharacterCard(input: ImportCharacterCardInput): Prom
     tags: card.tags,
   });
 
-  // The card PNG becomes the sibling avatar of the imported JSON card. The chara chunk is
-  // stripped so the stored avatar is a plain image, never a second character card.
   await writeCharacterAvatarFile(detail.id, stripPngCharacterCardChunks(pngBuffer), '.png');
 
   return {

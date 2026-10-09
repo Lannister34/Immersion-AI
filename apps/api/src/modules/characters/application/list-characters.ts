@@ -8,19 +8,10 @@ export interface CharacterChatUsageRecord {
   lastChatAt: string | null;
 }
 
-/**
- * Порт к модулю indexing: статистика чатов по персонажам приходит из
- * перестраиваемой read-модели и никогда не является источником истины.
- */
 export interface CharacterChatStatsPort {
   getCharacterChatStats(): Promise<ReadonlyMap<string, CharacterChatUsageRecord>>;
 }
 
-/**
- * Чаты, созданные до перехода на JSON-карточки, помнят персонажа по имени
- * картинки, а новые — по имени JSON. Складываем оба ключа, иначе у старой
- * карточки счётчик чатов обнулится на ровном месте.
- */
 export function resolveCharacterChatUsage(
   stats: ReadonlyMap<string, CharacterChatUsageRecord>,
   characterId: string,

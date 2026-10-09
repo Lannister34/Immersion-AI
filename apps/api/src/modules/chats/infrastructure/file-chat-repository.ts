@@ -35,7 +35,6 @@ import type {
 import { joinContinuationContent } from '../application/continuation-content.js';
 import { deriveLastMessagePreview } from '../application/last-message-preview.js';
 
-// MVP scope: rewrite chats are generic-only until the character-backed slice lands.
 const GENERIC_CHAT_DIRECTORY = '_no_character_';
 const chatWriteQueues = new Map<string, Promise<unknown>>();
 const DEFAULT_CHAT_TITLE_PREFIX = 'Новый чат';
@@ -117,7 +116,6 @@ function resolveChatFilePath(chatId: string) {
   return path.join(resolveChatsDirectory(), `${chatId}.jsonl`);
 }
 
-/** Вложения лежат в папке рядом с файлом чата и уходят вместе с ним. */
 function resolveChatAttachmentsDirectory(chatId: string) {
   return path.join(resolveChatsDirectory(), `${chatId}.files`);
 }
@@ -459,11 +457,24 @@ function trimmedOrNull(value: string) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-/**
- * Lenient variant of the transcript parsing used by readChatFile: built on the
- * same helpers (parseStoredHeader/parseStoredChatLine), but lines that would
- * make the strict reader throw are counted as skipped instead. Used for import.
- */
+function parseTranscriptHeaderOrNull(line: string, source: string): ParsedChatTranscriptHeader | null {
+  try {
+    const storedHeader = parseStoredHeader(line, source);
+    if (!storedHeader) return null;
+    return {
+      characterName: trimmedOrNull(storedHeader.character_name ?? ''),
+      createdAt: trimmedOrNull(storedHeader.chat_metadata?.createdAt ?? ''),
+      generationSettings: parseStoredGenerationSettings(storedHeader.generation_settings, source),
+      lorebookIds: [...(storedHeader.lorebook_ids ?? [])],
+      scenarioName: trimmedOrNull(storedHeader.scenario_name ?? ''),
+      title: trimmedOrNull(storedHeader.chat_metadata?.title ?? ''),
+      userName: trimmedOrNull(storedHeader.user_name ?? ''),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function parseChatTranscriptLeniently(
   rawContent: string,
   source: string,
@@ -474,29 +485,9 @@ export function parseChatTranscriptLeniently(
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
-  let header: ParsedChatTranscriptHeader | null = null;
-  let messageLines = lines;
+  const header = lines.length > 0 ? parseTranscriptHeaderOrNull(lines[0] ?? '', source) : null;
+  const messageLines = header ? lines.slice(1) : lines;
   let skippedLines = 0;
-
-  if (lines.length > 0) {
-    try {
-      const storedHeader = parseStoredHeader(lines[0] ?? '', source);
-      if (storedHeader) {
-        header = {
-          characterName: trimmedOrNull(storedHeader.character_name ?? ''),
-          createdAt: trimmedOrNull(storedHeader.chat_metadata?.createdAt ?? ''),
-          generationSettings: parseStoredGenerationSettings(storedHeader.generation_settings, source),
-          lorebookIds: [...(storedHeader.lorebook_ids ?? [])],
-          scenarioName: trimmedOrNull(storedHeader.scenario_name ?? ''),
-          title: trimmedOrNull(storedHeader.chat_metadata?.title ?? ''),
-          userName: trimmedOrNull(storedHeader.user_name ?? ''),
-        };
-        messageLines = lines.slice(1);
-      }
-    } catch {
-      // Malformed first line: not a header; the message loop will count it as skipped.
-    }
-  }
 
   const messages: AppendChatMessageInput[] = [];
   for (const [index, line] of messageLines.entries()) {
@@ -613,8 +604,6 @@ export class FileChatRepository implements ChatRepository {
         return null;
       }
 
-      // Инвариант проверяется внутри очереди записи: проверка до вызова провайдера
-      // не защищает от сообщений, добавленных за время генерации.
       if (options?.requireEmptyTranscript && currentSession.messages.length > 0) {
         throw new ChatTranscriptNotEmptyError(chatId);
       }
@@ -652,8 +641,6 @@ export class FileChatRepository implements ChatRepository {
         return null;
       }
 
-      // Инвариант проверяется внутри очереди записи: за время генерации транскрипт
-      // мог измениться, и продолжение больше некуда безопасно дописывать.
       const lastMessage = currentSession.messages.at(-1);
       const lastMessageStillMatches =
         lastMessage !== undefined &&
@@ -745,7 +732,6 @@ export class FileChatRepository implements ChatRepository {
       const filePath = resolveChatFilePath(chatId);
       try {
         await fs.unlink(filePath);
-        // Вложения принадлежат чату: без него они уже никому не нужны.
         await deleteChatAttachmentFiles(chatId);
         return true;
       } catch (error) {
@@ -835,7 +821,6 @@ export class FileChatRepository implements ChatRepository {
               fileSize: fileStats.size,
             } satisfies ChatFileStatRecord;
           } catch {
-            // Файл исчез между readdir и stat — параллельное удаление, просто пропускаем.
             return null;
           }
         }),
@@ -961,7 +946,6 @@ export class FileChatRepository implements ChatRepository {
         return null;
       }
 
-      // Прекондиция против молчаливой перезаписи параллельного ручного переименования.
       if (options?.expectedCurrentTitle !== undefined && currentSession.chat.title !== options.expectedCurrentTitle) {
         throw new ChatTitleConflictError(chatId);
       }
@@ -1032,8 +1016,6 @@ export class FileChatRepository implements ChatRepository {
         nextHeaderRecord.scenario_name = bindings.scenarioName ?? '';
       }
 
-      // Build a synthetic session record so updateHeaderRecord uses the new identifiers in its
-      // getString(headerValue, sessionFallback) calls instead of resurrecting the old ones.
       const projectedCharacterId = getString(nextHeaderRecord.character_id).trim() || null;
       const projectedCharacterName = getString(nextHeaderRecord.character_name).trim() || null;
       const projectedScenarioId = getString(nextHeaderRecord.scenario_id).trim() || null;

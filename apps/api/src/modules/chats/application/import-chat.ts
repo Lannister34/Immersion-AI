@@ -38,9 +38,6 @@ export async function importChat(command: ImportChatCommand): Promise<ImportChat
     throw new InvalidChatFileError();
   }
 
-  // Deliberately not binding characterId/scenarioId: imported names may not
-  // exist locally, so the header names are preserved as display names only.
-  // Lorebook ids are kept as-is: a missing lorebook is inert at prompt time.
   const chatRepository = new FileChatRepository();
   const summary = await chatRepository.createGenericChat({
     characterName: transcript.header?.characterName ?? null,

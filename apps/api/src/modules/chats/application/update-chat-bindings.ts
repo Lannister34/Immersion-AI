@@ -26,7 +26,6 @@ export async function updateChatBindings(input: UpdateChatBindingsInput): Promis
       updates.characterId = null;
       updates.characterName = null;
     } else {
-      // Throws CharacterNotFoundError with the same route mapping as before.
       const character = await getCharacter(input.characterId);
       updates.characterId = character.id;
       updates.characterName = character.name;
@@ -38,7 +37,6 @@ export async function updateChatBindings(input: UpdateChatBindingsInput): Promis
       updates.scenarioId = null;
       updates.scenarioName = null;
     } else {
-      // Throws ScenarioNotFoundError with the same route mapping as before.
       const scenario = await getScenario(input.scenarioId);
       updates.scenarioId = scenario.id;
       updates.scenarioName = scenario.name;

@@ -139,7 +139,7 @@ describe('chat attachments', () => {
     await app.close();
   });
 
-  it('keeps the attachment on the message it was sent with', async () => {
+  it('keeps the attachment on the user message whatever the provider replies', async () => {
     const app = buildApiApp();
     const chat = await createChat(app);
     const attachment = await uploadPng(app, chat.id);
@@ -149,7 +149,6 @@ describe('chat attachments', () => {
       url: '/api/generation/chat-reply',
       payload: { attachmentIds: [attachment.id], chatId: chat.id, message: 'Что на картинке?' },
     });
-    // Провайдер в тестах недоступен, но пользовательское сообщение уже записано.
     expect([200, 409, 502]).toContain(generation.statusCode);
 
     const sessionResponse = await app.inject({ method: 'GET', url: `/api/chats/${chat.id}` });

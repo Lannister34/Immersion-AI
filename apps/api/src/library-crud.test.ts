@@ -62,17 +62,24 @@ function _decodePngCharaChunk(buffer: Buffer): { data: Record<string, unknown> }
 }
 
 function buildPngWithCharaChunk(cardJson: string): Buffer {
+  const width = 1;
+  const height = 1;
+  const bitDepth = 8;
+  const grayscaleColorType = 0;
+  const deflateCompression = 0;
+  const adaptiveFiltering = 0;
+  const noInterlace = 0;
   const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(1, 0); // width
-  ihdr.writeUInt32BE(1, 4); // height
-  ihdr.writeUInt8(8, 8); // bit depth
-  ihdr.writeUInt8(0, 9); // colour type (grayscale)
-  ihdr.writeUInt8(0, 10); // compression
-  ihdr.writeUInt8(0, 11); // filter
-  ihdr.writeUInt8(0, 12); // interlace
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr.writeUInt8(bitDepth, 8);
+  ihdr.writeUInt8(grayscaleColorType, 9);
+  ihdr.writeUInt8(deflateCompression, 10);
+  ihdr.writeUInt8(adaptiveFiltering, 11);
+  ihdr.writeUInt8(noInterlace, 12);
 
-  const idatRaw = Buffer.from([0x00, 0x00]); // 1 filter byte + 1 sample byte
-  const idatCompressed = zlib.deflateSync(idatRaw);
+  const onePixelScanline = Buffer.from([0x00, 0x00]);
+  const idatCompressed = zlib.deflateSync(onePixelScanline);
 
   const cardBase64 = Buffer.from(cardJson, 'utf8').toString('base64');
   const tEXt = Buffer.concat([Buffer.from('chara', 'ascii'), Buffer.from([0x00]), Buffer.from(cardBase64, 'latin1')]);
@@ -306,7 +313,7 @@ describe('library CRUD routes', () => {
       await app.close();
     });
 
-    it('imports a SillyTavern PNG character card and returns the editable JSON detail', async () => {
+    it('imports a SillyTavern PNG character card as one editable JSON character whose image is only its avatar', async () => {
       const cardJson = {
         spec: 'chara_card_v2',
         data: {
@@ -346,8 +353,52 @@ describe('library CRUD routes', () => {
       const listResponse = await app.inject({ method: 'GET', url: '/api/characters' });
       const listPayload = CharacterListResponseSchema.parse(listResponse.json());
       expect(listPayload.items.some((item) => item.id === payload.character.id)).toBe(true);
-      // The sibling avatar PNG must not surface as a separate PNG-card character.
       expect(listPayload.items.filter((item) => item.name === 'Эмбер')).toHaveLength(1);
+
+      await app.close();
+    });
+
+    it('stores the image of an imported card as a plain avatar without the card chunk', async () => {
+      const cardChunkMarker = Buffer.from('tEXtchara', 'ascii');
+      const png = buildPngWithCharaChunk(JSON.stringify({ name: 'Эмбер' }));
+      expect(png.includes(cardChunkMarker)).toBe(true);
+
+      const app = buildApiApp();
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/characters/import',
+        payload: { fileName: 'Ember.png', contentBase64: png.toString('base64') },
+      });
+      const payload = CharacterDetailResponseSchema.parse(response.json());
+      expect(response.statusCode).toBe(201);
+
+      const avatarResponse = await app.inject({ method: 'GET', url: payload.character.avatarUrl ?? '' });
+      expect(avatarResponse.statusCode).toBe(200);
+      expect(avatarResponse.rawPayload.includes(cardChunkMarker)).toBe(false);
+
+      await app.close();
+    });
+
+    it('renames a character in its card without moving its file', async () => {
+      const app = buildApiApp();
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: '/api/characters',
+        payload: { name: 'Эля' },
+      });
+      const created = CharacterDetailResponseSchema.parse(createResponse.json()).character;
+
+      const updateResponse = await app.inject({
+        method: 'PUT',
+        url: `/api/characters/${encodeURIComponent(created.id)}`,
+        payload: { name: 'Эльвира' },
+      });
+      expect(updateResponse.statusCode).toBe(200);
+      expect(CharacterDetailResponseSchema.parse(updateResponse.json()).character.id).toBe(created.id);
+
+      const listResponse = await app.inject({ method: 'GET', url: '/api/characters' });
+      const listPayload = CharacterListResponseSchema.parse(listResponse.json());
+      expect(listPayload.items.map((item) => [item.id, item.name])).toEqual([[created.id, 'Эльвира']]);
 
       await app.close();
     });
@@ -367,7 +418,7 @@ describe('library CRUD routes', () => {
       await app.close();
     });
 
-    it('migrates a legacy PNG character card to a JSON card and keeps the image as its avatar', async () => {
+    it('migrates a legacy PNG card to a JSON card named from the card, not the file, and keeps the image as its avatar', async () => {
       const charactersDir = path.join(temporaryDataRoot, 'characters');
       await fs.mkdir(charactersDir, { recursive: true });
       const cardJson = {
@@ -384,8 +435,6 @@ describe('library CRUD routes', () => {
         },
       };
       const png = buildPngWithCharaChunk(JSON.stringify(cardJson));
-      // Имя файла нарочно не совпадает с именем в карточке: до перехода список
-      // показывал именно его, и персонаж выглядел как совсем другой человек.
       await fs.writeFile(path.join(charactersDir, 'Лена.png'), png);
 
       const app = buildApiApp();
@@ -415,6 +464,24 @@ describe('library CRUD routes', () => {
       const avatarResponse = await app.inject({ method: 'GET', url: payload.character.avatarUrl ?? '' });
       expect(avatarResponse.statusCode).toBe(200);
       expect(avatarResponse.headers['content-type']).toBe('image/png');
+
+      await app.close();
+    });
+
+    it('dates a migrated legacy card by its image so it does not jump to the top of the list', async () => {
+      const charactersDir = path.join(temporaryDataRoot, 'characters');
+      await fs.mkdir(charactersDir, { recursive: true });
+      const imagePath = path.join(charactersDir, 'Old.png');
+      await fs.writeFile(imagePath, buildPngWithCharaChunk(JSON.stringify({ name: 'Старожил' })));
+      const imageMtime = new Date('2001-02-03T04:05:06.000Z');
+      await fs.utimes(imagePath, imageMtime, imageMtime);
+
+      const app = buildApiApp();
+      const listResponse = await app.inject({ method: 'GET', url: '/api/characters' });
+      const listPayload = CharacterListResponseSchema.parse(listResponse.json());
+
+      expect(listPayload.items).toHaveLength(1);
+      expect(listPayload.items[0]?.updatedAt).toBe(imageMtime.toISOString());
 
       await app.close();
     });
@@ -505,7 +572,6 @@ describe('library CRUD routes', () => {
       expect(detailPayload.character.firstMessage).toBe('Чай завариваю — будешь?');
       expect(detailPayload.character.personality).toBe('обновлённая личность');
 
-      // Картинка осталась картинкой: её больше не переписывают ради полей карточки.
       const persisted = await fs.readFile(path.join(charactersDir, 'Мария Чернова.png'));
       expect(persisted.equals(png)).toBe(true);
 
