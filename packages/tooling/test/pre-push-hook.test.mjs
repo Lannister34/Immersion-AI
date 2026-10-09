@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { gitIn, isolatedGitEnvironment, mustGitIn } from './isolated-git.mjs';
 
 const HOOK = fileURLToPath(new URL('../../../.husky/pre-push', import.meta.url));
 const HOOK_EXPORTED_VARIABLES = [
@@ -21,24 +21,6 @@ function temporaryRoot() {
   const root = mkdtempSync(path.join(tmpdir(), 'immersion-pre-push-'));
   temporaryRoots.push(root);
   return root;
-}
-
-function isolatedGitEnvironment(root) {
-  const globalConfig = path.join(root, 'gitconfig');
-  writeFileSync(globalConfig, '');
-  const inherited = Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith('GIT_'));
-
-  return { ...Object.fromEntries(inherited), GIT_CONFIG_GLOBAL: globalConfig, GIT_CONFIG_NOSYSTEM: '1' };
-}
-
-function gitIn(cwd, env, ...args) {
-  return spawnSync('git', args, { cwd, encoding: 'utf8', env });
-}
-
-function mustGitIn(cwd, env, ...args) {
-  const result = gitIn(cwd, env, ...args);
-  assert.equal(result.status, 0, `git ${args.join(' ')} failed: ${result.stderr}`);
-  return result.stdout.trim();
 }
 
 function createFixture({ npmExitCode = 0 } = {}) {

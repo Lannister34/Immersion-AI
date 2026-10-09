@@ -17,9 +17,15 @@ importers:
       '@commitlint/config-conventional':
         specifier: ^20.0.0
         version: 20.5.0
+      '@devkit/checks':
+        specifier: github:Lannister34/devkit#69fcc84978075e086fcb825ea112718c584fe313&path:/packages/checks
+        version: https://codeload.github.com/Lannister34/devkit/tar.gz/69fcc84978075e086fcb825ea112718c584fe313#path:/packages/checks(typescript@5.9.3)
       husky:
         specifier: ^9.1.7
         version: 9.1.7
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
 
   apps/api:
     dependencies:
@@ -428,6 +434,14 @@ packages:
   '@csstools/css-tokenizer@4.0.0':
     resolution: {integrity: sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA==}
     engines: {node: '>=20.19.0'}
+
+  '@devkit/checks@https://codeload.github.com/Lannister34/devkit/tar.gz/69fcc84978075e086fcb825ea112718c584fe313#path:/packages/checks':
+    resolution: {path: /packages/checks, tarball: https://codeload.github.com/Lannister34/devkit/tar.gz/69fcc84978075e086fcb825ea112718c584fe313}
+    version: 0.1.0
+    engines: {node: '>=18'}
+    hasBin: true
+    peerDependencies:
+      typescript: '>=5.0.0 <7'
 
   '@esbuild/aix-ppc64@0.27.7':
     resolution: {integrity: sha512-EKX3Qwmhz1eMdEJokhALr0YiD0lhQNwDqkPYyPhiSwKrh7/4KRjQc04sZ8db+5DVVnZ1LmbNDI1uAMPEUBnQPg==}
@@ -2191,6 +2205,10 @@ snapshots:
       css-tree: 3.2.1
 
   '@csstools/css-tokenizer@4.0.0': {}
+
+  '@devkit/checks@https://codeload.github.com/Lannister34/devkit/tar.gz/69fcc84978075e086fcb825ea112718c584fe313#path:/packages/checks(typescript@5.9.3)':
+    dependencies:
+      typescript: 5.9.3
 
   '@esbuild/aix-ppc64@0.27.7':
     optional: true

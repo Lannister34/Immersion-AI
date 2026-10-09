@@ -1,1 +1,5 @@
-npx biome check --staged --no-errors-on-unmatched --error-on-warnings
+staged=$(mktemp)
+trap 'rm -f "$staged"' EXIT
+npx --no biome check --staged --no-errors-on-unmatched --error-on-warnings
+git diff --cached --name-only --diff-filter=ACMR -z >"$staged"
+xargs -0 -r npx --no devkit-comments -- <"$staged"

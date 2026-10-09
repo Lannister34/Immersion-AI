@@ -16,7 +16,7 @@
     "stop": "pm2 stop ecosystem.config.cjs",
     "restart": "pm2 restart ecosystem.config.cjs",
     "logs": "pm2 logs",
-    "lint": "biome check --error-on-warnings .",
+    "lint": "biome check --error-on-warnings . && devkit-comments",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "typecheck": "corepack pnpm -r typecheck",
@@ -32,6 +32,8 @@
     "@biomejs/biome": "^2.4.7",
     "@commitlint/cli": "^20.1.0",
     "@commitlint/config-conventional": "^20.0.0",
-    "husky": "^9.1.7"
+    "@devkit/checks": "github:Lannister34/devkit#69fcc84978075e086fcb825ea112718c584fe313&path:/packages/checks",
+    "husky": "^9.1.7",
+    "typescript": "~5.9.3"
   }
 }
