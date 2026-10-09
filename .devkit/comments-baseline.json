@@ -56,7 +56,7 @@
   "apps/web/src/modules/chats/components/chat-bindings.tsx": 1,
   "apps/web/src/modules/chats/components/chat-header.tsx": 1,
   "apps/web/src/modules/chats/components/chat-list-row.tsx": 3,
-  "apps/web/src/modules/chats/components/chat-list-screen.tsx": 4,
+  "apps/web/src/modules/chats/components/chat-list-screen.tsx": 2,
   "apps/web/src/modules/chats/components/chat-session-screen.tsx": 9,
   "apps/web/src/modules/chats/components/composer.tsx": 3,
   "apps/web/src/modules/chats/components/context-meter.tsx": 1,
