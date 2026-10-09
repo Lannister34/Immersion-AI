@@ -12,6 +12,7 @@ import {
   UpdateChatGenerationSettingsResponseSchema,
   UpdateChatTitleResponseSchema,
 } from '@immersion/contracts/chats';
+import { CHAT_IMPORT_MAX_BYTES } from '@immersion/contracts/common';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildApiApp } from './app.js';
@@ -1520,7 +1521,7 @@ describe('chat routes', () => {
   });
 
   it('rejects an oversized import file', async () => {
-    const oversized = Buffer.alloc(10 * 1024 * 1024 + 1, 0x61);
+    const oversized = Buffer.alloc(CHAT_IMPORT_MAX_BYTES + 1, 0x61);
 
     const app = buildApiApp();
     const response = await app.inject({

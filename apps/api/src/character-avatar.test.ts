@@ -4,6 +4,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 
 import { CharacterDetailResponseSchema, CharacterListResponseSchema } from '@immersion/contracts/characters';
+import { IMAGE_UPLOAD_MAX_BYTES, IMAGE_UPLOAD_MAX_MEGABYTES } from '@immersion/contracts/common';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -159,6 +160,25 @@ describe('character avatar upload API', () => {
 
     const avatarResponse = await app.inject({ method: 'GET', url: avatarUrlOf(character.id) });
     expect(avatarResponse.statusCode).toBe(404);
+
+    await app.close();
+  });
+
+  it('rejects an avatar one byte over the image upload limit with its size message', async () => {
+    const app = buildApiApp();
+    const character = await createJsonCharacter(app);
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: avatarUrlOf(character.id),
+      payload: { contentBase64: Buffer.alloc(IMAGE_UPLOAD_MAX_BYTES + 1).toString('base64'), mimeType: 'image/png' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      code: 'invalid_avatar_image',
+      message: `Файл аватара больше ${IMAGE_UPLOAD_MAX_MEGABYTES} МБ.`,
+    });
 
     await app.close();
   });

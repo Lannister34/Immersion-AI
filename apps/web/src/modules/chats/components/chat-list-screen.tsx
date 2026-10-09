@@ -1,3 +1,4 @@
+import { CHAT_IMPORT_MAX_BYTES, CHAT_IMPORT_MAX_MEGABYTES } from '@immersion/contracts/common';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { type ChangeEvent, type ReactNode, useDeferredValue, useMemo, useRef, useState } from 'react';
@@ -13,11 +14,9 @@ import { importChat } from '../api/import-chat';
 import { chatListQueryKey, chatListQueryOptions } from '../queries/chat-list-query';
 import { ChatListRow } from './chat-list-row';
 
-const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
-
 class ImportFileTooLargeError extends Error {
   constructor() {
-    super('Import file exceeds the 10 MB limit.');
+    super(`Import file exceeds the ${CHAT_IMPORT_MAX_MEGABYTES} MB limit.`);
     this.name = 'ImportFileTooLargeError';
   }
 }
@@ -30,14 +29,14 @@ interface ImportNotice {
 
 function getImportErrorMessage(error: unknown): string {
   if (error instanceof ImportFileTooLargeError) {
-    return 'Файл больше 10 МБ — импорт невозможен.';
+    return `Файл больше ${CHAT_IMPORT_MAX_MEGABYTES} МБ — импорт невозможен.`;
   }
   if (error instanceof ApiError) {
     if (error.code === 'invalid_chat_file') {
       return 'Файл не похож на экспорт чата: в нём не нашлось ни одного сообщения.';
     }
     if (error.code === 'chat_file_too_large') {
-      return 'Файл слишком большой: лимит импорта — 10 МБ.';
+      return `Файл слишком большой: лимит импорта — ${CHAT_IMPORT_MAX_MEGABYTES} МБ.`;
     }
   }
   return 'Не удалось импортировать чат. Проверьте файл и повторите попытку.';
@@ -70,9 +69,7 @@ export function ChatListScreen({ characterFilter }: ChatListScreenProps) {
   });
   const importMutation = useMutation({
     mutationFn: async (file: File) => {
-      // Проверка до кодирования: base64 большого файла зря нагружает вкладку,
-      // а сервер всё равно ответит 413.
-      if (file.size > MAX_IMPORT_FILE_BYTES) {
+      if (file.size > CHAT_IMPORT_MAX_BYTES) {
         throw new ImportFileTooLargeError();
       }
       const contentBase64 = await readFileAsBase64(file);

@@ -7,6 +7,7 @@ import {
   type UploadChatAttachmentResponse,
   UploadChatAttachmentResponseSchema,
 } from '@immersion/contracts/chats';
+import { IMAGE_UPLOAD_MAX_BYTES, IMAGE_UPLOAD_MAX_MEGABYTES } from '@immersion/contracts/common';
 
 import {
   deleteChatAttachmentFiles,
@@ -16,8 +17,6 @@ import {
 } from '../infrastructure/file-chat-repository.js';
 import { ChatNotFoundError } from './append-chat-messages.js';
 import type { ChatAttachmentMimeTypeRecord, ChatMessageAttachmentRecord } from './chat-records.js';
-
-export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 
 const EXTENSION_BY_MIME_TYPE: Record<ChatAttachmentMimeTypeRecord, string> = {
   'image/jpeg': '.jpg',
@@ -88,8 +87,8 @@ export async function uploadChatAttachment(chatId: string, input: unknown): Prom
     throw new InvalidChatAttachmentError('Файл изображения пуст.');
   }
 
-  if (bytes.length > MAX_ATTACHMENT_BYTES) {
-    throw new InvalidChatAttachmentError('Изображение больше 8 МБ.');
+  if (bytes.length > IMAGE_UPLOAD_MAX_BYTES) {
+    throw new InvalidChatAttachmentError(`Изображение больше ${IMAGE_UPLOAD_MAX_MEGABYTES} МБ.`);
   }
 
   const mimeType = detectImageMimeType(bytes);

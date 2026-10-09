@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
+import { base64LengthFor } from '../common/base64-length.js';
 import { createFileIdSchema } from '../common/file-id.js';
+import { CHAT_IMPORT_MAX_BYTES, IMAGE_UPLOAD_MAX_BYTES } from '../common/upload-limits.js';
 
 export const ChatIdSchema = z.string().regex(/^[A-Za-z0-9_-]+$/);
 export type ChatId = z.infer<typeof ChatIdSchema>;
@@ -48,7 +50,7 @@ export const ChatMessageDtoSchema = z.object({
 export type ChatMessageDto = z.infer<typeof ChatMessageDtoSchema>;
 
 export const UploadChatAttachmentCommandSchema = z.object({
-  contentBase64: z.string().min(1).max(11_500_000),
+  contentBase64: z.string().min(1).max(base64LengthFor(IMAGE_UPLOAD_MAX_BYTES)),
   mimeType: ChatAttachmentMimeTypeSchema,
 });
 export type UploadChatAttachmentCommand = z.infer<typeof UploadChatAttachmentCommandSchema>;
@@ -159,7 +161,7 @@ export const ChatMessageMutationResponseSchema = z.object({
 export type ChatMessageMutationResponse = z.infer<typeof ChatMessageMutationResponseSchema>;
 
 export const ImportChatCommandSchema = z.object({
-  contentBase64: z.string().min(1).max(15_000_000),
+  contentBase64: z.string().min(1).max(base64LengthFor(CHAT_IMPORT_MAX_BYTES)),
   title: z.string().trim().min(1).max(120).optional(),
 });
 export type ImportChatCommand = z.infer<typeof ImportChatCommandSchema>;
