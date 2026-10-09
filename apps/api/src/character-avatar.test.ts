@@ -180,7 +180,6 @@ describe('character avatar upload API', () => {
     });
     expect(response.statusCode).toBe(200);
 
-    // Картинка карточки была её аватаром — новая заменяет её, а не ложится рядом.
     const remaining = await fs.readdir(charactersDir);
     expect(remaining).toContain('card-hero.jpg');
     expect(remaining).not.toContain('card-hero.png');
@@ -226,11 +225,10 @@ describe('character avatar upload API', () => {
     });
     expect(firstUpload.statusCode).toBe(200);
 
-    // Push the stored avatar's mtime into the past so a same-millisecond rewrite cannot mask the bump.
     const baseName = path.basename(character.id, '.json');
     const avatarPath = path.join(temporaryDataRoot, 'characters', `${baseName}.png`);
-    const past = new Date(Date.now() - 60_000);
-    await fs.utimes(avatarPath, past, past);
+    const mtimeBeforeAnyRewrite = new Date('2000-01-01T00:00:00.000Z');
+    await fs.utimes(avatarPath, mtimeBeforeAnyRewrite, mtimeBeforeAnyRewrite);
 
     const staleDetail = await app.inject({ method: 'GET', url: `/api/characters/${encodeURIComponent(character.id)}` });
     const staleUrl = CharacterDetailResponseSchema.parse(staleDetail.json()).character.avatarUrl;
@@ -250,7 +248,7 @@ describe('character avatar upload API', () => {
     await app.close();
   });
 
-  it('treats an image next to a JSON card as that card avatar, card chunk or not', async () => {
+  it('treats an image next to a JSON card as its avatar even when the image carries a card of its own', async () => {
     const app = buildApiApp();
     const charactersDir = path.join(temporaryDataRoot, 'characters');
     await fs.mkdir(charactersDir, { recursive: true });
@@ -258,8 +256,6 @@ describe('character avatar upload API', () => {
     await fs.writeFile(path.join(charactersDir, 'X.json'), JSON.stringify({ name: 'Хозяйка' }), 'utf8');
     await fs.writeFile(path.join(charactersDir, 'X.png'), cardPng);
 
-    // Персонаж — только JSON; картинка рядом с ним всегда аватар, даже если внутри
-    // неё лежит своя карточка: одно имя файла — один персонаж.
     const listResponse = await app.inject({ method: 'GET', url: '/api/characters' });
     const items = CharacterListResponseSchema.parse(listResponse.json()).items;
     expect(items.map((item) => item.id)).toEqual(['X.json']);
@@ -281,6 +277,32 @@ describe('character avatar upload API', () => {
     const remaining = await fs.readdir(charactersDir);
     expect(remaining).not.toContain('X.json');
     expect(remaining).not.toContain('X.jpg');
+
+    await app.close();
+  });
+
+  it('serves a stored avatar with the content type sniffed from its bytes, never from its file extension', async () => {
+    const app = buildApiApp();
+    const character = await createJsonCharacter(app);
+    const baseName = path.basename(character.id, '.json');
+    await fs.writeFile(path.join(temporaryDataRoot, 'characters', `${baseName}.png`), JPEG_BYTES);
+
+    const avatarResponse = await app.inject({ method: 'GET', url: avatarUrlOf(character.id) });
+    expect(avatarResponse.statusCode).toBe(200);
+    expect(avatarResponse.headers['content-type']).toBe('image/jpeg');
+
+    await app.close();
+  });
+
+  it('gives a new character an id that does not adopt an orphan image with the same base name', async () => {
+    const app = buildApiApp();
+    const charactersDir = path.join(temporaryDataRoot, 'characters');
+    await fs.mkdir(charactersDir, { recursive: true });
+    await fs.writeFile(path.join(charactersDir, 'Орфей.webp'), WEBP_BYTES);
+
+    const character = await createJsonCharacter(app, 'Орфей');
+    expect(character.id).not.toBe('Орфей.json');
+    expect(character.avatarUrl).toBeNull();
 
     await app.close();
   });

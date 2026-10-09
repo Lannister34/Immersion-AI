@@ -5,13 +5,6 @@ import { ChatNotFoundError } from './append-chat-messages.js';
 import type { AppendContinuationToLastAssistantMessageInput } from './chat-repository.js';
 import { toChatSessionResponse } from './chat-session-response.js';
 
-/**
- * Appends generated continuation text to the last assistant message.
- *
- * The repository re-checks inside the chat write queue that the last message is
- * still the one the continuation was generated for (index + content prefix) and
- * throws ChatLastMessageChangedError otherwise.
- */
 export async function appendAssistantMessageContinuation(
   chatId: string,
   input: AppendContinuationToLastAssistantMessageInput,

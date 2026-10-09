@@ -8,10 +8,6 @@ export interface ListChatsInput {
   searchText?: string;
 }
 
-/**
- * Порт к модулю indexing: список чатов отвечает из перестраиваемой read-модели,
- * которая сама освежается по mtime/size канонических файлов перед каждым ответом.
- */
 export interface ChatListIndexPort {
   listChatSummaries(options: { searchText?: string }): Promise<ChatSummaryRecord[]>;
 }

@@ -57,19 +57,17 @@ function readTextChunks(buffer: Buffer): PngTextChunk[] {
         chunks.push({ keyword, text });
       }
     } else if (span.type === 'iTXt') {
-      // iTXt: keyword \0 compression_flag(1) compression_method(1) language_tag \0 translated_keyword \0 text
       const nullIndex = data.indexOf(0);
       if (nullIndex > 0) {
         const keyword = data.subarray(0, nullIndex).toString('latin1');
         const compressionFlag = data[nullIndex + 1] ?? 0;
         if (compressionFlag === 0) {
-          // Skip language tag and translated keyword
-          let cursor = nullIndex + 3;
-          const langEnd = data.indexOf(0, cursor);
-          if (langEnd >= 0) cursor = langEnd + 1;
-          const translatedEnd = data.indexOf(0, cursor);
-          if (translatedEnd >= 0) cursor = translatedEnd + 1;
-          const text = data.subarray(cursor).toString('utf8');
+          const languageTagStart = nullIndex + 3;
+          const languageTagEnd = data.indexOf(0, languageTagStart);
+          const translatedKeywordStart = languageTagEnd >= 0 ? languageTagEnd + 1 : languageTagStart;
+          const translatedKeywordEnd = data.indexOf(0, translatedKeywordStart);
+          const textStart = translatedKeywordEnd >= 0 ? translatedKeywordEnd + 1 : translatedKeywordStart;
+          const text = data.subarray(textStart).toString('utf8');
           chunks.push({ keyword, text });
         }
       }
@@ -170,7 +168,6 @@ function isCharacterCardKeyword(keyword: string | null): boolean {
   return keyword === 'chara' || keyword === 'ccv3';
 }
 
-/** True when the buffer is a PNG carrying a SillyTavern character card chunk (chara / ccv3). */
 export function pngContainsCharacterCard(pngBuffer: Buffer): boolean {
   let spans: PngChunkSpan[];
   try {
@@ -182,7 +179,6 @@ export function pngContainsCharacterCard(pngBuffer: Buffer): boolean {
   return spans.some((span) => isCharacterCardKeyword(textChunkKeywordOf(pngBuffer, span)));
 }
 
-/** Removes chara / ccv3 chunks so the PNG can be stored as a plain avatar image. */
 export function stripPngCharacterCardChunks(pngBuffer: Buffer): Buffer {
   const spans = readChunkSpans(pngBuffer);
   const dropped = spans.filter((span) => isCharacterCardKeyword(textChunkKeywordOf(pngBuffer, span)));

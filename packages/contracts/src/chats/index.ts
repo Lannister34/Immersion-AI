@@ -30,7 +30,6 @@ export type ChatAttachmentId = z.infer<typeof ChatAttachmentIdSchema>;
 export const ChatAttachmentMimeTypeSchema = z.enum(['image/png', 'image/jpeg', 'image/webp']);
 export type ChatAttachmentMimeType = z.infer<typeof ChatAttachmentMimeTypeSchema>;
 
-/** Картинка, приложенная к сообщению; файл лежит рядом с чатом. */
 export const ChatMessageAttachmentDtoSchema = z.object({
   id: ChatAttachmentIdSchema,
   mimeType: ChatAttachmentMimeTypeSchema,
@@ -48,7 +47,6 @@ export const ChatMessageDtoSchema = z.object({
 });
 export type ChatMessageDto = z.infer<typeof ChatMessageDtoSchema>;
 
-// 8 MiB decoded ≈ 11.2M base64 characters; точный размер проверяет use case.
 export const UploadChatAttachmentCommandSchema = z.object({
   contentBase64: z.string().min(1).max(11_500_000),
   mimeType: ChatAttachmentMimeTypeSchema,
@@ -78,11 +76,9 @@ export const ChatSamplingOverridesDtoSchema = z.object({
 export type ChatSamplingOverridesDto = z.infer<typeof ChatSamplingOverridesDtoSchema>;
 
 export const ChatGenerationSettingsDtoSchema = z.object({
-  /** Дописывается в конец собранного промпта; ручной промпт её вытесняет. */
   additionalInstructions: z.string().max(20_000).nullable(),
   samplerPresetId: z.string().min(1).nullable(),
   sampling: ChatSamplingOverridesDtoSchema,
-  /** Ручной системный промпт: заменяет всю сборку целиком. */
   systemPrompt: z.string().max(20_000).nullable(),
 });
 export type ChatGenerationSettingsDto = z.infer<typeof ChatGenerationSettingsDtoSchema>;
@@ -162,8 +158,6 @@ export const ChatMessageMutationResponseSchema = z.object({
 });
 export type ChatMessageMutationResponse = z.infer<typeof ChatMessageMutationResponseSchema>;
 
-// ~10 MB decoded payload => ~14M base64 characters; the exact decoded-size
-// limit is enforced by the import use case with a dedicated 413 problem code.
 export const ImportChatCommandSchema = z.object({
   contentBase64: z.string().min(1).max(15_000_000),
   title: z.string().trim().min(1).max(120).optional(),

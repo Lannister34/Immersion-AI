@@ -478,9 +478,6 @@ describe('chat routes', () => {
     await app.close();
   });
 
-  // Осознанная смена контракта: раньше битый файл ронял весь список (500),
-  // теперь список деградирует мягко и исключает только битый чат.
-  // Чтение одной сессии сохраняет прежнее поведение с ошибкой.
   it('excludes a malformed chat file from the list but keeps failing the single-chat read', async () => {
     await writeGenericChatFile('healthy-session', [
       JSON.stringify({
@@ -597,13 +594,12 @@ describe('chat routes', () => {
     const payload = CreateChatResponseSchema.parse(response.json());
 
     expect(response.statusCode).toBe(201);
-    // Приветствие карточки написано под её базовый сценарий — при другом сценарии не вставляется.
     expect(payload.chat.messageCount).toBe(0);
 
     await app.close();
   });
 
-  it('seeds the scenario greeting over the card greeting when the bound scenario has one', async () => {
+  it('seeds the scenario greeting over the card greeting with {{user}} and {{char}} already rendered', async () => {
     const charactersDir = path.join(temporaryDataRoot, 'characters');
     const scenariosDir = path.join(temporaryDataRoot, 'scenarios');
     await fs.mkdir(charactersDir, { recursive: true });
@@ -641,8 +637,6 @@ describe('chat routes', () => {
 
     const sessionResponse = await app.inject({ method: 'GET', url: `/api/chats/${payload.chat.id}` });
     const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
-    // Приветствие ложится в чат обычным сообщением, поэтому плейсхолдеры в нём
-    // раскрываются сразу — иначе {{user}} уехал бы и на экран, и в модель.
     expect(sessionPayload.messages).toHaveLength(1);
     expect(sessionPayload.messages[0]).toMatchObject({
       role: 'assistant',
@@ -899,7 +893,6 @@ describe('chat routes', () => {
     const readPayload = GetChatSessionResponseSchema.parse(readResponse.json());
     expect(readPayload.characterId).toBe('Boris.json');
 
-    // Clear the character by passing null.
     const clearResponse = await app.inject({
       method: 'PATCH',
       url: '/api/chats/bindings-route-chat/bindings',
@@ -1355,7 +1348,7 @@ describe('chat routes', () => {
     await app.close();
   });
 
-  it('round-trips a chat through export and import', async () => {
+  it('round-trips a chat through export and import, keeping settings and lorebooks but not the character binding', async () => {
     await writeGenericChatFile('roundtrip-chat', [
       JSON.stringify({
         chat_metadata: {
@@ -1431,7 +1424,6 @@ describe('chat routes', () => {
     expect(importPayload.chat.id).not.toBe('roundtrip-chat');
     expect(importPayload.chat.title).toBe('Экспорт туда и обратно');
     expect(importPayload.chat.characterName).toBe('Дракон');
-    // Идентификаторы не привязываются автоматически: имя остаётся только подписью.
     expect(importPayload.chat.characterId).toBeNull();
 
     const sourceSession = GetChatSessionResponseSchema.parse(
@@ -1445,7 +1437,6 @@ describe('chat routes', () => {
     expect(importedSession.messages.map(({ role, content, createdAt }) => ({ role, content, createdAt }))).toEqual(
       sourceSession.messages.map(({ role, content, createdAt }) => ({ role, content, createdAt })),
     );
-    // Настройки генерации и лорбуки чата переживают экспорт-импорт без потерь.
     expect(importedSession.generationSettings).toEqual(roundtripGenerationSettings);
     expect(importedSession.generationSettings).toEqual(sourceSession.generationSettings);
     expect(importedSession.lorebookIds).toEqual(roundtripLorebookIds);
@@ -1483,6 +1474,29 @@ describe('chat routes', () => {
     );
     expect(session.messages.map((message) => message.content)).toEqual(['Только сообщения', 'Без заголовка']);
     expect(session.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+
+    await app.close();
+  });
+
+  it('counts a malformed first line as skipped instead of rejecting the import', async () => {
+    const content = [
+      'это не заголовок',
+      JSON.stringify({ is_user: true, mes: 'Уцелевшее сообщение', send_date: '2026-02-01T00:00:00.000Z' }),
+    ].join('\n');
+
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/chats/import',
+      payload: {
+        contentBase64: Buffer.from(content, 'utf8').toString('base64'),
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    const payload = ImportChatResponseSchema.parse(response.json());
+    expect(payload.importedMessages).toBe(1);
+    expect(payload.skippedLines).toBe(1);
 
     await app.close();
   });

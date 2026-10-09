@@ -6,7 +6,6 @@ import type {
   ChatSummaryWithSearchText,
 } from '../../chats/index.js';
 
-/** Порт к владельцу канонических файлов чатов (модуль chats). */
 export interface ChatIndexSourcePort {
   listChatFileStats(): Promise<ChatFileStatRecord[]>;
   readChatSummaryWithSearchText(chatId: string): Promise<ChatSummaryWithSearchText | null>;
@@ -22,7 +21,6 @@ export interface CharacterChatStatsRecord {
 }
 
 interface ChatIndexSlot {
-  /** null — файл не распарсился; чат исключён из выдачи, пока файл не изменится. */
   data: { searchText: ChatSearchTextRecord; summary: ChatSummaryRecord } | null;
   fileMtimeMs: number;
   fileSize: number;
@@ -42,12 +40,6 @@ function matchesNeedle(searchText: ChatSearchTextRecord, needle: string): boolea
   return searchText.messageTextsLower.some((text) => text.includes(needle));
 }
 
-/**
- * Перестраиваемая in-memory read-модель списка чатов. Никогда не является
- * источником истины: перед каждым запросом сверяется с каноническими файлами
- * (readdir + stat) и перечитывает только те, у кого изменились mtime/size.
- * Ничего не пишет на диск; после рестарта процесса строится с нуля.
- */
 export class InMemoryChatIndex {
   private readonly slots = new Map<string, ChatIndexSlot>();
   private refreshQueue: Promise<void> = Promise.resolve();
@@ -90,7 +82,6 @@ export class InMemoryChatIndex {
     return stats;
   }
 
-  /** Обновления сериализуются: параллельные запросы не перечитывают один файл дважды. */
   private refresh(): Promise<void> {
     const run = this.refreshQueue.catch(() => undefined).then(() => this.refreshFromFiles());
     this.refreshQueue = run;
@@ -119,7 +110,6 @@ export class InMemoryChatIndex {
         try {
           const parsed = await this.source.readChatSummaryWithSearchText(stat.chatId);
           if (!parsed) {
-            // Файл удалили между stat и чтением.
             this.slots.delete(stat.chatId);
 
             return;
@@ -131,9 +121,6 @@ export class InMemoryChatIndex {
             fileSize: stat.fileSize,
           });
         } catch (error) {
-          // Битый файл не должен ронять весь список: чат исключается из read-модели
-          // (и не перечитывается до изменения файла), а канонический GET одной
-          // сессии сохраняет прежнее поведение с ошибкой.
           getSharedApiLogger().warn(
             { chatId: stat.chatId, err: error },
             'Chat index: failed to parse chat file; excluding it from the listing',

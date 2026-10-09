@@ -41,7 +41,6 @@ export const GenerationReadinessRuntimeSchema = z.object({
 });
 export type GenerationReadinessRuntime = z.infer<typeof GenerationReadinessRuntimeSchema>;
 
-/** Принимает ли активная модель изображения; unknown — сервер не сообщает. */
 export const VisionSupportSchema = z.enum(['supported', 'unknown', 'unsupported']);
 export type VisionSupport = z.infer<typeof VisionSupportSchema>;
 
@@ -59,7 +58,6 @@ export const ChatReplyGenerationModeSchema = z.enum(['reply', 'continue']);
 export type ChatReplyGenerationMode = z.infer<typeof ChatReplyGenerationModeSchema>;
 
 export const StartChatReplyCommandSchema = z.object({
-  /** Ранее загруженные вложения этого чата; модель получит их вместе с текстом. */
   attachmentIds: z.array(ChatAttachmentIdSchema).max(4).optional(),
   chatId: ChatIdSchema,
   message: z.string().trim().min(1).max(20_000),
@@ -73,7 +71,6 @@ export const ContinueChatReplyCommandSchema = z.object({
 });
 export type ContinueChatReplyCommand = z.infer<typeof ContinueChatReplyCommandSchema>;
 
-/** Ответ на уже существующее последнее сообщение пользователя: новое сообщение не добавляется. */
 export const AnswerChatReplyCommandSchema = z.object({
   chatId: ChatIdSchema,
   mode: z.literal('answer'),

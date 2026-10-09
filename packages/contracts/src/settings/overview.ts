@@ -3,7 +3,6 @@ import { z } from 'zod';
 export const ResponseLanguageSchema = z.enum(['ru', 'en', 'none']);
 export const ContextTrimStrategySchema = z.enum(['trim_middle', 'trim_start']);
 
-/** Оформление сообщений в чате: разметка в стиле ролевых чатов. */
 export const MessageFormattingSchema = z.object({
   actionsItalic: z.boolean(),
   quotesHighlighted: z.boolean(),
