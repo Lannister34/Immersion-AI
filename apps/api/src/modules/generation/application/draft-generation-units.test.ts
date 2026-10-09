@@ -3,15 +3,37 @@ import { describe, expect, it } from 'vitest';
 import { replaceNamesWithPlaceholders } from './draft-generation-support.js';
 import { extractJsonFromModelOutput } from './model-json-output.js';
 
+describe('extractJsonFromModelOutput', () => {
+  it('reads the outermost JSON object out of surrounding prose without a code fence', () => {
+    const raw = 'Конечно! Вот карточка: {"name": "Ария", "tags": ["скульптор"]} Надеюсь, подойдёт.';
+
+    expect(extractJsonFromModelOutput(raw)).toEqual({ name: 'Ария', tags: ['скульптор'] });
+  });
+});
+
 describe('extractJsonFromModelOutput repair path', () => {
+  it('escapes raw control characters inside string values', () => {
+    const raw = '{"firstMessage": "Строка один\nСтрока\tдва\r", "name": "Ария"}';
+
+    expect(extractJsonFromModelOutput(raw)).toEqual({
+      firstMessage: 'Строка один\nСтрока\tдва\r',
+      name: 'Ария',
+    });
+  });
+
   it('removes trailing commas without touching commas inside string values', () => {
-    // Невалидный escape \* заставляет пройти через ветку починки.
     const raw = '{"firstMessage": "смеётся, } \\* конец", "name": "Ария",}';
 
     expect(extractJsonFromModelOutput(raw)).toEqual({
       firstMessage: 'смеётся, } * конец',
       name: 'Ария',
     });
+  });
+
+  it('keeps a bare value that directly precedes a closing bracket while repairing', () => {
+    const raw = '{"note": "\\*", "counts": [1, 2], "done": true,}';
+
+    expect(extractJsonFromModelOutput(raw)).toEqual({ counts: [1, 2], done: true, note: '*' });
   });
 
   it('removes trailing commas before closing brackets in arrays', () => {

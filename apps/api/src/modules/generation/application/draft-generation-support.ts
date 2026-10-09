@@ -22,8 +22,6 @@ export interface DraftGenerationContext {
   userPersona: string;
 }
 
-// Драфт-генерация не привязана к чату, поэтому чатовых оверрайдов нет:
-// работает активный пресет либо привязка пресета к модели.
 const NO_CHAT_GENERATION_SETTINGS: ChatGenerationSettingsDto = {
   additionalInstructions: null,
   samplerPresetId: null,
@@ -81,7 +79,6 @@ export async function resolveDraftGenerationContext(): Promise<DraftGenerationCo
   };
 }
 
-/** Prompt line asking the model to infer {{user}}'s grammatical gender from the player name. */
 export function buildGenderHint(context: DraftGenerationContext): string {
   if (context.language === 'ru') {
     return context.userName.trim()
@@ -94,7 +91,6 @@ export function buildGenderHint(context: DraftGenerationContext): string {
     : 'Default to masculine grammatical gender for {{user}}. ';
 }
 
-/** Prompt block with player name/persona; the model must still write {{user}} in output. */
 export function buildPlayerContextBlock(context: DraftGenerationContext): string {
   if (!context.userName.trim() && !context.userPersona.trim()) {
     return '';
@@ -111,14 +107,6 @@ export function buildPlayerContextBlock(context: DraftGenerationContext): string
 - Name: ${context.userName.trim() || 'N/A'}${personaLine}`;
 }
 
-/**
- * Builds a regex that matches a name in any Russian case form.
- * Strategy: strip the last vowel-like ending to get a stem, then match
- * stem + a known declension ending. The ending set is deliberately closed:
- * matching arbitrary Cyrillic tails turned names like «Вера» into false
- * positives on «верно»/«верхом». Non-Cyrillic names fall back to exact
- * word-boundary match.
- */
 const RUSSIAN_DECLENSION_ENDINGS = '(?:ами|ями|ах|ях|ой|ей|ёй|ою|ею|ом|ем|ём|ью|ам|ям|[аяоеёиыуюй])?';
 
 function nameToRegex(name: string): RegExp {
@@ -140,7 +128,6 @@ function nameToRegex(name: string): RegExp {
   return new RegExp(`\\b${escaped}\\b`, 'giu');
 }
 
-/** Replaces real character/user names (including declined forms) with {{char}}/{{user}} placeholders. */
 export function replaceNamesWithPlaceholders(
   text: string,
   characterName: string | null,
@@ -159,7 +146,6 @@ export function replaceNamesWithPlaceholders(
   return result;
 }
 
-/** Coerces a model-provided value to trimmed text capped at the contract limit. */
 export function normalizeDraftText(value: unknown, maxLength: number): string {
   if (typeof value !== 'string') {
     return '';
@@ -171,7 +157,6 @@ export function normalizeDraftText(value: unknown, maxLength: number): string {
 const DRAFT_TAG_MAX_LENGTH = 60;
 const DRAFT_TAGS_MAX_COUNT = 50;
 
-/** Coerces a model-provided tags value to the contract tag shape. */
 export function normalizeDraftTags(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];

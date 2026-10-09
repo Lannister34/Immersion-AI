@@ -66,7 +66,6 @@ Each entry should cover a distinct aspect of the world. Cover: locations, factio
 }
 
 function normalizeEntryKeys(entry: Record<string, unknown>): string[] {
-  // Легаси-модели могут вернуть поле "key" (единственное число) или строку вместо массива.
   const rawKeys = entry.keys ?? entry.key;
   const keyValues = Array.isArray(rawKeys) ? rawKeys : [rawKeys];
   const keys: string[] = [];

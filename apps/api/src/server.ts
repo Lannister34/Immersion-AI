@@ -3,8 +3,6 @@ import { getLlmProcessManager, setupGracefulShutdown } from './modules/runtime/i
 
 const app = buildApiApp();
 setupGracefulShutdown();
-// Explicit startup step: re-attach to a llama-server left running by a previous
-// API process. This used to be a hidden import-time side effect.
 void getLlmProcessManager()
   .reconnectToDetachedRuntime()
   .catch((error: unknown) => {
@@ -14,8 +12,6 @@ void getLlmProcessManager()
 async function startServer() {
   try {
     await app.listen({
-      // Local-only by default: the API serves stored provider credentials and file
-      // mutations. Opt in to LAN exposure explicitly via IMMERSION_API_HOST.
       host: process.env.IMMERSION_API_HOST ?? '127.0.0.1',
       port: Number.parseInt(process.env.IMMERSION_API_PORT ?? '4787', 10),
     });

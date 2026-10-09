@@ -26,7 +26,6 @@ function getBoolean(value: unknown, fallback: boolean) {
   return typeof value === 'boolean' ? value : fallback;
 }
 
-// Курсив действий включён исторически, подсветка речи — опция по желанию.
 function getMessageFormatting(value: unknown) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 

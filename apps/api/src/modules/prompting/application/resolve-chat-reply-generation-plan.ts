@@ -41,14 +41,11 @@ export interface ResolveChatReplyGenerationPlanInput {
   character?: PromptCharacterSnapshot | null;
   characterScenarioContent?: string | null;
   lorebookSections?: string[];
-  /** Картинки сообщений (data-URL) по id сообщения. */
   messageImages?: ReadonlyMap<string, string[]>;
   providerModelName: string | null;
   session: ChatSessionDto;
   settings?: SettingsOverviewResponse;
-  /** Exact counter wired at composition; defaults to the chars/4 heuristic. */
   tokenCounter?: TokenCounter;
-  /** Trailing user instruction (continue/opening) budgeted with the prompt. */
   trailingUserInstruction?: string | null;
 }
 

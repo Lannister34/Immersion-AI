@@ -14,11 +14,8 @@ import { settingsRoutes } from './modules/settings/interface/http/routes.js';
 import { healthRoute } from './routes/health.js';
 import { rootRoute } from './routes/root.js';
 
-// Character card imports arrive as base64 JSON (up to ~10M characters), so the
-// default 1 MiB Fastify body limit is far too small.
 const API_BODY_LIMIT_BYTES = 16 * 1024 * 1024;
 
-// Dev web server (4788) and Playwright smoke preview (4173).
 const DEFAULT_WEB_ORIGINS = [
   'http://localhost:4788',
   'http://127.0.0.1:4788',

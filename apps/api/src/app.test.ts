@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from 'node:url';
 
 import { HealthResponseSchema } from '@immersion/contracts';
+import { ImportChatCommandSchema } from '@immersion/contracts/chats';
 import { ProvidersOverviewResponseSchema } from '@immersion/contracts/providers';
 import { RuntimeOverviewResponseSchema } from '@immersion/contracts/runtime';
 import { SettingsOverviewResponseSchema } from '@immersion/contracts/settings';
@@ -122,9 +123,8 @@ describe('buildApiApp', () => {
     await app.close();
   });
 
-  it('accepts multi-megabyte character card imports instead of rejecting with 413', async () => {
+  it('passes a character card import over the 1 MiB Fastify default body limit to the domain instead of rejecting it with 413', async () => {
     const app = buildApiApp();
-    // ~2 MiB of base64 payload: over Fastify's 1 MiB default body limit, under ours.
     const contentBase64 = 'QUFB'.repeat(700_000);
     const response = await app.inject({
       method: 'POST',
@@ -135,11 +135,26 @@ describe('buildApiApp', () => {
       },
     });
 
-    // Not a valid PNG card, so the domain rejects it — but the transport must not 413.
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({
       code: 'invalid_character_card',
     });
+
+    await app.close();
+  });
+
+  it('accepts a body as large as the largest contract payload, so an oversized chat import gets its own 413', async () => {
+    const app = buildApiApp();
+    const largestContentBase64 = 'A'.repeat(ImportChatCommandSchema.shape.contentBase64.maxLength ?? 0);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/chats/import',
+      payload: { contentBase64: largestContentBase64 },
+    });
+
+    expect(response.statusCode).toBe(413);
+    expect(response.json()).toMatchObject({ code: 'chat_file_too_large' });
 
     await app.close();
   });

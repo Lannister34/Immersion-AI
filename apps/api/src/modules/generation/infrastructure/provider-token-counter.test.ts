@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProviderTokenCounter } from './provider-token-counter.js';
 
 const BASE_URL = 'http://127.0.0.1:6021';
+const COUNT_CACHE_CAPACITY = 4096;
 
 interface RecordedTokenizeRequest {
   body: string;
@@ -40,13 +41,17 @@ describe('ProviderTokenCounter', () => {
     return requests;
   }
 
-  function mockKoboldTokenize() {
+  function mockKoboldTokenize(llamaProbe: 'missing' | 'refused' = 'missing') {
     const requests: RecordedTokenizeRequest[] = [];
 
     globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
       const url = input instanceof Request ? input.url : input.toString();
       const body = typeof init?.body === 'string' ? init.body : '';
       requests.push({ body, url });
+
+      if (url === `${BASE_URL}/tokenize` && llamaProbe === 'refused') {
+        throw new TypeError('fetch failed');
+      }
 
       if (url === `${BASE_URL}/api/extra/tokencount`) {
         const { prompt } = JSON.parse(body) as { prompt?: string };
@@ -70,20 +75,18 @@ describe('ProviderTokenCounter', () => {
     });
   }
 
-  it('counts exactly via the llama-server dialect and serves repeats from the cache', async () => {
+  it('counts exactly via the llama-server dialect after a single probe and serves repeats from the cache', async () => {
     const requests = mockLlamaTokenize();
     const counter = buildCounter();
 
     const first = await counter.countTokens(['abcd', 'ef']);
 
     expect(first).toEqual({ counts: [4, 2], method: 'exact' });
-    // One detection probe plus one request per text.
     expect(requests.filter((request) => request.url.endsWith('/tokenize'))).toHaveLength(3);
 
     const second = await counter.countTokens(['abcd', 'ghi']);
 
     expect(second).toEqual({ counts: [4, 3], method: 'exact' });
-    // 'abcd' is a cache hit: only 'ghi' triggers a new tokenize request.
     expect(requests.filter((request) => request.url.endsWith('/tokenize'))).toHaveLength(4);
     expect(requests.at(-1)?.body).toContain('ghi');
   });
@@ -95,12 +98,50 @@ describe('ProviderTokenCounter', () => {
     const result = await counter.countTokens(['abcde']);
 
     expect(result).toEqual({ counts: [5], method: 'exact' });
-    // Detection first tries llama (404), then kobold.
     expect(requests.some((request) => request.url.endsWith('/tokenize'))).toBe(true);
     expect(requests.some((request) => request.url.endsWith('/api/extra/tokencount'))).toBe(true);
   });
 
-  it('falls back to the heuristic and skips tokenize calls until the retry window passes', async () => {
+  it('falls through to the KoboldCpp dialect when the llama-server probe is refused', async () => {
+    mockKoboldTokenize('refused');
+    const counter = buildCounter();
+
+    const result = await counter.countTokens(['abcde']);
+
+    expect(result).toEqual({ counts: [5], method: 'exact' });
+  });
+
+  it('counts a text again once a different model serves the same base URL', async () => {
+    const requests = mockLlamaTokenize();
+    let model = 'first.gguf';
+    const counter = new ProviderTokenCounter({
+      resolveTokenizeTarget: () => Promise.resolve({ baseUrl: BASE_URL, model }),
+    });
+
+    await counter.countTokens(['abcd']);
+    const requestsWithFirstModel = requests.length;
+    model = 'second.gguf';
+    await counter.countTokens(['abcd']);
+
+    expect(requests).toHaveLength(requestsWithFirstModel + 1);
+  });
+
+  it('evicts the least recently counted text once the count cache is full', async () => {
+    const requests = mockLlamaTokenize();
+    const counter = buildCounter();
+
+    await counter.countTokens(Array.from({ length: COUNT_CACHE_CAPACITY }, (_, index) => `text ${index}`));
+    await counter.countTokens(['text 0']);
+    await counter.countTokens(['one text too many']);
+    const requestsBeforeRecount = requests.length;
+    await counter.countTokens(['text 0', 'text 1']);
+
+    expect(requests.slice(requestsBeforeRecount).map((request) => request.body)).toEqual([
+      JSON.stringify({ content: 'text 1' }),
+    ]);
+  });
+
+  it('falls back to the chars/4 heuristic and skips tokenize calls until the retry window passes', async () => {
     let currentTime = 1_000_000;
     const fetchMock = vi.fn(async () => {
       throw new Error('connection refused');
@@ -110,7 +151,6 @@ describe('ProviderTokenCounter', () => {
 
     const first = await counter.countTokens(['abcdefgh']);
 
-    // The exact formula of the historic heuristic: max(1, ceil(len / 4)).
     expect(first).toEqual({ counts: [2], method: 'approximate' });
     const callsAfterDetection = fetchMock.mock.calls.length;
     expect(callsAfterDetection).toBeGreaterThan(0);
@@ -118,7 +158,6 @@ describe('ProviderTokenCounter', () => {
     const second = await counter.countTokens(['abcdefgh']);
 
     expect(second.method).toBe('approximate');
-    // Capability 'absent' is remembered: no new tokenize traffic.
     expect(fetchMock.mock.calls.length).toBe(callsAfterDetection);
 
     currentTime += 61_000;
@@ -126,7 +165,6 @@ describe('ProviderTokenCounter', () => {
     const third = await counter.countTokens(['abcdefgh']);
 
     expect(third.method).toBe('approximate');
-    // The retry window passed, so detection probes the endpoint again.
     expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterDetection);
   });
 
