@@ -45,11 +45,6 @@ const OpenAiCompatibleChatCompletionResponseSchema = z.object({
     .min(1),
 });
 
-/**
- * OpenAI-совместимый формат картинок: вместо строки в content уходит массив
- * частей. Для текстовых сообщений оставляем строку — так же, как раньше, и
- * серверы без мультимодальности ничего нового не видят.
- */
 function buildMessagePayload(message: ChatCompletionRequest['messages'][number]) {
   if (!message.images || message.images.length === 0) {
     return { content: message.content, role: message.role };

@@ -97,10 +97,6 @@ interface RecordingTokenCounter extends TokenCounter {
   calls: string[][];
 }
 
-/**
- * Deterministic fake: the cost of a text is looked up by substring match,
- * with a fallback of 1 token. Counts every call for cache-path assertions.
- */
 function buildFakeTokenCounter(costsBySubstring: Record<string, number>): RecordingTokenCounter {
   const calls: string[][] = [];
 
@@ -126,7 +122,7 @@ function buildFakeTokenCounter(costsBySubstring: Record<string, number>): Record
 }
 
 describe('token-accurate context budgeting', () => {
-  it('trims the oldest messages by real token counts with trim_start and reserves reply tokens', async () => {
+  it('trims the oldest messages by real token counts with trim_start, counting the system prompt inside the budget left after the reply reservation', async () => {
     const tokenCounter = buildFakeTokenCounter({
       LATEST: 10,
       MIDDLE: 10,
@@ -150,7 +146,6 @@ describe('token-accurate context budgeting', () => {
       tokenCounter,
     );
 
-    // Reply reservation: 25 - 5 = 20 prompt tokens; system (5) counts inside it.
     expect(bundle.diagnostics.tokenEstimate).toMatchObject({
       finalTotal: 15,
       promptBudget: 20,
@@ -189,7 +184,7 @@ describe('token-accurate context budgeting', () => {
     expect(bundle.diagnostics.tokenEstimate.finalTotal).toBe(10);
   });
 
-  it('pins the continued message together with the trailing instruction even over budget', async () => {
+  it('pins the continued message together with the trailing instruction even over budget, trimming only older messages', async () => {
     const tokenCounter = buildFakeTokenCounter({
       CONTINUE: 8,
       LATEST: 5,
@@ -210,9 +205,6 @@ describe('token-accurate context budgeting', () => {
       tokenCounter,
     );
 
-    // Бюджет 10, а хвост LATEST(5) + инструкция(8) = 13: продолжаемое сообщение
-    // нельзя вытеснять — «продолжай» без самого текста порождает бессмыслицу.
-    // Старые сообщения (OLD) обрезаются, допустимое переполнение остаётся.
     expect(bundle.messages).toEqual([
       {
         role: 'user',

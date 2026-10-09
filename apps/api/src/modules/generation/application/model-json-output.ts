@@ -2,11 +2,6 @@ import { ProviderGenerationError } from './generation-errors.js';
 
 const VALID_JSON_ESCAPES = '"\\/bfnrtu';
 
-/**
- * Repairs common LLM JSON mistakes: unescaped control characters and invalid
- * escape sequences inside string values, plus trailing commas.
- * Ported from the legacy ai-generation route.
- */
 function repairModelJson(raw: string): string {
   let repaired = '';
   let inString = false;
@@ -19,7 +14,6 @@ function repairModelJson(raw: string): string {
       if (VALID_JSON_ESCAPES.includes(character)) {
         repaired += character;
       } else {
-        // Invalid escape like \* or \' — drop the backslash, keep the character.
         repaired = repaired.slice(0, -1) + character;
       }
 
@@ -46,10 +40,7 @@ function repairModelJson(raw: string): string {
       } else {
         repaired += character;
       }
-    } else if (character === ',' && isTrailingComma(raw, index)) {
-      // Висячая запятая перед } или ] — убираем только вне строк,
-      // чтобы не портить запятые внутри текстовых значений.
-    } else {
+    } else if (!isTrailingCommaAt(raw, index)) {
       repaired += character;
     }
   }
@@ -57,8 +48,12 @@ function repairModelJson(raw: string): string {
   return repaired;
 }
 
-function isTrailingComma(raw: string, commaIndex: number): boolean {
-  for (let index = commaIndex + 1; index < raw.length; index += 1) {
+function isTrailingCommaAt(raw: string, position: number): boolean {
+  if (raw.charAt(position) !== ',') {
+    return false;
+  }
+
+  for (let index = position + 1; index < raw.length; index += 1) {
     const character = raw.charAt(index);
 
     if (/\s/u.test(character)) {
@@ -71,11 +66,6 @@ function isTrailingComma(raw: string, commaIndex: number): boolean {
   return false;
 }
 
-/**
- * Extracts a JSON value from raw model output: strips markdown code fences,
- * slices to the outermost braces, and repairs common LLM JSON errors.
- * Throws ProviderGenerationError when no parseable JSON is present.
- */
 export function extractJsonFromModelOutput(text: string): unknown {
   const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/u);
   const source = codeBlockMatch?.[1] ?? text;
@@ -91,13 +81,11 @@ export function extractJsonFromModelOutput(text: string): unknown {
   try {
     return JSON.parse(raw);
   } catch {
-    // Fall through to the repaired variant.
-  }
-
-  try {
-    return JSON.parse(repairModelJson(raw));
-  } catch {
-    throw new ProviderGenerationError('Provider returned malformed JSON output. Try again.');
+    try {
+      return JSON.parse(repairModelJson(raw));
+    } catch {
+      throw new ProviderGenerationError('Provider returned malformed JSON output. Try again.');
+    }
   }
 }
 

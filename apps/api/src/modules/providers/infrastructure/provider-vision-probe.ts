@@ -5,7 +5,6 @@ import { normalizeGenerationProviderBaseUrl } from '../application/generation-pr
 
 const PROBE_TIMEOUT_MS = 1500;
 const KNOWN_TTL_MS = 60_000;
-/** Неизвестность перепроверяем чаще: сервер мог ещё догружать модель. */
 const UNKNOWN_TTL_MS = 30_000;
 
 export interface VisionProbeTarget {
@@ -43,16 +42,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-/** OpenAI-совместимый URL часто заканчивается на /v1, а служебные ручки живут в корне. */
 export function resolveProviderOrigin(baseUrl: string): string {
   return normalizeGenerationProviderBaseUrl(baseUrl).replace(/\/v1$/u, '');
 }
 
-/**
- * llama.cpp: GET /props отдаёт modalities.vision. Сборки без мультимодальности
- * поля не присылают — это «неизвестно», а не «не поддерживает»: сервер может
- * быть и не llama.cpp вовсе.
- */
 function readLlamaProps(payload: unknown): VisionSupport {
   const modalities = asRecord(asRecord(payload)?.modalities);
 
@@ -85,10 +78,6 @@ function matchesModel(entry: Record<string, unknown>, model: string | null): boo
   return [entry.key, entry.id].some((value) => typeof value === 'string' && value === model);
 }
 
-/**
- * LM Studio: GET /api/v1/models (и /api/v0/models в старых версиях) отдаёт
- * список моделей, у каждой — capabilities.vision, а раньше type: 'vlm'.
- */
 function readLmStudioModels(payload: unknown, model: string | null): VisionSupport {
   const models = asRecord(payload)?.models ?? asRecord(payload)?.data;
 
@@ -116,12 +105,6 @@ function readLmStudioModels(payload: unknown, model: string | null): VisionSuppo
   return 'unknown';
 }
 
-/**
- * Определяет, принимает ли активная модель изображения. Спрашиваем сам сервер:
- * сначала llama.cpp /props, затем каталог моделей LM Studio. Незнакомый
- * OpenAI-совместимый сервер остаётся «неизвестно» — блокировать по догадке
- * хуже, чем честно сказать, что мы не знаем.
- */
 export class ProviderVisionProbe {
   private readonly cache = new Map<string, CachedSupport>();
   private readonly fetchJson: (url: string) => Promise<unknown>;
@@ -171,14 +154,10 @@ export class ProviderVisionProbe {
     ];
 
     for (const probe of probes) {
-      try {
-        const support = await probe();
+      const support = await probe().catch((): VisionSupport => 'unknown');
 
-        if (support !== 'unknown') {
-          return support;
-        }
-      } catch {
-        // Ручки нет или сервер не ответил — пробуем следующий диалект.
+      if (support !== 'unknown') {
+        return support;
       }
     }
 

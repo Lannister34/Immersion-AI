@@ -63,7 +63,7 @@ describe('ProviderVisionProbe', () => {
     await expect(probe.getVisionSupport(TARGET)).resolves.toBe('supported');
   });
 
-  it('stays unknown for a server that answers nothing familiar', async () => {
+  it('stays unknown, not unsupported, for a server that answers nothing familiar, so images are not refused on a guess', async () => {
     const probe = buildProbe({});
 
     await expect(probe.getVisionSupport(TARGET)).resolves.toBe('unknown');
@@ -124,6 +124,34 @@ describe('ProviderVisionProbe', () => {
     await probe.getVisionSupport(TARGET);
 
     expect(calls).toEqual(['http://127.0.0.1:5001/props', 'http://127.0.0.1:5001/props']);
+  });
+
+  it('asks again once an unknown answer is half a minute old, since the server may still be loading the model', async () => {
+    const calls: string[] = [];
+    let nowMs = 0;
+    const probe = new ProviderVisionProbe({
+      fetchJson: async (url) => {
+        calls.push(url);
+
+        return {};
+      },
+      now: () => nowMs,
+    });
+    const oneRound = [
+      'http://127.0.0.1:5001/props',
+      'http://127.0.0.1:5001/api/v1/models',
+      'http://127.0.0.1:5001/api/v0/models',
+    ];
+
+    await probe.getVisionSupport(TARGET);
+    nowMs = 29_999;
+    await probe.getVisionSupport(TARGET);
+    const callsBeforeExpiry = [...calls];
+    nowMs = 30_000;
+    await expect(probe.getVisionSupport(TARGET)).resolves.toBe('unknown');
+
+    expect(callsBeforeExpiry).toEqual(oneRound);
+    expect(calls).toEqual([...oneRound, ...oneRound]);
   });
 
   it('probes again for another model on the same endpoint', async () => {

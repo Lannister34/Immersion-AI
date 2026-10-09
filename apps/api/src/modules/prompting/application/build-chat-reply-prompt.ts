@@ -11,7 +11,6 @@ export type ChatReplyPromptRole = 'assistant' | 'system' | 'user';
 
 export interface ChatReplyPromptMessage {
   content: string;
-  /** data-URL картинок сообщения; пусто — обычное текстовое сообщение. */
   images?: string[];
   role: ChatReplyPromptRole;
 }
@@ -45,16 +44,7 @@ export interface BuildChatReplyPromptInput {
   samplerPreset: ActiveSamplerPreset;
   session: ChatSessionDto;
   settings: SettingsOverviewResponse;
-  /**
-   * Картинки сообщений по их id. Байты живут в модуле chats, поэтому сюда
-   * приходят уже готовые data-URL — сборка промпта в чужое хранилище не ходит.
-   */
   messageImages?: ReadonlyMap<string, string[]>;
-  /**
-   * Extra user-role instruction appended after the transcript (continue mode,
-   * opening message). It is part of the prompt and is counted inside the
-   * context budget instead of being bolted on after trimming.
-   */
   trailingUserInstruction?: string | null;
 }
 
@@ -141,8 +131,6 @@ function trimFromStart(messages: CountedPromptMessage[], tokenBudget: number, pi
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const counted = messages[index]!;
 
-    // Хвост из pinnedTailCount сообщений не вытесняется даже сверх бюджета:
-    // в continue-режиме это продолжаемый ответ + инструкция «продолжай».
     if (keptMessages.length >= pinnedTailCount && counted.tokens > remainingTokens) {
       break;
     }
@@ -329,8 +317,6 @@ function buildUntrimmedChatReplyPrompt(input: BuildChatReplyPromptInput): Untrim
     .map((section) => section.trim())
     .filter((section) => section.length > 0)
     .join('\n\n');
-  // Ручной промпт чата — это весь системный блок целиком: он для того и нужен,
-  // чтобы автосборка (персонаж, лорбуки, язык, доп. инструкции) отключилась.
   const isManualSystemPrompt = basePrompt.source.kind === 'chat-override';
   const systemSections = (
     isManualSystemPrompt
@@ -355,8 +341,6 @@ function buildUntrimmedChatReplyPrompt(input: BuildChatReplyPromptInput): Untrim
   for (const message of input.session.messages) {
     const images = input.messageImages?.get(message.id) ?? [];
 
-    // Сообщение без текста, но с картинкой — нормальный случай: пропускаем
-    // только по-настоящему пустые реплики.
     if (message.content.trim().length === 0 && images.length === 0) {
       continue;
     }
@@ -391,8 +375,6 @@ function toBudgetedBundle(
     message,
     tokens: counts[index] ?? fallbackCounts[index] ?? 1,
   }));
-  // Continue/first-message добавляют хвостовую инструкцию: продолжаемое сообщение
-  // и инструкция пинуются вместе, иначе обрезка может выбросить сам объект продолжения.
   const pinnedTailCount = input.trailingUserInstruction?.trim() ? 2 : 1;
   const budgetedPrompt = trimTranscriptToContextBudget(countedMessages, input.samplerPreset, pinnedTailCount);
 

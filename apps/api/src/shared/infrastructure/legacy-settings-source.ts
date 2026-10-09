@@ -16,8 +16,6 @@ function readJsonObject(filePath: string) {
   try {
     parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as unknown;
   } catch (error) {
-    // A malformed settings file must degrade to defaults instead of failing every
-    // read path (settings/runtime overviews, generation readiness).
     getSharedApiLogger().warn({ err: error, filePath }, 'Malformed JSON in settings source; falling back to defaults');
 
     return {};
@@ -46,11 +44,6 @@ export type LegacyUserSettingsMutator = (
 
 let userSettingsWriteQueue: Promise<unknown> = Promise.resolve();
 
-/**
- * The single serialized read-modify-write path for user-settings.json. Every module
- * that persists into this file must go through this function so concurrent mutations
- * from different modules cannot drop each other's changes.
- */
 export async function updateLegacyUserSettingsSource(mutate: LegacyUserSettingsMutator) {
   const operation = async () => {
     const filePath = resolveLegacyUserSettingsPath();

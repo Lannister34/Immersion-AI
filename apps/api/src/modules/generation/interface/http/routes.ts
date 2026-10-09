@@ -476,8 +476,6 @@ export const generationRoutes: FastifyPluginAsync = async (app) => {
         unsubscribe = null;
       };
 
-      // Register the close handler before the first write so an immediately
-      // dropped connection still releases the subscription and heartbeat.
       request.raw.once('close', cleanup);
 
       reply.hijack();
@@ -525,8 +523,6 @@ export const generationRoutes: FastifyPluginAsync = async (app) => {
       request.log.error({ err: error }, 'Failed to open generation job event stream');
 
       if (hijacked) {
-        // After hijack the reply object no longer owns the response; the raw
-        // socket is all we can close.
         reply.raw.end();
         return;
       }

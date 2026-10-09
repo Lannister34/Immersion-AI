@@ -25,9 +25,6 @@ export interface GenerateScenarioDraftDependencies {
 
 const SCENARIO_DRAFT_MAX_TOKENS = 2048;
 
-// Легаси /scenario делал двухшаговую генерацию (buildSummaryPrompt поверх карточки
-// персонажа и лорбука). Драфт-команда принимает только концепцию, поэтому
-// суммаризация неприменима и остаётся один шаг генерации.
 const SCENARIO_DRAFT_SYSTEM_INSTRUCTION = {
   en: `You are a creative writing assistant specializing in roleplay scenarios.
 MANDATORY: In ALL output text, use the literal placeholders {{user}} and {{char}} to refer to the player and the character respectively. NEVER substitute real names — write exactly {{user}} and {{char}} as template variables.
@@ -117,7 +114,6 @@ export async function generateScenarioDraft(
     signal: dependencies.signal,
   });
   const record = asJsonRecord(extractJsonFromModelOutput(completion.content), 'a scenario draft');
-  // Пост-обработка как в легаси: возвращаем просочившееся имя игрока обратно в {{user}}.
   const content = replaceNamesWithPlaceholders(normalizeDraftText(record.content, 20_000), null, context.userName);
   const firstMessage = replaceNamesWithPlaceholders(
     normalizeDraftText(record.firstMessage ?? record.first_mes, 20_000),

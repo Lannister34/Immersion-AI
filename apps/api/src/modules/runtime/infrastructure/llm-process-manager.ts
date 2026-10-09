@@ -13,14 +13,12 @@ const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..', '..');
 const PID_FILE_NAME = '.llm-server.json';
 const LOG_FILE_NAME = 'llm-server.log';
-// Хвоста в пару сотен килобайт хватает на стартовый вывод llama-server.
 const LOG_TAIL_BYTES = 256 * 1024;
 
 function resolveLogFilePath() {
   return path.join(resolveDataRoot(), 'logs', LOG_FILE_NAME);
 }
 
-/** Последние строки файла логов: используется, когда процесс пережил рестарт API. */
 function readLogFileTail(): string[] {
   try {
     const logFilePath = resolveLogFilePath();
@@ -41,7 +39,6 @@ function readLogFileTail(): string[] {
       fs.closeSync(handle);
     }
   } catch {
-    // Файла ещё нет — модель не запускали из этой версии приложения.
     return [];
   }
 }
@@ -142,7 +139,21 @@ function removePidFile() {
       fs.unlinkSync(pidFilePath);
     }
   } catch {
-    // ignore cleanup failures
+    // TODO: log a PID file that cannot be removed instead of ignoring the error
+  }
+}
+
+async function isLlamaServerHealthy(port: number, timeoutMs: number): Promise<boolean> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!response.ok) {
+      return false;
+    }
+
+    const payload = (await response.json()) as Record<string, unknown>;
+    return payload.status === 'ok';
+  } catch {
+    return false;
   }
 }
 
@@ -182,12 +193,6 @@ async function killByPid(pid: number) {
 
 const MAX_LOG_LINES = 100;
 
-/**
- * Owns the detached llama-server child process: spawn, PID-file tracking,
- * health polling, log ring buffer, and stop semantics. Construction has no
- * side effects; reconnection to a detached process from a previous API run
- * is an explicit call from server startup.
- */
 export class LlmProcessManager {
   private childProcess: ChildProcess | null = null;
   private visionProjectorPath: string | null = null;
@@ -251,16 +256,10 @@ export class LlmProcessManager {
   }
 
   getLogs() {
-    // Буфер живёт в памяти API. Если процесс запускала предыдущая версия API
-    // (tsx watch перезапускается на каждой правке), читаем хвост файла — иначе
-    // логи работающей модели выглядели бы пустыми.
     return this.logBuffer.length > 0 ? [...this.logBuffer] : readLogFileTail();
   }
 
   async start(config: LlmStartConfig) {
-    // Consult the PID file as well: right after an API restart the in-memory state
-    // is still idle while a detached llama-server from the previous process is
-    // alive. Starting without stopping it first would orphan that process.
     if (
       this.state.status === 'running' ||
       this.state.status === 'starting' ||
@@ -384,11 +383,6 @@ export class LlmProcessManager {
     await this.killCurrentProcess();
   }
 
-  /**
-   * Re-attach to a detached llama-server left by a previous API process.
-   * Must be called explicitly from server startup; importing this module
-   * never triggers it.
-   */
   async reconnectToDetachedRuntime() {
     const pidFile = readPidFile();
 
@@ -410,23 +404,11 @@ export class LlmProcessManager {
       pid: pidFile.pid,
     });
 
-    try {
-      const response = await fetch(`http://127.0.0.1:${pidFile.port}/health`, {
-        signal: AbortSignal.timeout(3000),
+    if (await isLlamaServerHealthy(pidFile.port, 3000)) {
+      this.setStateStatus('running', {
+        error: null,
       });
-
-      if (response.ok) {
-        const payload = (await response.json()) as Record<string, unknown>;
-
-        if (payload.status === 'ok') {
-          this.setStateStatus('running', {
-            error: null,
-          });
-          return;
-        }
-      }
-    } catch {
-      // keep polling below
+      return;
     }
 
     this.startHealthPoll(pidFile.port);
@@ -489,25 +471,11 @@ export class LlmProcessManager {
     this.cleanupTimers();
 
     this.healthPollTimer = setInterval(async () => {
-      try {
-        const response = await fetch(`http://127.0.0.1:${port}/health`, {
-          signal: AbortSignal.timeout(2000),
+      if (await isLlamaServerHealthy(port, 2000)) {
+        this.setStateStatus('running', {
+          error: null,
         });
-
-        if (!response.ok) {
-          return;
-        }
-
-        const payload = (await response.json()) as Record<string, unknown>;
-
-        if (payload.status === 'ok') {
-          this.setStateStatus('running', {
-            error: null,
-          });
-          this.cleanupTimers();
-        }
-      } catch {
-        // keep polling until ready or timeout
+        this.cleanupTimers();
       }
     }, 500);
 
@@ -563,9 +531,6 @@ export class LlmProcessManager {
     } else if (activePid) {
       await killByPid(activePid);
     } else {
-      // After an API restart the in-memory state is empty, but a detached
-      // llama-server from the previous API process may still be tracked in the
-      // PID file. Stop must reach it too instead of silently no-oping.
       const pidFile = readPidFile();
 
       if (pidFile) {

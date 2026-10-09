@@ -14,28 +14,18 @@ const MAX_CACHED_COUNTS = 4096;
 
 type TokenizeEndpointKind = 'kobold' | 'llama';
 
-interface TokenizeCapability {
-  kind: TokenizeEndpointKind | 'absent';
-  /** For 'absent' — when a re-probe is allowed; irrelevant otherwise. */
-  retryAtMs: number;
-}
+type TokenizeCapability = { kind: TokenizeEndpointKind } | { kind: 'absent'; retryAtMs: number };
 
 export interface TokenizeTarget {
   baseUrl: string;
-  /** Идентичность модели входит в ключ кэша: смена модели на том же порту меняет токенизатор. */
   model: string | null;
 }
 
 export interface ProviderTokenCounterDependencies {
   now?: () => number;
-  /** Tokenize-capable local server target, or null to force the heuristic. */
   resolveTokenizeTarget?: () => Promise<TokenizeTarget | null>;
 }
 
-/**
- * Only the built-in local runtime is tokenized: external providers are
- * OpenAI-compatible black boxes, so they always use the heuristic.
- */
 async function resolveBuiltinRuntimeTarget(): Promise<TokenizeTarget | null> {
   try {
     const settings = await getProviderSettings();
@@ -105,13 +95,6 @@ async function requestTokenCount(baseUrl: string, kind: TokenizeEndpointKind, te
   return parseKoboldTokenCount(await postJson(`${baseUrl}/api/extra/tokencount`, { prompt: text }));
 }
 
-/**
- * Exact token counter backed by the running local LLM server. Detects the
- * tokenize dialect once per base URL (llama-server POST /tokenize vs
- * KoboldCpp POST /api/extra/tokencount), caches per-text counts in a bounded
- * LRU-ish map, and silently falls back to the chars/4 heuristic on any
- * failure so generation and preview never break.
- */
 export class ProviderTokenCounter implements TokenCounter {
   private readonly capabilities = new Map<string, TokenizeCapability>();
   private readonly countCache = new Map<string, number>();
@@ -172,19 +155,17 @@ export class ProviderTokenCounter implements TokenCounter {
       return null;
     }
 
-    this.capabilities.set(baseUrl, { kind: detected, retryAtMs: 0 });
+    this.capabilities.set(baseUrl, { kind: detected });
 
     return detected;
   }
 
   private async detectCapability(baseUrl: string): Promise<TokenizeEndpointKind | null> {
     for (const kind of ['llama', 'kobold'] as const) {
-      try {
-        if ((await requestTokenCount(baseUrl, kind, '')) !== null) {
-          return kind;
-        }
-      } catch {
-        // Endpoint refused or timed out — try the next dialect.
+      const probeCount = await requestTokenCount(baseUrl, kind, '').catch(() => null);
+
+      if (probeCount !== null) {
+        return kind;
       }
     }
 
@@ -201,7 +182,6 @@ export class ProviderTokenCounter implements TokenCounter {
     const cachedCount = this.countCache.get(cacheKey);
 
     if (cachedCount !== undefined) {
-      // LRU-ish refresh: re-insert so this key becomes the newest entry.
       this.countCache.delete(cacheKey);
       this.countCache.set(cacheKey, cachedCount);
 
