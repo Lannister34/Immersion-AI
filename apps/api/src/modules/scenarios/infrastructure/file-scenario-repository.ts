@@ -122,7 +122,6 @@ function detailFromStored(id: string, stored: StoredScenario, fallbackUpdatedAt:
     concept: asString(stored.concept) ?? '',
     content: asString(stored.content) ?? '',
     createdAt: asString(stored.createdAt),
-    // Легаси-файлы без поля читаются как пустое приветствие.
     firstMessage: asString(stored.firstMessage) ?? '',
     id,
     name: asString(stored.name) ?? path.basename(id, path.extname(id)),

@@ -50,7 +50,6 @@ export type ImportCharacterCardCommand = z.infer<typeof ImportCharacterCardComma
 export const CharacterAvatarMimeTypeSchema = z.enum(['image/png', 'image/jpeg', 'image/webp']);
 export type CharacterAvatarMimeType = z.infer<typeof CharacterAvatarMimeTypeSchema>;
 
-// 8 MiB decoded ≈ 11.2M base64 characters; the API re-checks the decoded size.
 export const UploadCharacterAvatarCommandSchema = z.object({
   contentBase64: z.string().min(1).max(11_200_000),
   mimeType: CharacterAvatarMimeTypeSchema,

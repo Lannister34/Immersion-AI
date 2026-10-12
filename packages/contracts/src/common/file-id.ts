@@ -2,10 +2,6 @@ import { z } from 'zod';
 
 const NULL_CHARACTER = String.fromCharCode(0);
 
-// File-backed resource ids double as file names inside a single storage directory.
-// Reject path separators, traversal sequences, null bytes, Windows drive colons,
-// and hidden-file prefixes while keeping existing human-readable names
-// (Unicode letters, spaces, single dots) valid.
 const FORBIDDEN_FILE_ID_SEQUENCES = ['\\', '/', ':', '..', NULL_CHARACTER] as const;
 
 export function createFileIdSchema(label: string) {

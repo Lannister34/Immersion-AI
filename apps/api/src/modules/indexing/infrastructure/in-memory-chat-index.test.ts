@@ -164,6 +164,55 @@ describe('InMemoryChatIndex', () => {
     expect((await index.listChatSummaries()).map((summary) => summary.id)).toEqual(['kept']);
   });
 
+  it('reads a chat again on the next query when its file was missing at read time, without waiting for a change', async () => {
+    await writeChatFile('flaky', {
+      createdAt: '2026-01-01T00:00:00.000Z',
+      messages: [{ content: 'Пропадал', isUser: true, sentAt: '2026-01-01T00:00:01.000Z' }],
+      title: 'Пропадавший',
+      updatedAt: '2026-01-01T00:00:01.000Z',
+    });
+    const missedOnce = new Set<string>();
+    const index = new InMemoryChatIndex({
+      listChatFileStats,
+      readChatSummaryWithSearchText: async (chatId) => {
+        if (!missedOnce.has(chatId)) {
+          missedOnce.add(chatId);
+          return null;
+        }
+        return readChatSummaryWithSearchText(chatId);
+      },
+    });
+
+    expect((await index.listChatSummaries()).map((summary) => summary.id)).toEqual([]);
+    expect((await index.listChatSummaries()).map((summary) => summary.id)).toEqual(['flaky']);
+  });
+
+  it('parses each changed file once when queries arrive concurrently', async () => {
+    await writeChatFile('alpha', {
+      createdAt: '2026-01-01T00:00:00.000Z',
+      messages: [{ content: 'Первое', isUser: true, sentAt: '2026-01-01T00:00:01.000Z' }],
+      title: 'Альфа',
+      updatedAt: '2026-01-01T00:00:01.000Z',
+    });
+    await writeChatFile('beta', {
+      createdAt: '2026-01-02T00:00:00.000Z',
+      messages: [{ content: 'Второе', isUser: true, sentAt: '2026-01-02T00:00:01.000Z' }],
+      title: 'Бета',
+      updatedAt: '2026-01-02T00:00:01.000Z',
+    });
+
+    const { parsedChatIds, source } = createCountingSource();
+    const index = new InMemoryChatIndex(source);
+
+    const listings = await Promise.all([index.listChatSummaries(), index.listChatSummaries()]);
+
+    expect(listings.map((listing) => listing.map((summary) => summary.id))).toEqual([
+      ['beta', 'alpha'],
+      ['beta', 'alpha'],
+    ]);
+    expect([...parsedChatIds].sort()).toEqual(['alpha', 'beta']);
+  });
+
   it('matches the search needle against title, character name, and message content', async () => {
     await writeChatFile('with-aria', {
       characterId: 'Aria.json',
@@ -250,7 +299,6 @@ describe('InMemoryChatIndex', () => {
     expect((await index.listChatSummaries()).map((summary) => summary.id)).toEqual(['healthy']);
     expect(parsedChatIds).toHaveLength(2);
 
-    // Неизменившийся битый файл не перечитывается на каждый запрос.
     expect((await index.listChatSummaries()).map((summary) => summary.id)).toEqual(['healthy']);
     expect(parsedChatIds).toHaveLength(2);
 
@@ -264,7 +312,7 @@ describe('InMemoryChatIndex', () => {
     expect((await index.listChatSummaries()).map((summary) => summary.id)).toEqual(['broken', 'healthy']);
   });
 
-  it('matches the canonical full-scan listing on a cold start', async () => {
+  it('matches the canonical full-scan listing on a cold start, headerless legacy files included', async () => {
     await writeChatFile('parity-aria', {
       characterId: 'Aria.json',
       characterName: 'Ария',
@@ -282,7 +330,6 @@ describe('InMemoryChatIndex', () => {
       title: 'Без персонажа',
       updatedAt: '2026-01-02T00:00:01.000Z',
     });
-    // Легаси-файл без заголовка: обе реализации должны прочитать его одинаково.
     await writeRawChatFile('parity-legacy', [
       JSON.stringify({ is_user: true, mes: 'Первая строка без заголовка', send_date: '2026-01-03T00:00:01.000Z' }),
       JSON.stringify({ is_user: false, mes: 'Ответ модели', send_date: '2026-01-03T00:00:02.000Z' }),

@@ -1,13 +1,6 @@
 const SENTENCE_END_PATTERN = /[.!?…:]["'»”’)\]]*$/u;
 const BLOCK_START_PATTERN = /^[—–«"*#>-]/u;
 
-/**
- * Joins a generated continuation onto existing message content.
- *
- * The separator is a single space by default (the reply was cut mid-sentence).
- * A newline is used only when the existing text already closes a sentence and
- * the continuation opens a new block (dialogue dash, quote, list marker).
- */
 export function joinContinuationContent(existingContent: string, continuation: string): string {
   const base = existingContent.replace(/\s+$/u, '');
   const addition = continuation.replace(/^\s+/u, '');

@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import { CharacterIdSchema } from '@immersion/contracts/characters';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildApiApp } from './app.js';
@@ -15,8 +16,6 @@ describe('resolveContainedFilePath', () => {
     expect(resolveContainedFilePath(directory, 'Анонимный чат.json')).toBe(path.join(directory, 'Анонимный чат.json'));
   });
 
-  // Набор одинаков на любой ОС: на Linux «\» и «C:» — легальные символы имени файла,
-  // и платформенная проверка пропускала бы то, что на Windows уже другой путь.
   it.each([
     '',
     '../user-settings.json',
@@ -30,7 +29,7 @@ describe('resolveContainedFilePath', () => {
     'C:evil.json',
     'C:\\Windows\\evil.json',
     '/etc/passwd',
-  ])('rejects traversal id %s', (fileId) => {
+  ])('rejects traversal id %s on every platform, including where it is a legal file name', (fileId) => {
     expect(() => resolveContainedFilePath(directory, fileId)).toThrow(UnsafeRepositoryFileIdError);
   });
 
@@ -38,6 +37,24 @@ describe('resolveContainedFilePath', () => {
     expect(() => resolveContainedFilePath(directory, path.join(os.tmpdir(), 'outside.json'))).toThrow(
       UnsafeRepositoryFileIdError,
     );
+  });
+});
+
+describe('file-backed resource id contract', () => {
+  it.each([
+    '../user-settings.json',
+    'nested/inner.json',
+    'nested\\inner.json',
+    'C:evil.json',
+    '.hidden.json',
+    '..',
+    `null${String.fromCharCode(0)}byte.json`,
+  ])('rejects %j, which would not stay a plain file name in its storage directory', (fileId) => {
+    expect(CharacterIdSchema.safeParse(fileId).success).toBe(false);
+  });
+
+  it.each(['Мария Чернова.json', 'v1.2 final.json'])('accepts the human-readable name %s', (fileId) => {
+    expect(CharacterIdSchema.safeParse(fileId).success).toBe(true);
   });
 });
 

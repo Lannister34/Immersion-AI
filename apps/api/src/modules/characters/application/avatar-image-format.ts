@@ -14,7 +14,6 @@ const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff]);
 const RIFF_SIGNATURE = Buffer.from('RIFF', 'ascii');
 const WEBP_TAG = Buffer.from('WEBP', 'ascii');
 
-/** Detects the real image format from magic bytes; returns null for anything unsupported. */
 export function detectAvatarImageFormat(bytes: Buffer): AvatarImageFormat | null {
   if (bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
     return PNG_FORMAT;
@@ -28,7 +27,6 @@ export function detectAvatarImageFormat(bytes: Buffer): AvatarImageFormat | null
   return null;
 }
 
-/** Content type for serving stored avatar bytes; sniffed, never trusted from the file name. */
 export function avatarContentTypeOf(bytes: Buffer): string {
   return detectAvatarImageFormat(bytes)?.mimeType ?? 'application/octet-stream';
 }

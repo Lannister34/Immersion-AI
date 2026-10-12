@@ -43,8 +43,6 @@ function baseNameOf(entry: string): string {
 }
 
 function characterAvatarUrlOf(id: string, mtimeMs: number): string {
-  // The mtime-derived version makes every avatar replacement produce a new URL,
-  // so clients never keep showing a stale cached image.
   return `/api/characters/${encodeURIComponent(id)}/avatar?v=${Math.trunc(mtimeMs)}`;
 }
 
@@ -111,12 +109,6 @@ function toStoredCharacter(input: SaveCharacterFileInput, createdAt: string, upd
   };
 }
 
-/**
- * Раньше PNG-карточка сама была персонажем, и в списке он назывался по имени
- * файла — а внутри карточки могло стоять совсем другое имя. Теперь персонаж
- * всегда JSON, а картинка рядом — его аватар. Одинокие карточки переводим при
- * первом же чтении списка; сам PNG не трогаем, он остаётся годным для экспорта.
- */
 async function migrateLegacyPngCharacterCards(directory: string, entries: string[]): Promise<string[]> {
   const jsonBaseNames = new Set(entries.filter(isJsonEntry).map(baseNameOf));
   const created: string[] = [];
@@ -146,8 +138,6 @@ async function migrateLegacyPngCharacterCards(directory: string, entries: string
       throw error;
     }
 
-    // Время правки берём у картинки: иначе после перехода все старые карточки
-    // всплыли бы наверх списка как «только что изменённые».
     const savedAt = stats.mtime.toISOString();
     const jsonEntry = `${base}${JSON_EXTENSION}`;
     await writeJsonFileAtomically(
@@ -206,7 +196,6 @@ export async function listCharacterFiles(): Promise<CharacterFileSummary[]> {
       avatarUrl: await characterAvatarUrlFor(entry),
       filePath,
       id: entry,
-      // Имя живёт в карточке; файл — только адрес, и переименование его не трогает.
       name: asString(stored?.name) ?? baseNameOf(entry),
       updatedAt: asString(stored?.updatedAt) ?? stats.mtime.toISOString(),
     });
@@ -221,7 +210,6 @@ export async function findCharacterFile(id: string): Promise<CharacterFileSummar
   if (direct) return direct;
   if (!isAvatarEntry(id)) return null;
 
-  // Чаты, привязанные до перехода на JSON, всё ещё ссылаются на файл картинки.
   const migratedId = `${baseNameOf(id)}${JSON_EXTENSION}`;
   return summaries.find((summary) => summary.id === migratedId) ?? null;
 }
@@ -247,8 +235,6 @@ async function fileExists(filePath: string): Promise<boolean> {
 }
 
 async function generateUniqueId(directory: string, base: string): Promise<string> {
-  // Sibling image files with the same base name are treated as the card's avatar,
-  // so a fresh JSON id must not collide with any of them either.
   const conflicts = await Promise.all(
     [JSON_EXTENSION, ...AVATAR_FILE_EXTENSIONS].map((extension) =>
       fileExists(path.join(directory, `${base}${extension}`)),
@@ -348,7 +334,6 @@ export async function deleteCharacterFile(id: string): Promise<boolean> {
     if (candidate.code === 'ENOENT') return false;
     throw error;
   }
-  // The card owns its sibling avatar image; do not leave orphans behind.
   await deleteCharacterAvatarFiles(id);
   return true;
 }
@@ -359,20 +344,16 @@ function avatarCandidatePathsOf(id: string): string[] {
   return AVATAR_FILE_EXTENSIONS.map((extension) => resolveContainedFilePath(directory, `${base}${extension}`));
 }
 
-/** Finds the sibling avatar image of a card, if any. */
 export async function findCharacterAvatarFilePath(id: string): Promise<string | null> {
   for (const candidate of avatarCandidatePathsOf(id)) {
     try {
       const stats = await fs.stat(candidate);
       if (stats.isFile()) return candidate;
-    } catch {
-      // Missing candidate — keep looking.
-    }
+    } catch {}
   }
   return null;
 }
 
-/** Versioned avatar URL of a card's sibling image, or null when it has none. */
 export async function characterAvatarUrlFor(id: string): Promise<string | null> {
   const avatarFilePath = await findCharacterAvatarFilePath(id);
   if (!avatarFilePath) return null;
@@ -385,7 +366,6 @@ export async function characterAvatarUrlFor(id: string): Promise<string | null> 
   return characterAvatarUrlOf(id, stats.mtimeMs);
 }
 
-/** Stores the avatar of a card as a sibling file, replacing any previous avatar. */
 export async function writeCharacterAvatarFile(id: string, bytes: Buffer, extension: string): Promise<void> {
   const directory = resolveCharactersDirectory();
   await fs.mkdir(directory, { recursive: true });
@@ -397,7 +377,6 @@ export async function writeCharacterAvatarFile(id: string, bytes: Buffer, extens
   await writeFileAtomically(targetPath, bytes);
 }
 
-/** Removes every sibling avatar image of a card. Returns false when none existed. */
 export async function deleteCharacterAvatarFiles(id: string): Promise<boolean> {
   let removed = false;
   for (const candidate of avatarCandidatePathsOf(id)) {

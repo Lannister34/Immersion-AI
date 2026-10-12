@@ -25,7 +25,6 @@ export async function createChat(command: CreateChatCommand): Promise<CreateChat
   const seedMessages: AppendChatMessageInput[] = [];
 
   if (command.scenarioId) {
-    // Throws ScenarioNotFoundError with the same route mapping as before.
     const scenario = await getScenario(command.scenarioId);
     scenarioId = scenario.id;
     scenarioName = scenario.name;
@@ -33,24 +32,18 @@ export async function createChat(command: CreateChatCommand): Promise<CreateChat
     if (!command.title?.trim()) {
       title = scenario.name;
     }
-    // Привязанный сценарий полностью заменяет базовый сценарий карточки,
-    // поэтому его приветствие имеет приоритет; подставляем его ниже, когда
-    // уже известен персонаж — из него берётся {{char}}.
     if (scenario.firstMessage.trim().length > 0) {
       scenarioGreeting = scenario.firstMessage;
     }
   }
 
   if (command.characterId) {
-    // Throws CharacterNotFoundError with the same route mapping as before.
     const character = await getCharacter(command.characterId);
     characterId = character.id;
     characterName = character.name;
     if (!command.title?.trim() && !command.scenarioId) {
       title = `Чат с ${character.name}`;
     }
-    // Первая фраза карточки принадлежит её базовому сценарию: если к чату
-    // привязан отдельный сценарий, приветствие не вставляем — сцена другая.
     const greeting = scenarioGreeting ?? (command.scenarioId ? null : character.firstMessage);
     if (greeting && greeting.trim().length > 0) {
       seedMessages.push({

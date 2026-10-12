@@ -9,11 +9,6 @@ import { toChatMessageAttachmentDto } from './chat-attachments.js';
 import type { ChatGenerationSettingsRecord, ChatSessionRecord, ChatSummaryRecord } from './chat-records.js';
 import { getDefaultUserName } from './default-user-name.js';
 
-/**
- * Ссылка на аватар персонажа, а не проверка его наличия: есть ли файл, знает
- * модуль characters, и отвечает на это сам эндпоинт. Клиент при 404 показывает
- * букву — так чатам не нужно ходить в чужое хранилище.
- */
 function buildCharacterAvatarUrl(characterId: string | null): string | null {
   if (!characterId) return null;
   return `/api/characters/${encodeURIComponent(characterId)}/avatar`;

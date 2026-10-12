@@ -58,7 +58,6 @@ export function toChatMessageAttachmentDto(chatId: string, attachment: ChatMessa
   } satisfies ChatMessageAttachmentDto;
 }
 
-/** Формат берём из содержимого файла: заявленный mime-type клиента ему верить нельзя. */
 function detectImageMimeType(bytes: Buffer): ChatAttachmentMimeTypeRecord | null {
   if (bytes.subarray(0, 8).toString('hex') === '89504e470d0a1a0a') {
     return 'image/png';
@@ -134,10 +133,6 @@ export async function getChatAttachment(chatId: string, attachmentId: string): P
   return { body: bytes, contentType };
 }
 
-/**
- * Вложения к отправляемому сообщению: проверяем, что файлы действительно
- * загружены в этот чат, — id приходит от клиента и мог устареть.
- */
 export async function resolveChatAttachments(
   chatId: string,
   attachmentIds: readonly string[],
@@ -158,7 +153,6 @@ export async function resolveChatAttachments(
   return attachments;
 }
 
-/** data-URL для отправки провайдеру: OpenAI-совместимый API принимает картинку так. */
 export async function readChatAttachmentDataUrl(chatId: string, attachmentId: string): Promise<string | null> {
   const bytes = await readChatAttachmentFile(chatId, attachmentId);
 

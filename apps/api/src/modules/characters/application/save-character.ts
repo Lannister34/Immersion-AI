@@ -23,7 +23,6 @@ export async function updateCharacter(id: string, input: SaveCharacterInput): Pr
   if (!existing) {
     throw new CharacterNotFoundError(id);
   }
-  // Пишем по разрешённому id: чат мог сослаться на карточку ещё по имени картинки.
   return writeCharacterFile(existing.id, input);
 }
 
