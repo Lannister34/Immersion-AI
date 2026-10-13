@@ -2,8 +2,10 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { getSharedApiLogger } from '../../../lib/logger.js';
+import { failFileStatOf } from '../../../test-support/failing-file-stat.js';
 import { FileChatRepository } from './file-chat-repository.js';
 
 describe('FileChatRepository', () => {
@@ -400,5 +402,46 @@ describe('FileChatRepository', () => {
 
     const directoryEntries = await fs.readdir(path.dirname(chatFilePath));
     expect(directoryEntries.filter((entry) => entry.endsWith('.tmp'))).toEqual([]);
+  });
+
+  describe('listChatFileStats', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    async function createChats(repository: FileChatRepository, chatIds: string[]) {
+      for (const chatId of chatIds) {
+        await repository.createGenericChat({
+          createdAt: '2026-01-01T00:00:00.000Z',
+          id: chatId,
+          title: chatId,
+          userName: 'Tester',
+        });
+      }
+    }
+
+    it('leaves out a chat file deleted after the directory listing without logging it', async () => {
+      const repository = new FileChatRepository();
+      await createChats(repository, ['kept', 'gone']);
+      failFileStatOf('gone.jsonl', 'ENOENT');
+      const warn = vi.spyOn(getSharedApiLogger(), 'warn').mockImplementation(() => undefined);
+
+      const stats = await repository.listChatFileStats();
+
+      expect(stats.map((stat) => stat.chatId)).toEqual(['kept']);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('leaves out a chat file whose metadata cannot be read and logs why instead of hiding the error', async () => {
+      const repository = new FileChatRepository();
+      await createChats(repository, ['kept', 'locked']);
+      failFileStatOf('locked.jsonl', 'EPERM');
+      const warn = vi.spyOn(getSharedApiLogger(), 'warn').mockImplementation(() => undefined);
+
+      const stats = await repository.listChatFileStats();
+
+      expect(stats.map((stat) => stat.chatId)).toEqual(['kept']);
+      expect(warn).toHaveBeenCalledWith(expect.objectContaining({ chatId: 'locked' }), expect.any(String));
+    });
   });
 });

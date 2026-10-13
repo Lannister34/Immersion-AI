@@ -7,6 +7,8 @@ import type { CharacterDetailDto } from '@immersion/contracts/characters';
 import { writeFileAtomically, writeJsonFileAtomically } from '../../../lib/atomic-file.js';
 import { resolveContainedFilePath } from '../../../lib/contained-path.js';
 import { resolveDataRoot } from '../../../lib/data-root.js';
+import { isErrnoCode } from '../../../lib/errno-code.js';
+import { getSharedApiLogger } from '../../../lib/logger.js';
 import {
   extractPngCharacterCard,
   InvalidCharacterCardError,
@@ -349,7 +351,14 @@ export async function findCharacterAvatarFilePath(id: string): Promise<string | 
     try {
       const stats = await fs.stat(candidate);
       if (stats.isFile()) return candidate;
-    } catch {}
+    } catch (error) {
+      if (!isErrnoCode(error, 'ENOENT')) {
+        getSharedApiLogger().warn(
+          { characterId: id, err: error, path: candidate },
+          'Character avatar: failed to read an avatar candidate; skipping it',
+        );
+      }
+    }
   }
   return null;
 }
