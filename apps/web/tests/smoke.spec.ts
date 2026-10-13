@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import { type ChatGenerationSettingsDto, ChatGenerationSettingsDtoSchema } from '@immersion/contracts/chats';
 import { expect, type Page, test } from '@playwright/test';
 
 const smokeDataRoot = process.env.IMMERSION_SMOKE_DATA_ROOT;
@@ -13,6 +14,18 @@ const smokeUserSettingsPath = path.join(smokeDataRoot, 'user-settings.json');
 const smokeChatsPath = path.join(smokeDataRoot, 'chats');
 
 let baselineUserSettings = '';
+
+async function generationSettingsSaved(page: Page, isTheSave: (body: ChatGenerationSettingsDto) => boolean) {
+  const response = await page.waitForResponse((candidate) => {
+    const request = candidate.request();
+    return (
+      candidate.url().includes('/generation-settings') &&
+      request.method() === 'PUT' &&
+      isTheSave(ChatGenerationSettingsDtoSchema.parse(request.postDataJSON()))
+    );
+  });
+  expect(response.ok()).toBe(true);
+}
 
 test.describe.configure({ mode: 'serial' });
 
@@ -189,33 +202,31 @@ test('overrides a model parameter and chat instructions from the settings panel'
   const resetButton = page.getByRole('button', { name: 'Сбросить изменения' });
   await expect(resetButton).toBeHidden();
 
-  const savedTemperature = page.waitForResponse(
-    (response) => response.url().includes('/generation-settings') && response.request().method() === 'PUT',
-  );
+  const savedTemperature = generationSettingsSaved(page, (body) => body.sampling.temperature === 1.25);
   await page.locator('#chat-sampling-temperature').fill('1.25');
   await savedTemperature;
   await expect(resetButton).toBeVisible();
 
+  const steppedTemperature = generationSettingsSaved(page, (body) => body.sampling.temperature === 1.3);
   await page.getByRole('button', { name: /Увеличить Temperature/ }).click();
   await expect(page.locator('#chat-sampling-temperature')).toHaveValue('1.3');
+  await steppedTemperature;
 
-  const clearedTemperature = page.waitForResponse(
-    (response) => response.url().includes('/generation-settings') && response.request().method() === 'PUT',
-  );
+  const clearedTemperature = generationSettingsSaved(page, (body) => body.sampling.temperature === null);
   await resetButton.click();
   await clearedTemperature;
   await expect(resetButton).toBeHidden();
 
   await page.getByRole('button', { name: 'Контекст', exact: true }).click();
-  const savedInstructions = page.waitForResponse(
-    (response) => response.url().includes('/generation-settings') && response.request().method() === 'PUT',
-  );
+  const savedInstructions = generationSettingsSaved(page, (body) => body.additionalInstructions === 'Отвечай коротко.');
   await page.locator('#chat-additional-instructions').fill('Отвечай коротко.');
   await savedInstructions;
 
   // После перезагрузки панель открывается на «Модели»: вкладка — состояние сеанса, а не URL.
   await page.reload();
-  await page.getByRole('button', { name: 'Контекст', exact: true }).click();
+  const contextTab = page.getByRole('button', { name: 'Контекст', exact: true });
+  await expect(contextTab).toBeVisible({ timeout: 10_000 });
+  await contextTab.click();
   await expect(page.locator('#chat-additional-instructions')).toHaveValue('Отвечай коротко.');
 });
 

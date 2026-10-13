@@ -50,3 +50,12 @@ jobs:
 
       - name: Verify
         run: npm run ci
+
+      - name: Keep smoke failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-results-${{ matrix.os }}
+          path: apps/web/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
