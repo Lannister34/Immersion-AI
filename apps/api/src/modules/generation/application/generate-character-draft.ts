@@ -112,7 +112,6 @@ function normalizeCharacterDraft(
     tags: normalizeDraftTags(record.tags),
   };
 
-  // Явно переданные значения формы выигрывают у сгенерированных.
   for (const [field, value] of Object.entries(fields ?? {})) {
     if (typeof value === 'string' && value.trim().length > 0) {
       draft[field as keyof CharacterDraftFields] = value;

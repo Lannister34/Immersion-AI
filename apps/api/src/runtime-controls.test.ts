@@ -25,8 +25,6 @@ describe('runtime control routes', () => {
     await fs.rm(dataRoot, { force: true, recursive: true });
   });
 
-  // Менеджер процесса — синглтон без публичного API для засева буфера логов,
-  // поэтому честно проверяем только пустой путь и форму контракта.
   it('returns empty runtime logs while no server output was captured', async () => {
     const app = buildApiApp();
     const response = await app.inject({
@@ -42,9 +40,7 @@ describe('runtime control routes', () => {
     await app.close();
   });
 
-  it('falls back to the log file when the in-memory buffer is empty', async () => {
-    // Модель могла быть запущена предыдущим процессом API — тогда живого stdout
-    // уже нет, и единственный источник вывода это файл.
+  it('falls back to the log file when the in-memory buffer is empty, as after an API restart that left the model running', async () => {
     await fs.mkdir(path.join(dataRoot, 'logs'), { recursive: true });
     await fs.writeFile(
       path.join(dataRoot, 'logs', 'llm-server.log'),
@@ -120,7 +116,7 @@ describe('runtime control routes', () => {
     await app.close();
   });
 
-  it('scans models from updated modelsDirs and marks missing directories without failing the overview', async () => {
+  it('dedupes updated modelsDirs, scans their models, and marks missing directories without failing the overview', async () => {
     const modelsDir = path.join(dataRoot, 'gguf-models');
     const missingDir = path.join(dataRoot, 'no-such-dir');
     await fs.mkdir(modelsDir, { recursive: true });
@@ -131,7 +127,6 @@ describe('runtime control routes', () => {
       method: 'PUT',
       url: '/api/runtime/config',
       payload: {
-        // Дубликат в команде проверяет серверную дедупликацию.
         modelsDirs: [modelsDir, missingDir, modelsDir],
         port: 5001,
         gpuLayers: 0,

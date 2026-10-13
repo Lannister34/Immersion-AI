@@ -210,7 +210,6 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
       this.subscribers.delete(jobId);
     }, this.finishedJobTtlMs);
 
-    // Do not keep the process alive just to evict finished jobs.
     timer.unref?.();
     this.evictionTimers.set(jobId, timer);
   }

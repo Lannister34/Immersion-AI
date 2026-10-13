@@ -113,8 +113,6 @@ export async function generateChatTitle(
     throw new ProviderGenerationError('Provider returned an unusable chat title.');
   }
 
-  // Прекондиция: если пользователь переименовал чат, пока провайдер отвечал,
-  // его вариант выигрывает, а генерация завершается конфликтом 409.
   const chat = await updateChatTitle({
     chatId: command.chatId,
     title,

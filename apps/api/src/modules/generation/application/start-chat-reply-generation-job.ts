@@ -35,7 +35,6 @@ function startContinueChatReplyJob(
   registry: GenerationJobRegistry,
   dependencies: ResolvedJobDependencies,
 ): StartChatReplyGenerationJobResponse {
-  // Валидация до создания job: нечего продолжать — job не нужен.
   getContinuableAssistantMessage(command.chatId, session);
 
   const job = registry.createChatReplyJob({
@@ -80,7 +79,6 @@ export async function startChatReplyGenerationJob(
   }
 
   if (command.mode === 'answer') {
-    // Отвечаем на уже сохранённое сообщение пользователя: транскрипт не меняем.
     getAnswerableUserMessage(command.chatId, session);
 
     const answerJob = dependencies.generationJobRegistry.createChatReplyJob({

@@ -40,7 +40,6 @@ export async function loadChatPromptContext(session: ChatSessionDto): Promise<Ch
     }
   }
 
-  // Linked scenario wins over the character's per-card scenario when present.
   if (session.scenarioId) {
     const scenario = await findScenario(session.scenarioId);
     if (scenario) {
@@ -49,8 +48,6 @@ export async function loadChatPromptContext(session: ChatSessionDto): Promise<Ch
         characterScenarioContent = scene;
       }
       if (!character) {
-        // Synthesise a minimal character so the contextual system template kicks in
-        // even when the chat is scenario-only.
         character = {
           description: scenario.concept.trim() || null,
           mesExample: null,

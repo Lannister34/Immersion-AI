@@ -250,6 +250,45 @@ describe('buildChatReplyPrompt', () => {
     expect(JSON.stringify(prompt)).not.toContain('Прикину тон ответа.');
   });
 
+  it('keeps a message that carries only an image and skips one with neither text nor images', () => {
+    const prompt = buildChatReplyPrompt({
+      messageImages: new Map([['m2', ['data:image/png;base64,AAAA']]]),
+      samplerPreset: defaultSamplerPreset,
+      session: buildSession([
+        {
+          attachments: [],
+          content: 'Смотри.',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          id: 'm1',
+          reasoning: null,
+          role: 'user',
+        },
+        {
+          attachments: [{ id: 'photo.png', mimeType: 'image/png', url: '/api/chats/chat-1/attachments/photo.png' }],
+          content: '',
+          createdAt: '2026-01-01T00:00:01.000Z',
+          id: 'm2',
+          reasoning: null,
+          role: 'user',
+        },
+        {
+          attachments: [],
+          content: '   ',
+          createdAt: '2026-01-01T00:00:02.000Z',
+          id: 'm3',
+          reasoning: null,
+          role: 'assistant',
+        },
+      ]),
+      settings,
+    });
+
+    expect(prompt).toEqual([
+      { content: 'Смотри.', role: 'user' },
+      { content: '', images: ['data:image/png;base64,AAAA'], role: 'user' },
+    ]);
+  });
+
   it('trims old transcript messages with trim_start when context budget is exceeded', () => {
     const prompt = buildChatReplyPrompt({
       samplerPreset: {
