@@ -80,7 +80,6 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const appliedInitialStateRef = useRef(initialState);
 
-  // Сбрасываем форму на серверное состояние только пока пользователь её не редактировал.
   useEffect(() => {
     const previousInitialState = appliedInitialStateRef.current;
     appliedInitialStateRef.current = initialState;
@@ -89,8 +88,6 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
 
   const isDirty = !formsEqual(form, initialState);
 
-  // Значение читаем из события синхронно: внутри отложенного апдейтера
-  // event.currentTarget уже null, и чтение .value роняет экран.
   const setField = <K extends keyof ScenarioFormState>(field: K, value: ScenarioFormState[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
@@ -140,8 +137,6 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
       return generateScenarioDraft({ concept, ...(name.length > 0 ? { name } : {}) });
     },
     onSuccess: (draft) => {
-      // Черновик заполняет форму; название не трогаем, если пользователь его уже ввёл.
-      // Пустую первую фразу от модели не применяем — не затираем написанное вручную.
       setForm((current) => ({
         ...current,
         content: draft.content,

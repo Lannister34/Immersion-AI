@@ -67,7 +67,6 @@ export function ScenariosScreen() {
     setImportError(null);
     importMutation.mutate(file, {
       onError: (error) => {
-        // ApiError наследует Error — сообщение берём из любого Error, включая ошибки парсинга файла.
         setImportError(error instanceof Error ? error.message : 'Не удалось импортировать сценарий.');
       },
     });
@@ -279,8 +278,6 @@ function ScenarioRow({ scenario }: ScenarioRowProps) {
     setConfirmDelete(false);
   };
 
-  // Ссылка — оверлей поверх строки, кнопки-действия подняты выше по z-index:
-  // <button> внутри <a> — невалидный HTML.
   return (
     <div
       className="card card-hover"

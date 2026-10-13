@@ -24,7 +24,6 @@ export function useUpdateSettingsProfile(options: UseUpdateSettingsProfileOption
       }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: settingsOverviewQueryKey }),
-        // Имя, persona и шаблон system prompt входят в prompt — превью нужно пересчитать.
         queryClient.invalidateQueries({ queryKey: chatReplyPromptPreviewQueryRootKey }),
       ]);
       await options.onSuccess?.(response);

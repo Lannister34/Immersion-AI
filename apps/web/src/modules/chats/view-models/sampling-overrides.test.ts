@@ -177,6 +177,18 @@ describe('parseSamplingDraft', () => {
 
     expect(result.overrides?.presencePenalty).toBe(-0.2);
   });
+
+  it('accepts a typed value above the practical ceiling of the step buttons', () => {
+    const result = parseSamplingDraft({ ...createEmptySamplingDraft(), maxContextLength: '65536' });
+
+    expect(result.overrides?.maxContextLength).toBe(65536);
+  });
+
+  it('reports a value only the contract rejects as invalid on its own field', () => {
+    const result = parseSamplingDraft({ ...createEmptySamplingDraft(), contextTrimStrategy: 'trim_end' });
+
+    expect(result).toEqual({ errors: { contextTrimStrategy: 'Недопустимое значение' }, overrides: null });
+  });
 });
 
 describe('samplingDraftsEqual', () => {

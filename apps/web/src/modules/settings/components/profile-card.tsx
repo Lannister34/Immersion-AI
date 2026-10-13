@@ -72,7 +72,6 @@ export function ProfileCard({ data }: ProfileCardProps) {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const appliedBaselineRef = useRef(baseline);
 
-  // Сбрасываем форму на серверное состояние только пока пользователь её не редактировал.
   useEffect(() => {
     const previousBaseline = appliedBaselineRef.current;
     appliedBaselineRef.current = baseline;
@@ -88,8 +87,6 @@ export function ProfileCard({ data }: ProfileCardProps) {
   const isDirty = !profileFormsEqual(form, baseline);
   const canSave = isDirty && form.userName.trim().length > 0 && !mutation.isPending;
 
-  // Значение читаем из события синхронно: внутри отложенного апдейтера
-  // event.currentTarget уже null, и чтение .value роняет экран.
   const setField = <K extends keyof ProfileFormState>(field: K, value: ProfileFormState[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
   };

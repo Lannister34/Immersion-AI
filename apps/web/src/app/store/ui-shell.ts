@@ -14,8 +14,6 @@ export function clampChatPanelWidth(width: number): number {
   return Math.round(Math.min(CHAT_PANEL_MAX_WIDTH, Math.max(CHAT_PANEL_MIN_WIDTH, width)));
 }
 
-// Ширина панели — вкус пользователя, а не состояние сервера: держим её в
-// localStorage, чтобы переживала перезагрузку и не ездила между вкладками.
 function readStoredPanelWidth(): number {
   const stored = window.localStorage.getItem(CHAT_PANEL_WIDTH_STORAGE_KEY);
   return stored === null ? CHAT_PANEL_DEFAULT_WIDTH : clampChatPanelWidth(Number(stored));

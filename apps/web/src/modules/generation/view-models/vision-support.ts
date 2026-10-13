@@ -1,7 +1,6 @@
 import type { VisionSupport } from '@immersion/contracts/generation';
 
 export interface VisionSupportViewModel {
-  /** Можно ли прикреплять картинки: при «не определено» решает пользователь. */
   allowsImages: boolean;
   hint: string;
   label: string;

@@ -81,8 +81,6 @@ export function ModelBindingsCard({ data }: ModelBindingsCardProps) {
                   onChange={(event) =>
                     upsertMutation.mutate({ modelName: binding.modelName, presetId: event.currentTarget.value })
                   }
-                  // .input тянется на 100%, поэтому в строке фиксируем ширину:
-                  // иначе select выдавливает имя модели из строки.
                   style={{ flex: '0 0 220px', width: 220 }}
                   value={binding.presetId}
                 >

@@ -4,18 +4,11 @@ import { createApiUrl } from '../api/client';
 import { avatarColor, avatarInitial } from '../lib/avatar';
 
 export interface AvatarProps {
-  /** Размер стороны в пикселях; вписывается в размерные классы .avatar--N. */
   size: number;
   name: string;
-  /** Путь к картинке на backend; null — аватара нет. */
   url: string | null;
 }
 
-/**
- * Аватар персонажа с запасным вариантом. Ссылку на картинку backend отдаёт, не
- * проверяя файл, поэтому «аватара нет» мы узнаём здесь — по ошибке загрузки, и
- * тогда показываем букву вместо пустого круга.
- */
 export function Avatar({ name, size, url }: AvatarProps) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const isBroken = url !== null && url === failedUrl;

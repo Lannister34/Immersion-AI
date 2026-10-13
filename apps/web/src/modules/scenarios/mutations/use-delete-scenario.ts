@@ -18,7 +18,6 @@ export function useDeleteScenario(scenarioId: string, options: UseDeleteScenario
       queryClient.removeQueries({ queryKey: scenarioDetailQueryKey(scenarioId) });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: scenarioListQueryKey }),
-        // Сводки чатов содержат имя сценария — иначе оно остаётся в списке после удаления.
         queryClient.invalidateQueries({ queryKey: chatListQueryKey }),
       ]);
       await options.onSuccess?.();

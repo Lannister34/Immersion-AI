@@ -38,7 +38,7 @@ function firstLine(text: string): string {
   return text.trim().split('\n')[0]?.trim() ?? '';
 }
 
-/** Привязки чата: пока только показываем — менять их по ходу переписки нельзя. */
+// TODO: let the user change the chat's character, scenario and lorebook bindings
 export function ChatBindings({
   characterAvatarUrl,
   characterId,

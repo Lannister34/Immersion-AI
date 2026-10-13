@@ -12,11 +12,6 @@ export interface TemplateTextareaProps {
   value: string;
 }
 
-/**
- * Textarea с подсветкой {{user}} и {{char}}: подложка повторяет текст теми же
- * метриками и рисует фон под плейсхолдерами, а сам ввод остаётся обычным
- * textarea — без contenteditable и без innerHTML.
- */
 export function TemplateTextarea({
   disabled = false,
   id,
@@ -39,7 +34,6 @@ export function TemplateTextarea({
     pendingCaretRef.current = null;
     const element = textareaRef.current;
     element?.focus();
-    // Позицию ограничиваем длиной значения: родитель мог обрезать текст по maxLength.
     const safeCaret = Math.min(caret, value.length);
     element?.setSelectionRange(safeCaret, safeCaret);
   }, [value]);
@@ -76,7 +70,6 @@ export function TemplateTextarea({
               <span key={`${index}-${segment.value}`}>{segment.value}</span>
             ),
           )}
-          {/* Хвостовой перенос сохраняет высоту последней пустой строки. */}
           {'\n'}
         </div>
         <textarea

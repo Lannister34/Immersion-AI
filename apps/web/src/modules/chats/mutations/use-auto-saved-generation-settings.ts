@@ -15,7 +15,6 @@ import { useUpdateChatGenerationSettings } from './use-update-chat-generation-se
 
 export const INHERIT_PRESET_VALUE = '';
 
-/** Дискретные действия сохраняем сразу, ввод и перетаскивание — после паузы. */
 const IMMEDIATE_DELAY_MS = 0;
 const TYPING_DELAY_MS = 500;
 const RETRY_WHILE_IN_FLIGHT_MS = 200;
@@ -24,12 +23,10 @@ export interface GenerationSettingsDraft {
   additionalInstructions: string;
   samplerPresetId: string;
   sampling: SamplingOverridesDraft;
-  /** Пустая строка — промпт собирается автоматически. */
   systemPrompt: string;
 }
 
 export interface AutoSavedGenerationSettings {
-  /** После сохранения значений в новый набор чат просто ссылается на него. */
   adoptSamplerPreset: (presetId: string) => void;
   draft: GenerationSettingsDraft;
   errors: SamplingOverrideErrors;
@@ -59,11 +56,6 @@ function draftsEqual(left: GenerationSettingsDraft, right: GenerationSettingsDra
   );
 }
 
-/**
- * Черновик настроек генерации чата с сохранением без кнопки: изменение уходит
- * на сервер само. Драфт один на всю панель — обе вкладки пишут в одну и ту же
- * настройку, и раздельные черновики затирали бы друг друга.
- */
 export function useAutoSavedGenerationSettings(
   chatId: string,
   generationSettings: ChatGenerationSettingsDto,
@@ -77,9 +69,9 @@ export function useAutoSavedGenerationSettings(
   const inFlightRef = useRef(false);
   const mutation = useUpdateChatGenerationSettings(chatId);
 
-  // Серверные значения принимаем только когда своих несохранённых правок нет,
-  // иначе фоновая ревалидация откатывала бы то, что пользователь только что ввёл.
-  if (!draftsEqual(syncedBaseline, baseline) && !pendingSave && !inFlightRef.current) {
+  const hasUnsavedEdits = pendingSave || inFlightRef.current;
+
+  if (!draftsEqual(syncedBaseline, baseline) && !hasUnsavedEdits) {
     setSyncedBaseline(baseline);
     setDraft(baseline);
     setErrors({});
@@ -95,8 +87,6 @@ export function useAutoSavedGenerationSettings(
   );
 
   const commit = (next: GenerationSettingsDraft) => {
-    // Пока предыдущее сохранение в полёте, ждём: иначе ответы могут разойтись
-    // по порядку и в кэш ляжет устаревший снимок.
     if (inFlightRef.current) {
       timerRef.current = setTimeout(() => {
         timerRef.current = null;
@@ -149,8 +139,6 @@ export function useAutoSavedGenerationSettings(
 
   return {
     adoptSamplerPreset: (presetId) => {
-      // Привязка и очистка полей уходят одним запросом: иначе между двумя
-      // сохранениями чат на мгновение остался бы со старыми переопределениями.
       schedule({ ...draft, samplerPresetId: presetId, sampling: createEmptySamplingDraft() }, IMMEDIATE_DELAY_MS);
     },
     draft,

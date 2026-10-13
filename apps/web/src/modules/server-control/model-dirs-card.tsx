@@ -27,7 +27,6 @@ export function ModelDirsCard({ dirsStatus, serverConfig }: ModelDirsCardProps) 
     mutationFn: saveRuntimeConfig,
     onSuccess: async (overview: RuntimeOverviewResponse) => {
       queryClient.setQueryData(runtimeOverviewQueryKey, overview);
-      // Инвалидация — чтобы таблица моделей перечитала свежий скан каталогов.
       await queryClient.invalidateQueries({ queryKey: runtimeOverviewQueryKey });
     },
   });
@@ -116,7 +115,6 @@ export function ModelDirsCard({ dirsStatus, serverConfig }: ModelDirsCardProps) 
             aria-label="Новый каталог моделей"
             className="input"
             onChange={(event) => {
-              // Значение читаем синхронно: в отложенном апдейтере event.currentTarget уже null.
               const { value } = event.currentTarget;
               setNewDir(value);
               setValidationError(null);

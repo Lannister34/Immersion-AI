@@ -24,7 +24,6 @@ export function useGenerateChatTitle(chatId: string) {
       ]);
     },
     onError: async (error) => {
-      // При конфликте показываем актуальное (ручное) название.
       if (error instanceof ApiError && error.code === 'chat_title_conflict') {
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: sessionKey }),

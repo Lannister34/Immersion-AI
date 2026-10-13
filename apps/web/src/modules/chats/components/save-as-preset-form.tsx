@@ -7,7 +7,6 @@ import type { AutoSavedGenerationSettings } from '../mutations/use-auto-saved-ge
 import { type InheritedSampling, parseSamplingDraft } from '../view-models/sampling-overrides';
 
 export interface SaveAsPresetFormProps {
-  /** Название набора, на котором сейчас основан чат: из него собираем имя по умолчанию. */
   baselinePresetName: string;
   effectiveSampling: InheritedSampling | undefined;
   form: AutoSavedGenerationSettings;
@@ -19,7 +18,6 @@ export function SaveAsPresetForm({ baselinePresetName, effectiveSampling, form }
   const [savedName, setSavedName] = useState<string | null>(null);
   const createPreset = useCreateSamplerPreset({
     onSuccess: (response) => {
-      // Значения теперь живут в наборе — чат снова просто ссылается на него.
       form.adoptSamplerPreset(response.preset.id);
       setSavedName(response.preset.name);
       setIsOpen(false);
@@ -40,8 +38,6 @@ export function SaveAsPresetForm({ baselinePresetName, effectiveSampling, form }
       return;
     }
 
-    // Черновик может быть ещё не сохранён, поэтому свои значения кладём поверх
-    // тех, что backend посчитал действующими.
     createPreset.mutate({
       contextTrimStrategy: parsed.overrides.contextTrimStrategy ?? effectiveSampling.contextTrimStrategy,
       maxContextLength: parsed.overrides.maxContextLength ?? effectiveSampling.maxContextLength,

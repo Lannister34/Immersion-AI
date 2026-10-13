@@ -18,10 +18,8 @@ import { SaveAsPresetForm } from './save-as-preset-form';
 import { SaveErrorLine } from './save-error-line';
 
 export interface ModelTabProps {
-  /** Значения, которые реально уходят в модель: запасной источник подсказок. */
   effectiveSampling: InheritedSampling | undefined;
   form: AutoSavedGenerationSettings;
-  /** Пресет, привязанный к загруженной модели; null — привязки нет. */
   modelBindingPresetId: string | null;
   settings: SettingsOverviewResponse | undefined;
 }
@@ -49,8 +47,6 @@ export function ModelTab({ effectiveSampling, form, modelBindingPresetId, settin
   const inheritedPresetId = modelBindingPresetId ?? settings?.sampler.activePresetId ?? null;
   const inheritedSuffix = modelBindingPresetId ? ' — от модели' : ' — из настроек';
   const pinnedPresetId = form.draft.samplerPresetId;
-  // Пустая привязка означает «тот набор, который сейчас даёт модель или настройки»,
-  // поэтому в списке он и стоит на месте своего пресета, а не отдельной строкой.
   const baselinePresetId = pinnedPresetId === INHERIT_PRESET_VALUE ? inheritedPresetId : pinnedPresetId;
   const baseline: InheritedSampling | undefined =
     presets.find((preset) => preset.id === baselinePresetId) ?? effectiveSampling;
@@ -134,8 +130,6 @@ export function ModelTab({ effectiveSampling, form, modelBindingPresetId, settin
                     form.setSampling(field.key, next);
                   }}
                   onKeyDown={(event) => {
-                    // Стрелки работают как у обычного числового поля: type="text"
-                    // выбран только ради того, чтобы убрать браузерный спиннер.
                     if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
                       event.preventDefault();
                       step(event.key === 'ArrowUp' ? 1 : -1);

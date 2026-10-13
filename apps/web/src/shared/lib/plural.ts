@@ -1,6 +1,5 @@
 export type RuPluralForms = readonly [one: string, few: string, many: string];
 
-// Русская плюрализация: «1 чат», «2 чата», «5 чатов», с исключением 11–14 («11 чатов», «111 чатов»).
 export function pluralRu(count: number, forms: RuPluralForms): string {
   const mod100 = Math.abs(count) % 100;
   const mod10 = mod100 % 10;

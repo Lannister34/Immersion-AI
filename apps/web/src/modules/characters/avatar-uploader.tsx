@@ -15,7 +15,6 @@ import { findFirstImageFile } from './view-models/clipboard-image';
 interface CharacterAvatarUploaderProps {
   characterId: string | null;
   detail: CharacterDetailDto | null;
-  /** Файл, выбранный до того, как карточка появилась на сервере. */
   pendingFile: File | null;
   onPendingFileChange: (file: File | null) => void;
 }
@@ -32,8 +31,6 @@ export function CharacterAvatarUploader({
   const [pickError, setPickError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  // Предпросмотр несохранённого файла живёт в blob-URL: его нужно отпустить,
-  // иначе выбранные подряд картинки останутся висеть в памяти вкладки.
   useEffect(() => {
     if (!pendingFile) {
       setPreviewUrl(null);
@@ -86,7 +83,6 @@ export function CharacterAvatarUploader({
       setPickError(`Файл больше ${IMAGE_UPLOAD_MAX_MEGABYTES} МБ.`);
       return;
     }
-    // Пока карточки нет, отправлять некуда: держим файл до сохранения.
     if (isUnsaved) {
       onPendingFileChange(file);
       return;
@@ -137,7 +133,6 @@ export function CharacterAvatarUploader({
     if (file) submitFile(file);
   };
 
-  // avatarUrl уже содержит серверную версию (?v=mtime), отдельный кэш-бастинг не нужен.
   const savedAvatarSrc = detail?.avatarUrl ? createApiUrl(detail.avatarUrl) : null;
   const avatarSrc = isUnsaved ? previewUrl : savedAvatarSrc;
 

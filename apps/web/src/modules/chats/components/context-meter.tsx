@@ -11,7 +11,6 @@ function formatNumber(value: number): string {
   return value.toLocaleString('ru-RU');
 }
 
-/** Счётчик контекста в шапке чата: сам бар — кнопка, подробности — во всплывашке. */
 export function ContextMeter({ stats }: ContextMeterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);

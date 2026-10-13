@@ -25,7 +25,6 @@ async function applySamplerUpdate(
   }
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: settingsOverviewQueryKey }),
-    // Preset влияет на эффективные настройки генерации — превью контекста нужно пересчитать.
     queryClient.invalidateQueries({ queryKey: chatReplyPromptPreviewQueryRootKey }),
   ]);
 }

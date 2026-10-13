@@ -111,7 +111,6 @@ export function ChatHeader({
                 <button
                   disabled={isGeneratingTitle}
                   onClick={() => {
-                    // Название придёт с сервера — свой черновик закрываем, чтобы он его не перекрыл.
                     setDraftTitle(null);
                     onGenerateTitle();
                   }}

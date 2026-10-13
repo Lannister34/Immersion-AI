@@ -107,7 +107,7 @@ export function BubbleMessage({
     try {
       await navigator.clipboard.writeText(text);
     } catch {
-      // ignore — clipboard restrictions
+      // TODO: tell the user when the browser refuses the clipboard write
     }
   };
 
@@ -174,8 +174,6 @@ export function BubbleMessage({
       ) : (
         <Avatar name={who} size={36} url={characterAvatarUrl} />
       )}
-      {/* В режиме правки блок фиксируем по ширине: иначе колонка сжимается
-          до собственной ширины textarea и бабл становится уже текста. */}
       <div
         style={{
           maxWidth: 'min(620px, 80%)',

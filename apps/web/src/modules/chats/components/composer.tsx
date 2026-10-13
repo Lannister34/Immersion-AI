@@ -15,7 +15,6 @@ import {
 
 export interface ComposerProps {
   attachments: ChatMessageAttachmentDto[];
-  /** Подсказка о поддержке картинок моделью; null — прикреплять нельзя. */
   attachmentsHint: string;
   attachmentsError: string | null;
   blockReason?: string | undefined;
@@ -70,9 +69,7 @@ export function Composer({
     }
   };
 
-  // Ctrl+V с картинкой в буфере — самый быстрый путь: скриншот попадает
-  // в сообщение без сохранения на диск.
-  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+  const attachPastedImages = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     if (!canAttachImages) {
       return;
     }
@@ -112,7 +109,7 @@ export function Composer({
         className="textarea"
         onChange={onChange}
         onKeyDown={onKeyDown}
-        onPaste={handlePaste}
+        onPaste={attachPastedImages}
         placeholder={blockReason ?? 'Напишите сообщение…'}
         style={{ minHeight: 48, border: 0, background: 'transparent', padding: 0, resize: 'none' }}
         value={value}
