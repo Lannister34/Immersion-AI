@@ -1,4 +1,5 @@
 import { CharacterAvatarMimeTypeSchema, type CharacterDetailDto } from '@immersion/contracts/characters';
+import { IMAGE_UPLOAD_MAX_BYTES, IMAGE_UPLOAD_MAX_MEGABYTES } from '@immersion/contracts/common';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type ChangeEvent, type DragEvent, useEffect, useRef, useState } from 'react';
 
@@ -10,8 +11,6 @@ import { deleteCharacterAvatar, uploadCharacterAvatar } from './api/character-av
 import { characterDetailQueryKey } from './queries/character-detail-query';
 import { characterListQueryKey } from './queries/character-list-query';
 import { findFirstImageFile } from './view-models/clipboard-image';
-
-const MAX_AVATAR_BYTES = 8 * 1024 * 1024;
 
 interface CharacterAvatarUploaderProps {
   characterId: string | null;
@@ -83,8 +82,8 @@ export function CharacterAvatarUploader({
       setPickError('Поддерживаются только PNG, JPEG и WebP.');
       return;
     }
-    if (file.size > MAX_AVATAR_BYTES) {
-      setPickError('Файл больше 8 МБ.');
+    if (file.size > IMAGE_UPLOAD_MAX_BYTES) {
+      setPickError(`Файл больше ${IMAGE_UPLOAD_MAX_MEGABYTES} МБ.`);
       return;
     }
     // Пока карточки нет, отправлять некуда: держим файл до сохранения.
@@ -171,7 +170,7 @@ export function CharacterAvatarUploader({
           border: isDragActive ? '1px dashed var(--accent)' : '1px solid var(--hairline)',
           cursor: busy ? 'progress' : 'pointer',
         }}
-        title="Нажмите или перетащите файл (PNG, JPEG или WebP, до 8 МБ)"
+        title={`Нажмите или перетащите файл (PNG, JPEG или WebP, до ${IMAGE_UPLOAD_MAX_MEGABYTES} МБ)`}
         type="button"
       >
         {uploadMutation.isPending ? <span className="muted">Загружаем…</span> : null}
@@ -187,7 +186,7 @@ export function CharacterAvatarUploader({
       <div className="muted" style={{ fontSize: 'var(--fz-2xs)', marginTop: 8 }}>
         {isUnsaved && pendingFile
           ? 'Аватар загрузится вместе с карточкой.'
-          : 'Нажмите на квадрат, перетащите файл или вставьте из буфера — PNG, JPEG или WebP до 8 МБ.'}
+          : `Нажмите на квадрат, перетащите файл или вставьте из буфера — PNG, JPEG или WebP до ${IMAGE_UPLOAD_MAX_MEGABYTES} МБ.`}
       </div>
       {isUnsaved && pendingFile ? (
         <button

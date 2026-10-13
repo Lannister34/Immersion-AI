@@ -1,4 +1,5 @@
 import type { CharacterDetailDto, UploadCharacterAvatarCommand } from '@immersion/contracts/characters';
+import { IMAGE_UPLOAD_MAX_BYTES, IMAGE_UPLOAD_MAX_MEGABYTES } from '@immersion/contracts/common';
 
 import {
   findCharacterFile,
@@ -7,8 +8,6 @@ import {
 } from '../infrastructure/file-character-repository.js';
 import { detectAvatarImageFormat } from './avatar-image-format.js';
 import { CharacterNotFoundError } from './get-character-avatar.js';
-
-export const MAX_AVATAR_BYTES = 8 * 1024 * 1024;
 
 export class InvalidAvatarImageError extends Error {
   constructor(message: string) {
@@ -30,8 +29,8 @@ export async function uploadCharacterAvatar(
   if (bytes.length === 0) {
     throw new InvalidAvatarImageError('Файл аватара пуст.');
   }
-  if (bytes.length > MAX_AVATAR_BYTES) {
-    throw new InvalidAvatarImageError('Файл аватара больше 8 МБ.');
+  if (bytes.length > IMAGE_UPLOAD_MAX_BYTES) {
+    throw new InvalidAvatarImageError(`Файл аватара больше ${IMAGE_UPLOAD_MAX_MEGABYTES} МБ.`);
   }
 
   const format = detectAvatarImageFormat(bytes);

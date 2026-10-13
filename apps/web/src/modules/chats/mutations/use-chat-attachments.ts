@@ -1,4 +1,5 @@
 import { ChatAttachmentMimeTypeSchema, type ChatMessageAttachmentDto } from '@immersion/contracts/chats';
+import { IMAGE_UPLOAD_MAX_BYTES, IMAGE_UPLOAD_MAX_MEGABYTES } from '@immersion/contracts/common';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -7,7 +8,6 @@ import { readFileAsBase64 } from '../../../shared/lib/read-file-as-base64';
 import { uploadChatAttachment } from '../api/upload-chat-attachment';
 
 export const MAX_ATTACHMENTS_PER_MESSAGE = 4;
-const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 
 export interface ChatAttachmentsDraft {
   attach: (files: readonly File[]) => void;
@@ -48,8 +48,8 @@ export function useChatAttachments(chatId: string): ChatAttachmentsDraft {
         return;
       }
 
-      if (file.size > MAX_ATTACHMENT_BYTES) {
-        setPickError('Изображение больше 8 МБ.');
+      if (file.size > IMAGE_UPLOAD_MAX_BYTES) {
+        setPickError(`Изображение больше ${IMAGE_UPLOAD_MAX_MEGABYTES} МБ.`);
         return;
       }
     }

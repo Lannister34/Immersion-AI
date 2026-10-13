@@ -8,6 +8,7 @@ import {
   GetChatSessionResponseSchema,
   UploadChatAttachmentResponseSchema,
 } from '@immersion/contracts/chats';
+import { IMAGE_UPLOAD_MAX_BYTES, IMAGE_UPLOAD_MAX_MEGABYTES } from '@immersion/contracts/common';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildApiApp } from './app.js';
@@ -103,6 +104,25 @@ describe('chat attachments', () => {
     const download = await app.inject({ method: 'GET', url: attachment.url });
     expect(download.statusCode).toBe(200);
     expect(download.headers['content-type']).toBe('image/png');
+
+    await app.close();
+  });
+
+  it('rejects an image one byte over the image upload limit with its size message', async () => {
+    const app = buildApiApp();
+    const chat = await createChat(app);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/chats/${chat.id}/attachments`,
+      payload: { contentBase64: Buffer.alloc(IMAGE_UPLOAD_MAX_BYTES + 1).toString('base64'), mimeType: 'image/png' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      code: 'invalid_chat_attachment',
+      message: `Изображение больше ${IMAGE_UPLOAD_MAX_MEGABYTES} МБ.`,
+    });
 
     await app.close();
   });
