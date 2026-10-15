@@ -12,7 +12,7 @@ import { IMAGE_UPLOAD_MAX_BYTES, IMAGE_UPLOAD_MAX_MEGABYTES } from '@immersion/c
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildApiApp } from './app.js';
-import { stubProviderFailure, stubProviderReply } from './test-support/recording-provider-stub.js';
+import { stubGlobalFetch } from './test-support/global-fetch-stub.js';
 
 const PROVIDER_URL = 'http://127.0.0.1:6006';
 
@@ -169,13 +169,22 @@ describe('chat attachments', () => {
   });
 
   it.each([
-    { provider: 'replies', replyStatus: 200, stubProvider: () => stubProviderReply('Чёрный пиксель.') },
-    { provider: 'fails with 500', replyStatus: 502, stubProvider: () => stubProviderFailure(500) },
+    {
+      provider: 'replies',
+      providerBody: { choices: [{ message: { content: 'Чёрный пиксель.' } }] },
+      providerStatus: 200,
+      replyStatus: 200,
+    },
+    { provider: 'fails with 500', providerBody: { error: 'provider failed' }, providerStatus: 500, replyStatus: 502 },
   ])('sends the image and keeps the attachment on the user message when the provider $provider', async ({
+    providerBody,
+    providerStatus,
     replyStatus,
-    stubProvider,
   }) => {
-    const providerRequests = stubProvider();
+    const http = stubGlobalFetch();
+    http.on('POST', `${PROVIDER_URL}/v1/chat/completions`, () =>
+      Response.json(providerBody, { status: providerStatus }),
+    );
     const app = buildApiApp();
     const chat = await createChat(app);
     const attachment = await uploadPng(app, chat.id);
@@ -187,8 +196,8 @@ describe('chat attachments', () => {
     });
 
     expect(generation.statusCode).toBe(replyStatus);
-    expect(providerRequests.map((request) => request.url)).toEqual([`${PROVIDER_URL}/v1/chat/completions`]);
-    expect(providerRequests[0]?.body).toMatchObject({
+    expect(http.requests.map((request) => request.url)).toEqual([`${PROVIDER_URL}/v1/chat/completions`]);
+    expect(JSON.parse(http.requests[0]?.bodyText ?? '')).toMatchObject({
       messages: expect.arrayContaining([
         {
           content: [
