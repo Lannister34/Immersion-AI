@@ -8,15 +8,20 @@ import { SettingsOverviewResponseSchema } from '@immersion/contracts/settings';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildApiApp } from './app.js';
+import { type ApiDependencyOverrides, createApiDependencies } from './composition/api-dependencies.js';
 import { parseApiConfig } from './config/api-config.js';
 import { findProjectRoot } from './config/find-project-root.js';
+import { createCapturingLogger } from './test-support/capturing-logger.js';
 
 const fixtureDataRoot = fileURLToPath(new URL('../testdata/smoke-data', import.meta.url));
 
-function buildConfiguredApp(environment: Record<string, string>) {
-  return buildApiApp(
-    parseApiConfig({ IMMERSION_DATA_ROOT: fixtureDataRoot, ...environment }, findProjectRoot(import.meta.dirname)),
+function buildConfiguredApp(environment: Record<string, string>, overrides: ApiDependencyOverrides = {}) {
+  const config = parseApiConfig(
+    { IMMERSION_DATA_ROOT: fixtureDataRoot, ...environment },
+    findProjectRoot(import.meta.dirname),
   );
+
+  return buildApiApp(createApiDependencies(config, overrides));
 }
 
 describe('buildApiApp', () => {
@@ -103,10 +108,32 @@ describe('buildApiApp', () => {
     await app.close();
   });
 
-  it('creates its logger at the configured level', async () => {
-    const app = buildConfiguredApp({ IMMERSION_LOG_LEVEL: 'silent' });
+  it('stamps /health with the injected clock', async () => {
+    const app = buildConfiguredApp({}, { clock: { now: () => new Date('2026-10-15T09:30:00.000Z') } });
+    const response = await app.inject({ method: 'GET', url: '/health' });
 
-    expect(app.log.level).toBe('silent');
+    expect(response.statusCode).toBe(200);
+    expect(HealthResponseSchema.parse(response.json()).timestamp).toBe('2026-10-15T09:30:00.000Z');
+
+    await app.close();
+  });
+
+  it('answers /health with and without a trailing slash, as before the system module', async () => {
+    const app = buildConfiguredApp({});
+    const responses = await Promise.all(['/health', '/health/'].map((url) => app.inject({ method: 'GET', url })));
+
+    expect(responses.map((response) => response.statusCode)).toEqual([200, 200]);
+
+    await app.close();
+  });
+
+  it('logs requests through the injected logger, so one logger serves the whole app', async () => {
+    const { logger, lines } = createCapturingLogger();
+    const app = buildConfiguredApp({ IMMERSION_LOG_LEVEL: 'silent' }, { logger });
+
+    await app.inject({ method: 'GET', url: '/health' });
+
+    expect(lines).toContainEqual(expect.objectContaining({ level: 'info', msg: 'request completed' }));
 
     await app.close();
   });

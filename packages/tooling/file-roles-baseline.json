@@ -12,7 +12,7 @@
   "apps/api/src/modules/providers/application/test-provider-connection.ts": "function:2 schema:1",
   "apps/api/src/modules/providers/domain/provider-settings.ts": "function:4 schema:1",
   "apps/api/src/modules/providers/infrastructure/provider-vision-probe.ts": "class:1 function:2",
-  "apps/api/src/modules/runtime/infrastructure/llm-process-manager.ts": "class:1 function:4",
+  "apps/api/src/modules/runtime/infrastructure/llm-process-manager.ts": "class:1 function:3",
   "apps/api/src/modules/scenarios/interface/http/routes.ts": "function:1 schema:1",
   "apps/api/src/modules/settings/application/sampler-preset-encoding.ts": "function:2 type:1",
   "apps/api/src/modules/settings/interface/http/routes.ts": "function:1 schema:1",

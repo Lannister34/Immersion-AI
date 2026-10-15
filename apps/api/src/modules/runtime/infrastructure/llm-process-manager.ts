@@ -557,13 +557,3 @@ export function getLlmProcessManager(): LlmProcessManager {
 
   return sharedManager;
 }
-
-export function setupGracefulShutdown() {
-  process.on('SIGTERM', () => {
-    process.exit(0);
-  });
-
-  process.on('SIGINT', () => {
-    process.exit(0);
-  });
-}
