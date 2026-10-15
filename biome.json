@@ -95,6 +95,8 @@
                       "**/shared/**",
                       "**/routes/**",
                       "**/test-support/**",
+                      "**/composition/**",
+                      "**/lifecycle/**",
                       "**/app.js",
                       "**/server.js",
                       "**/platform/**",
@@ -119,7 +121,15 @@
               "options": {
                 "patterns": [
                   {
-                    "group": ["**/modules/**", "**/shared/**", "**/routes/**", "**/app.js", "**/server.js"],
+                    "group": [
+                      "**/modules/**",
+                      "**/shared/**",
+                      "**/routes/**",
+                      "**/composition/**",
+                      "**/lifecycle/**",
+                      "**/app.js",
+                      "**/server.js"
+                    ],
                     "message": "A platform primitive knows no feature module: platform/ imports only config/, other platform/ files and test support (ADR-0004, decision 7)."
                   }
                 ]
