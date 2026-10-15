@@ -17,14 +17,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildApiApp } from './app.js';
 
-const testSettings = {
-  textgenerationwebui: {
-    server_urls: {
-      koboldcpp: 'http://127.0.0.1:5001',
-    },
-  },
-};
-
 const testUserSettings = {
   activePresetId: 'default',
   modelPresetMap: {
@@ -72,7 +64,6 @@ describe('chat routes', () => {
   beforeEach(async () => {
     previousDataRoot = process.env.IMMERSION_DATA_ROOT;
     temporaryDataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'immersion-api-chats-'));
-    await fs.writeFile(path.join(temporaryDataRoot, 'settings.json'), JSON.stringify(testSettings), 'utf8');
     await fs.writeFile(path.join(temporaryDataRoot, 'user-settings.json'), JSON.stringify(testUserSettings), 'utf8');
     process.env.IMMERSION_DATA_ROOT = temporaryDataRoot;
   });

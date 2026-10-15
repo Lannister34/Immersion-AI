@@ -56,7 +56,3 @@ export async function updateLegacyUserSettingsSource(mutate: LegacyUserSettingsM
     return next;
   });
 }
-
-export function readLegacyAppSettingsSource() {
-  return readJsonObject(path.join(readDataRoot(), 'settings.json'));
-}

@@ -1,65 +1,29 @@
 import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 
 import {
   ProviderConnectionResponseSchema,
   ProviderSettingsSnapshotSchema,
   type UpdateProviderSettingsCommand,
 } from '@immersion/contracts/providers';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { buildApiApp } from './app.js';
-
-interface ProviderConnectionRequestRecord {
-  authorization: string | null;
-  url: string;
-}
+import { useTestApi } from './test-support/use-test-api.js';
 
 describe('provider settings routes', () => {
-  let dataRoot = '';
-  const originalFetch = globalThis.fetch;
+  const api = useTestApi();
 
-  beforeEach(async () => {
-    dataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'immersion-api-'));
-    process.env.IMMERSION_DATA_ROOT = dataRoot;
-  });
+  function answerProviderModels(payload: unknown, status = 200) {
+    const { http } = api();
+    http.on('GET', /\/models$/u, () => Response.json(payload, { status }));
 
-  afterEach(async () => {
-    globalThis.fetch = originalFetch;
-    vi.restoreAllMocks();
-    delete process.env.IMMERSION_DATA_ROOT;
-    await fs.rm(dataRoot, { force: true, recursive: true });
-  });
-
-  async function writeUserSettings(settings: Record<string, unknown>) {
-    await fs.writeFile(path.join(dataRoot, 'user-settings.json'), JSON.stringify(settings, null, 2), 'utf8');
-  }
-
-  function mockProviderModelsResponse(payload: unknown, status = 200) {
-    const requests: ProviderConnectionRequestRecord[] = [];
-
-    globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-      const headers = new Headers(init?.headers);
-
-      requests.push({
-        authorization: headers.get('authorization'),
-        url: input instanceof Request ? input.url : input.toString(),
-      });
-
-      return new Response(JSON.stringify(payload), {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        status,
-      });
-    }) as typeof fetch;
-
-    return requests;
+    return {
+      requests: () =>
+        http.requests.map((request) => ({ authorization: request.headers.get('authorization'), url: request.url })),
+    };
   }
 
   it('reads provider settings from the canonical file-backed source', async () => {
-    await writeUserSettings({
+    await api().settings.write({
       backendMode: 'external',
       activeProvider: 'custom',
       providerConfigs: {
@@ -70,7 +34,7 @@ describe('provider settings routes', () => {
       },
     });
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'GET',
       url: '/api/providers/settings',
@@ -88,24 +52,16 @@ describe('provider settings routes', () => {
         },
       },
     });
-
-    await app.close();
   });
 
   it('tests the active external provider models endpoint without exposing secrets', async () => {
-    await writeUserSettings({
-      backendMode: 'external',
-      activeProvider: 'custom',
-      providerConfigs: {
-        custom: {
-          url: 'http://127.0.0.1:6001',
-          apiKey: 'secret',
-          model: 'existing-model',
-        },
-      },
+    await api().settings.useExternalProvider({
+      apiKey: 'secret',
+      model: 'existing-model',
+      url: 'http://127.0.0.1:6001',
     });
-    const before = await fs.readFile(path.join(dataRoot, 'user-settings.json'), 'utf8');
-    const requests = mockProviderModelsResponse({
+    const before = await fs.readFile(api().settings.path, 'utf8');
+    const provider = answerProviderModels({
       data: [
         {
           id: 'local-model-a',
@@ -116,13 +72,13 @@ describe('provider settings routes', () => {
       ],
     });
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'GET',
       url: '/api/providers/connection',
     });
     const payload = ProviderConnectionResponseSchema.parse(response.json());
-    const after = await fs.readFile(path.join(dataRoot, 'user-settings.json'), 'utf8');
+    const after = await fs.readFile(api().settings.path, 'utf8');
 
     expect(response.statusCode).toBe(200);
     expect(payload).toEqual({
@@ -141,28 +97,22 @@ describe('provider settings routes', () => {
       status: 'ok',
     });
     expect(JSON.stringify(payload)).not.toContain('secret');
-    expect(requests).toEqual([
+    expect(provider.requests()).toEqual([
       {
         authorization: 'Bearer secret',
         url: 'http://127.0.0.1:6001/v1/models',
       },
     ]);
     expect(after).toBe(before);
-
-    await app.close();
   });
 
   it('does not duplicate the v1 suffix when testing provider models', async () => {
-    await writeUserSettings({
+    await api().settings.write({
       backendMode: 'external',
       activeProvider: 'custom',
-      providerConfigs: {
-        custom: {
-          url: 'http://127.0.0.1:6001/v1',
-        },
-      },
+      providerConfigs: { custom: { url: 'http://127.0.0.1:6001/v1' } },
     });
-    const requests = mockProviderModelsResponse({
+    const provider = answerProviderModels({
       data: [
         {
           id: 'model-from-v1-base',
@@ -170,7 +120,7 @@ describe('provider settings routes', () => {
       ],
     });
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'GET',
       url: '/api/providers/connection',
@@ -184,26 +134,20 @@ describe('provider settings routes', () => {
         id: 'model-from-v1-base',
       },
     ]);
-    expect(requests.map((request) => request.url)).toEqual(['http://127.0.0.1:6001/v1/models']);
-
-    await app.close();
+    expect(provider.requests().map((request) => request.url)).toEqual(['http://127.0.0.1:6001/v1/models']);
   });
 
   it('returns a typed provider connection issue when the external URL is missing', async () => {
-    await writeUserSettings({
+    await api().settings.write({
       backendMode: 'external',
       activeProvider: 'custom',
-      providerConfigs: {
-        custom: {
-          url: '   ',
-        },
-      },
+      providerConfigs: { custom: { url: '   ' } },
     });
-    const requests = mockProviderModelsResponse({
+    const provider = answerProviderModels({
       data: [],
     });
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'GET',
       url: '/api/providers/connection',
@@ -218,26 +162,20 @@ describe('provider settings routes', () => {
       },
       status: 'error',
     });
-    expect(requests).toHaveLength(0);
-
-    await app.close();
+    expect(provider.requests()).toHaveLength(0);
   });
 
   it('returns a typed provider connection issue when the external URL is invalid', async () => {
-    await writeUserSettings({
+    await api().settings.write({
       backendMode: 'external',
       activeProvider: 'custom',
-      providerConfigs: {
-        custom: {
-          url: 'not-a-url',
-        },
-      },
+      providerConfigs: { custom: { url: 'not-a-url' } },
     });
-    const requests = mockProviderModelsResponse({
+    const provider = answerProviderModels({
       data: [],
     });
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'GET',
       url: '/api/providers/connection',
@@ -252,24 +190,18 @@ describe('provider settings routes', () => {
       },
       status: 'error',
     });
-    expect(requests).toHaveLength(0);
-
-    await app.close();
+    expect(provider.requests()).toHaveLength(0);
   });
 
   it('returns a typed provider connection issue when the provider responds with HTTP failure', async () => {
-    await writeUserSettings({
+    await api().settings.write({
       backendMode: 'external',
       activeProvider: 'custom',
-      providerConfigs: {
-        custom: {
-          url: 'http://127.0.0.1:6001',
-        },
-      },
+      providerConfigs: { custom: { url: 'http://127.0.0.1:6001' } },
     });
-    const requests = mockProviderModelsResponse({ error: 'failed' }, 500);
+    const provider = answerProviderModels({ error: 'failed' }, 500);
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'GET',
       url: '/api/providers/connection',
@@ -285,26 +217,20 @@ describe('provider settings routes', () => {
       models: [],
       status: 'error',
     });
-    expect(requests).toHaveLength(1);
-
-    await app.close();
+    expect(provider.requests()).toHaveLength(1);
   });
 
   it('returns a typed provider connection issue when the models payload is invalid', async () => {
-    await writeUserSettings({
+    await api().settings.write({
       backendMode: 'external',
       activeProvider: 'custom',
-      providerConfigs: {
-        custom: {
-          url: 'http://127.0.0.1:6001',
-        },
-      },
+      providerConfigs: { custom: { url: 'http://127.0.0.1:6001' } },
     });
-    const requests = mockProviderModelsResponse({
+    const provider = answerProviderModels({
       unexpected: [],
     });
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'GET',
       url: '/api/providers/connection',
@@ -319,13 +245,11 @@ describe('provider settings routes', () => {
       models: [],
       status: 'error',
     });
-    expect(requests).toHaveLength(1);
-
-    await app.close();
+    expect(provider.requests()).toHaveLength(1);
   });
 
   it('returns a typed provider connection issue when builtin runtime is not running', async () => {
-    await writeUserSettings({
+    await api().settings.write({
       backendMode: 'builtin',
       activeProvider: 'custom',
       providerConfigs: {
@@ -334,7 +258,7 @@ describe('provider settings routes', () => {
         },
       },
     });
-    const requests = mockProviderModelsResponse({
+    const provider = answerProviderModels({
       data: [
         {
           id: 'should-not-fetch',
@@ -342,7 +266,7 @@ describe('provider settings routes', () => {
       ],
     });
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'GET',
       url: '/api/providers/connection',
@@ -359,13 +283,11 @@ describe('provider settings routes', () => {
       models: [],
       status: 'error',
     });
-    expect(requests).toHaveLength(0);
-
-    await app.close();
+    expect(provider.requests()).toHaveLength(0);
   });
 
   it('updates provider settings without overwriting unrelated user settings', async () => {
-    await writeUserSettings({
+    await api().settings.write({
       userName: 'Misha',
       backendMode: 'external',
       activeProvider: 'custom',
@@ -387,7 +309,7 @@ describe('provider settings routes', () => {
       },
     };
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'PUT',
       url: '/api/providers/settings',
@@ -406,10 +328,7 @@ describe('provider settings routes', () => {
       },
     });
 
-    const stored = JSON.parse(await fs.readFile(path.join(dataRoot, 'user-settings.json'), 'utf8')) as Record<
-      string,
-      unknown
-    >;
+    const stored = await api().settings.read();
 
     expect(stored.userName).toBe('Misha');
     expect(stored.backendMode).toBe('builtin');
@@ -420,12 +339,10 @@ describe('provider settings routes', () => {
         model: 'settings-model',
       },
     });
-
-    await app.close();
   });
 
   it('patches a single provider field without touching the rest', async () => {
-    await writeUserSettings({
+    await api().settings.write({
       userName: 'Misha',
       backendMode: 'external',
       activeProvider: 'custom',
@@ -435,7 +352,7 @@ describe('provider settings routes', () => {
       },
     });
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'PATCH',
       url: '/api/providers/settings',
@@ -452,42 +369,38 @@ describe('provider settings routes', () => {
     expect(snapshot.mode).toBe('external');
     expect(snapshot.providerConfigs.koboldcpp?.url).toBe('http://127.0.0.1:5001');
 
-    const stored: unknown = JSON.parse(await fs.readFile(path.join(dataRoot, 'user-settings.json'), 'utf8'));
+    const stored = await api().settings.read();
     expect(stored).toMatchObject({ userName: 'Misha' });
-
-    await app.close();
   });
 
   it('keeps both of two concurrent patches that change different fields', async () => {
-    await writeUserSettings({
+    await api().settings.write({
       backendMode: 'external',
       activeProvider: 'custom',
       providerConfigs: { custom: { url: 'http://127.0.0.1:6001', model: 'old-model' } },
     });
-    const app = buildApiApp();
+    const { app } = api();
 
     const responses = await Promise.all([
       app.inject({ method: 'PATCH', url: '/api/providers/settings', payload: { config: { model: 'model-A' } } }),
       app.inject({ method: 'PATCH', url: '/api/providers/settings', payload: { config: { apiKey: 'sk-B' } } }),
     ]);
-    const stored: unknown = JSON.parse(await fs.readFile(path.join(dataRoot, 'user-settings.json'), 'utf8'));
+    const stored = await api().settings.read();
 
     expect(responses.map((response) => response.statusCode)).toEqual([200, 200]);
     expect(stored).toMatchObject({
       providerConfigs: { custom: { apiKey: 'sk-B', model: 'model-A', url: 'http://127.0.0.1:6001' } },
     });
-
-    await app.close();
   });
 
   it('switches the provider, applies the config to the one that becomes active and leaves the previous one untouched', async () => {
-    await writeUserSettings({
+    await api().settings.write({
       backendMode: 'builtin',
       activeProvider: 'custom',
       providerConfigs: { custom: { url: 'http://127.0.0.1:6001', model: 'local-model' } },
     });
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'PATCH',
       url: '/api/providers/settings',
@@ -507,17 +420,15 @@ describe('provider settings routes', () => {
       url: 'https://api.anthropic.com/v1',
     });
     expect(snapshot.providerConfigs.custom).toEqual({ model: 'local-model', url: 'http://127.0.0.1:6001' });
-
-    await app.close();
   });
 
   it('clears the api key on an empty string and keeps it when the field is absent', async () => {
-    await writeUserSettings({
+    await api().settings.write({
       backendMode: 'external',
       activeProvider: 'openai',
       providerConfigs: { openai: { url: 'https://api.openai.com/v1', apiKey: 'sk-old', model: 'gpt-4o' } },
     });
-    const app = buildApiApp();
+    const { app } = api();
 
     const untouched = await app.inject({
       method: 'PATCH',
@@ -532,18 +443,16 @@ describe('provider settings routes', () => {
       payload: { config: { apiKey: '' } },
     });
     expect(ProviderSettingsSnapshotSchema.parse(cleared.json()).providerConfigs.openai?.apiKey).toBeUndefined();
-
-    await app.close();
   });
 
   it('lists models with the key typed into the form, not the stored one, so the list comes before saving', async () => {
-    await writeUserSettings({
+    await api().settings.write({
       backendMode: 'external',
       activeProvider: 'openai',
       providerConfigs: { openai: { url: 'https://api.openai.com/v1', apiKey: 'sk-stored', model: 'gpt-4o' } },
     });
-    const requests = mockProviderModelsResponse({ data: [{ id: 'gpt-4o-mini' }] });
-    const app = buildApiApp();
+    const provider = answerProviderModels({ data: [{ id: 'gpt-4o-mini' }] });
+    const { app } = api();
 
     const response = await app.inject({
       method: 'POST',
@@ -552,18 +461,18 @@ describe('provider settings routes', () => {
     });
 
     expect(ProviderConnectionResponseSchema.parse(response.json()).models).toEqual([{ id: 'gpt-4o-mini' }]);
-    expect(requests).toEqual([{ authorization: 'Bearer sk-typed', url: 'https://api.openai.com/v1/models' }]);
-
-    await app.close();
+    expect(provider.requests()).toEqual([
+      { authorization: 'Bearer sk-typed', url: 'https://api.openai.com/v1/models' },
+    ]);
   });
 
   it('rejects a patch that changes nothing or carries an empty url', async () => {
-    await writeUserSettings({
+    await api().settings.write({
       backendMode: 'external',
       activeProvider: 'custom',
       providerConfigs: { custom: { url: 'http://127.0.0.1:6001' } },
     });
-    const app = buildApiApp();
+    const { app } = api();
 
     const empty = await app.inject({ method: 'PATCH', url: '/api/providers/settings', payload: {} });
     expect(empty.statusCode).toBe(400);
@@ -574,14 +483,12 @@ describe('provider settings routes', () => {
       payload: { config: { url: '   ' } },
     });
     expect(blankUrl.statusCode).toBe(400);
-
-    await app.close();
   });
 
   it('falls back to default settings when the canonical source file contains invalid JSON', async () => {
-    await fs.writeFile(path.join(dataRoot, 'user-settings.json'), '{ invalid json', 'utf8');
+    await fs.writeFile(api().settings.path, '{ invalid json', 'utf8');
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'GET',
       url: '/api/providers/settings',
@@ -592,7 +499,5 @@ describe('provider settings routes', () => {
       mode: 'builtin',
       activeProvider: 'custom',
     });
-
-    await app.close();
   });
 });
