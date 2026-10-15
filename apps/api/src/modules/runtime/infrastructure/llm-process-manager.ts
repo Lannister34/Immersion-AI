@@ -6,7 +6,7 @@ import type { RuntimeConfigCommand, RuntimeEngineInfo, RuntimeStatusSnapshot } f
 
 import { findProjectRoot } from '../../../config/find-project-root.js';
 import { readDataRoot } from '../../../config/read-api-config.js';
-import { getSharedApiLogger } from '../../../lib/logger.js';
+import { getSharedApiLogger } from '../../../platform/logging/shared-api-logger.js';
 
 const PID_FILE_NAME = '.llm-server.json';
 const LOG_FILE_NAME = 'llm-server.log';

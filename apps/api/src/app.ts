@@ -3,7 +3,6 @@ import Fastify from 'fastify';
 
 import type { ApiConfig } from './config/api-config.js';
 import { readApiConfig } from './config/read-api-config.js';
-import { buildApiLogger } from './lib/logger.js';
 import { charactersRoutes } from './modules/characters/interface/http/routes.js';
 import { chatsRoutes } from './modules/chats/interface/http/routes.js';
 import { generationRoutes } from './modules/generation/interface/http/routes.js';
@@ -13,6 +12,7 @@ import { providersRoutes } from './modules/providers/interface/http/routes.js';
 import { runtimeRoutes } from './modules/runtime/interface/http/routes.js';
 import { scenariosRoutes } from './modules/scenarios/interface/http/routes.js';
 import { settingsRoutes } from './modules/settings/interface/http/routes.js';
+import { createApiLogger } from './platform/logging/api-logger.js';
 import { healthRoute } from './routes/health.js';
 import { rootRoute } from './routes/root.js';
 
@@ -22,7 +22,7 @@ const API_BODY_LIMIT_BYTES = 16 * 1024 * 1024;
 export function buildApiApp(config: ApiConfig = readApiConfig()) {
   const app = Fastify({
     bodyLimit: API_BODY_LIMIT_BYTES,
-    loggerInstance: buildApiLogger(config.logLevel),
+    loggerInstance: createApiLogger(config.logLevel),
   });
 
   app.register(cors, {

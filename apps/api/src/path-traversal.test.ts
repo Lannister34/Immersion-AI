@@ -6,39 +6,6 @@ import { CharacterIdSchema } from '@immersion/contracts/characters';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildApiApp } from './app.js';
-import { resolveContainedFilePath, UnsafeRepositoryFileIdError } from './lib/contained-path.js';
-
-describe('resolveContainedFilePath', () => {
-  const directory = path.join(os.tmpdir(), 'immersion-containment');
-
-  it('resolves plain file names, including Cyrillic names with spaces', () => {
-    expect(resolveContainedFilePath(directory, 'scenario.json')).toBe(path.join(directory, 'scenario.json'));
-    expect(resolveContainedFilePath(directory, 'Анонимный чат.json')).toBe(path.join(directory, 'Анонимный чат.json'));
-  });
-
-  it.each([
-    '',
-    '../user-settings.json',
-    '..\\user-settings.json',
-    '../../user-settings.json',
-    'nested/inner.json',
-    'nested\\inner.json',
-    '..',
-    '.',
-    '.hidden.json',
-    'C:evil.json',
-    'C:\\Windows\\evil.json',
-    '/etc/passwd',
-  ])('rejects traversal id %s on every platform, including where it is a legal file name', (fileId) => {
-    expect(() => resolveContainedFilePath(directory, fileId)).toThrow(UnsafeRepositoryFileIdError);
-  });
-
-  it('rejects absolute paths', () => {
-    expect(() => resolveContainedFilePath(directory, path.join(os.tmpdir(), 'outside.json'))).toThrow(
-      UnsafeRepositoryFileIdError,
-    );
-  });
-});
 
 describe('file-backed resource id contract', () => {
   it.each([

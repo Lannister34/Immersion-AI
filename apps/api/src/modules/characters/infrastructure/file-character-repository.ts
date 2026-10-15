@@ -5,10 +5,10 @@ import path from 'node:path';
 import type { CharacterDetailDto } from '@immersion/contracts/characters';
 
 import { readDataRoot } from '../../../config/read-api-config.js';
-import { writeFileAtomically, writeJsonFileAtomically } from '../../../lib/atomic-file.js';
-import { resolveContainedFilePath } from '../../../lib/contained-path.js';
-import { isErrnoCode } from '../../../lib/errno-code.js';
-import { getSharedApiLogger } from '../../../lib/logger.js';
+import { isErrnoCode } from '../../../platform/errno-code.js';
+import { getSharedApiLogger } from '../../../platform/logging/shared-api-logger.js';
+import { writeFileAtomically, writeJsonFileAtomically } from '../../../platform/storage/atomic-file.js';
+import { resolveContainedFilePath } from '../../../platform/storage/contained-path.js';
 import {
   extractPngCharacterCard,
   InvalidCharacterCardError,
