@@ -47,6 +47,13 @@ invalid value stops the API with a message that names the variable.
 | `IMMERSION_DATA_ROOT` | `data` in the repository root | Folder for chats, characters, settings and logs; a relative path resolves against the repository root |
 | `IMMERSION_LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent` |
 
+The web client has one build variable, `VITE_API_BASE_URL`, read by `vite build` and the Vite dev
+server. Unset or blank, the client sends requests to its own origin, and the dev server forwards
+`/api` to the API. To call the API directly, set it to the API's origin, such as
+`http://127.0.0.1:4787`: scheme, host and optional port, with no path, query, fragment or
+credentials. The API accepts those requests from the origins in `IMMERSION_WEB_ORIGINS`. Any other
+value stops the client from loading, with an error in the browser console that names the variable.
+
 Earlier versions started with `npm run dev:api` or `start.bat` kept data in `apps/data`: move that
 folder to `data` in the repository root to keep your library.
 
@@ -164,6 +171,13 @@ API читает эти переменные окружения один раз,
 | `IMMERSION_WEB_ORIGINS` | `http://localhost:<порт клиента>,http://127.0.0.1:<порт клиента>` | Origin через запятую (http или https, без пути), из которых браузер может обращаться к API |
 | `IMMERSION_DATA_ROOT` | `data` в корне репозитория | Папка с чатами, персонажами, настройками и логами; относительный путь считается от корня репозитория |
 | `IMMERSION_LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` или `silent` |
+
+У веб-клиента одна переменная сборки, `VITE_API_BASE_URL`; её читают `vite build` и dev-сервер
+Vite. Если она не задана или пуста, клиент шлёт запросы на свой же origin, а dev-сервер
+перенаправляет `/api` в API. Чтобы клиент обращался к API напрямую, укажите origin API, например
+`http://127.0.0.1:4787`: схема, хост и, если нужно, порт, без пути, параметров запроса, фрагмента и
+учётных данных. API принимает такие запросы с origin из `IMMERSION_WEB_ORIGINS`. Любое другое
+значение не даёт клиенту загрузиться, а в консоли браузера появляется ошибка с именем переменной.
 
 Прежние версии, запущенные через `npm run dev:api` или `start.bat`, хранили данные в `apps/data`:
 перенесите эту папку в `data` в корне репозитория, чтобы не потерять библиотеку.
