@@ -1,6 +1,8 @@
 import { ApiProblemSchema } from '@immersion/contracts/common';
 import type { ZodType } from 'zod';
 
+import { webConfig } from '../config/web-config';
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -38,9 +40,7 @@ async function parseResponse<T>(response: Response, schema: ZodType<T>) {
 }
 
 export function createApiUrl(path: string) {
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
-
-  return apiBaseUrl ? new URL(path, apiBaseUrl).toString() : path;
+  return webConfig.apiOrigin === null ? path : new URL(path, webConfig.apiOrigin).toString();
 }
 
 export async function apiGet<T>(path: string, schema: ZodType<T>) {
