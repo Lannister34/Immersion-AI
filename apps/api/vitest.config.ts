@@ -12,6 +12,9 @@ export default defineConfig({
     env: { IMMERSION_DATA_ROOT: 'data-root-inherited-from-the-shell' },
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    restoreMocks: true,
     setupFiles: ['src/test-support/vitest-setup.ts'],
+    unstubEnvs: true,
+    unstubGlobals: true,
   },
 });

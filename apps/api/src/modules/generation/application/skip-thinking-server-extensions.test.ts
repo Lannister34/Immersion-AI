@@ -3,8 +3,11 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
+import { z } from 'zod';
 
-import { type RecordedProviderRequest, stubProviderReply } from '../../../test-support/recording-provider-stub.js';
+import { chatCompletionReply } from '../../../test-support/chat-completion-reply.js';
+import { stubGlobalFetch } from '../../../test-support/global-fetch-stub.js';
+import type { HttpStub } from '../../../test-support/http-stub.js';
 import { appendChatMessages } from '../../chats/application/append-chat-messages.js';
 import { createChat } from '../../chats/application/create-chat.js';
 import { generateCharacterAvatarPrompt } from './generate-character-avatar-prompt.js';
@@ -66,33 +69,42 @@ async function useProviderSettings(settings: object): Promise<void> {
   });
 }
 
-function onlyRequestBody(requests: RecordedProviderRequest[]): Record<string, unknown> {
-  expect(requests).toHaveLength(1);
-  const body = requests[0]?.body;
+const ProviderRequestBodySchema = z.record(z.string(), z.unknown());
 
-  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-    throw new Error('The provider request carried no JSON object body.');
+function stubProviderReply(): HttpStub {
+  const http = stubGlobalFetch();
+  http.on('POST', /\/chat\/completions$/u, () => chatCompletionReply(REPLY_EVERY_DRAFT_ACCEPTS));
+
+  return http;
+}
+
+function onlyRequestBody(http: HttpStub): Record<string, unknown> {
+  expect(http.requests).toHaveLength(1);
+  const body = http.requests[0]?.json(ProviderRequestBodySchema);
+
+  if (body === undefined) {
+    throw new Error('The provider received no request.');
   }
 
-  return body as Record<string, unknown>;
+  return body;
 }
 
 describe('llama-server counts reasoning tokens against max_tokens, so drafts ask the template to skip thinking', () => {
   it.each(DRAFT_USE_CASES)('the %s asks a local server to skip thinking', async (_name, generate) => {
     await useProviderSettings(LOCAL_PROVIDER_SETTINGS);
-    const requests = stubProviderReply(REPLY_EVERY_DRAFT_ACCEPTS);
+    const http = stubProviderReply();
 
     await generate();
 
-    expect(onlyRequestBody(requests)).toMatchObject({ chat_template_kwargs: { enable_thinking: false } });
+    expect(onlyRequestBody(http)).toMatchObject({ chat_template_kwargs: { enable_thinking: false } });
   });
 
   it.each(DRAFT_USE_CASES)('the %s never sends chat_template_kwargs to the OpenAI cloud', async (_name, generate) => {
     await useProviderSettings(CLOUD_PROVIDER_SETTINGS);
-    const requests = stubProviderReply(REPLY_EVERY_DRAFT_ACCEPTS);
+    const http = stubProviderReply();
 
     await generate();
 
-    expect(onlyRequestBody(requests)).not.toHaveProperty('chat_template_kwargs');
+    expect(onlyRequestBody(http)).not.toHaveProperty('chat_template_kwargs');
   });
 });

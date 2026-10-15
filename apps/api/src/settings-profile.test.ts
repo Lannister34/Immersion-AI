@@ -1,46 +1,37 @@
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
+import {
+  SettingsOverviewResponseSchema,
+  type UpdateSettingsProfileCommand,
+  UpdateSettingsProfileResponseSchema,
+} from '@immersion/contracts/settings';
+import { describe, expect, it } from 'vitest';
 
-import { SettingsOverviewResponseSchema, UpdateSettingsProfileResponseSchema } from '@immersion/contracts/settings';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { storedSamplerPreset } from './test-support/stored-sampler-preset.js';
+import { useTestApi } from './test-support/use-test-api.js';
 
-import { buildApiApp } from './app.js';
+const PROFILE_COMMAND: UpdateSettingsProfileCommand = {
+  userName: 'Renamed',
+  userPersona: '',
+  systemPromptTemplate: '',
+  responseLanguage: 'ru',
+  streamingEnabled: true,
+  thinkingEnabled: true,
+  messageFormatting: { actionsItalic: true, quotesHighlighted: false },
+};
 
 describe('settings profile routes', () => {
-  let previousDataRoot: string | undefined;
-  let temporaryDataRoot: string;
-
-  beforeEach(async () => {
-    previousDataRoot = process.env.IMMERSION_DATA_ROOT;
-    temporaryDataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'immersion-settings-'));
-    process.env.IMMERSION_DATA_ROOT = temporaryDataRoot;
-  });
-
-  afterEach(async () => {
-    if (previousDataRoot) {
-      process.env.IMMERSION_DATA_ROOT = previousDataRoot;
-    } else {
-      delete process.env.IMMERSION_DATA_ROOT;
-    }
-    await fs.rm(temporaryDataRoot, { recursive: true, force: true });
-  });
+  const api = useTestApi();
 
   it('PUT /profile persists profile fields back to user-settings.json and they reflect on the next overview', async () => {
-    await fs.writeFile(
-      path.join(temporaryDataRoot, 'user-settings.json'),
-      JSON.stringify({
-        userName: 'Old',
-        userPersona: 'Old persona',
-        systemPromptTemplate: '',
-        responseLanguage: 'ru',
-        streamingEnabled: true,
-        thinkingEnabled: true,
-        messageFormatting: { actionsItalic: true, quotesHighlighted: false },
-      }),
-    );
-
-    const app = buildApiApp();
+    const { app, settings } = api();
+    await settings.write({
+      userName: 'Old',
+      userPersona: 'Old persona',
+      systemPromptTemplate: '',
+      responseLanguage: 'ru',
+      streamingEnabled: true,
+      thinkingEnabled: true,
+      messageFormatting: { actionsItalic: true, quotesHighlighted: false },
+    });
 
     const putResponse = await app.inject({
       method: 'PUT',
@@ -70,86 +61,41 @@ describe('settings profile routes', () => {
     expect(overview.profile.userName).toBe('New name');
     expect(overview.profile.userPersona).toBe('New persona description');
 
-    const persisted = JSON.parse(
-      await fs.readFile(path.join(temporaryDataRoot, 'user-settings.json'), 'utf8'),
-    ) as Record<string, unknown>;
+    const persisted = await settings.read();
     expect(persisted.userName).toBe('New name');
     expect(persisted.streamingEnabled).toBe(false);
-
-    await app.close();
   });
 
   it('PUT /profile preserves unrelated fields like samplerPresets', async () => {
-    await fs.writeFile(
-      path.join(temporaryDataRoot, 'user-settings.json'),
-      JSON.stringify({
-        userName: 'Keep me',
-        samplerPresets: [
-          {
-            id: 'demo',
-            name: 'Demo',
-            context_trim_strategy: 'trim_middle',
-            max_context_length: 8192,
-            max_length: 600,
-            min_p: 0.02,
-            presence_penalty: 0,
-            rep_pen: 1.05,
-            rep_pen_range: 2048,
-            temperature: 1,
-            top_k: 0,
-            top_p: 1,
-          },
-        ],
-        activePresetId: 'demo',
-      }),
-    );
+    const { app, settings } = api();
+    const demoPreset = storedSamplerPreset('demo', 'Demo');
+    await settings.write({
+      userName: 'Keep me',
+      samplerPresets: [demoPreset],
+      activePresetId: 'demo',
+    });
 
-    const app = buildApiApp();
     const response = await app.inject({
       method: 'PUT',
       url: '/api/settings/profile',
-      payload: {
-        userName: 'Renamed',
-        userPersona: '',
-        systemPromptTemplate: '',
-        responseLanguage: 'ru',
-        streamingEnabled: true,
-        thinkingEnabled: true,
-        messageFormatting: { actionsItalic: true, quotesHighlighted: false },
-      },
+      payload: PROFILE_COMMAND,
     });
     expect(response.statusCode).toBe(200);
 
-    const persisted = JSON.parse(
-      await fs.readFile(path.join(temporaryDataRoot, 'user-settings.json'), 'utf8'),
-    ) as Record<string, unknown>;
+    const persisted = await settings.read();
     expect(persisted.userName).toBe('Renamed');
-    expect(Array.isArray(persisted.samplerPresets)).toBe(true);
-    expect((persisted.samplerPresets as unknown[]).length).toBe(1);
+    expect(persisted.samplerPresets).toEqual([demoPreset]);
     expect(persisted.activePresetId).toBe('demo');
-
-    await app.close();
   });
 
   it('PUT /profile rejects an empty user name', async () => {
-    const app = buildApiApp();
-    const response = await app.inject({
+    const response = await api().app.inject({
       method: 'PUT',
       url: '/api/settings/profile',
-      payload: {
-        userName: '   ',
-        userPersona: '',
-        systemPromptTemplate: '',
-        responseLanguage: 'ru',
-        streamingEnabled: true,
-        thinkingEnabled: true,
-        messageFormatting: { actionsItalic: true, quotesHighlighted: false },
-      },
+      payload: { ...PROFILE_COMMAND, userName: '   ' },
     });
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({ code: 'validation_error' });
-
-    await app.close();
   });
 });

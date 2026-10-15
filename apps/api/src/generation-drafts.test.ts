@@ -18,7 +18,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { buildApiApp } from './app.js';
-import { stubProviderReply } from './test-support/recording-provider-stub.js';
+import { chatCompletionReply } from './test-support/chat-completion-reply.js';
+import { stubGlobalFetch } from './test-support/global-fetch-stub.js';
 
 const fixtureDataRoot = fileURLToPath(new URL('../testdata/smoke-data', import.meta.url));
 
@@ -302,7 +303,10 @@ describe('generation draft routes', () => {
     });
 
     it('names the token limit, not malformed JSON, when the draft is cut off where a {{user}} brace ends the text', async () => {
-      stubProviderReply('{"name": "Ария", "scenario": "{{char}} встречает {{user}} у печи, и', 'length');
+      const http = stubGlobalFetch();
+      http.on('POST', 'http://127.0.0.1:6006/v1/chat/completions', () =>
+        chatCompletionReply('{"name": "Ария", "scenario": "{{char}} встречает {{user}} у печи, и', 'length'),
+      );
       const app = buildApiApp();
 
       const response = await app.inject({
