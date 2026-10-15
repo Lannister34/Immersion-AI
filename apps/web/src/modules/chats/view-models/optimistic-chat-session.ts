@@ -1,9 +1,5 @@
 import type { ChatMessageDto, ChatSessionDto } from '@immersion/contracts/chats';
 
-// Оптимистично меняем только транскрипт. Сводные поля чата (messageCount,
-// lastMessagePreview, updatedAt) принадлежат backend и обновляются
-// инвалидацией session- и list-запросов после ответа сервера.
-
 export interface OptimisticUserMessageInput {
   attachments?: ChatMessageDto['attachments'];
   content: string;

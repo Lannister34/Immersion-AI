@@ -102,9 +102,9 @@ export function CharactersScreen() {
   };
 
   const handleDragLeave = (event: DragEvent<HTMLElement>) => {
-    // relatedTarget === null означает уход курсора за пределы окна.
     const nextTarget = event.relatedTarget as Node | null;
-    if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
+    const pointerLeftWindow = nextTarget === null;
+    if (pointerLeftWindow || !event.currentTarget.contains(nextTarget)) {
       setDragActive(false);
     }
   };
@@ -348,11 +348,8 @@ function CharacterCard({ character }: CharacterCardProps) {
   const color = avatarColor(character.name);
   const initial = avatarInitial(character.name);
   const actions = useCharacterActions(character);
-  // Подтверждение удаления остаётся видимым независимо от hover-состояния карточки.
-  const confirmDeleteVisible = actions.confirmDelete;
+  const revealActionsOnHover = !actions.confirmDelete;
 
-  // Ссылка — оверлей поверх карточки, кнопки-действия подняты выше по z-index:
-  // <button> внутри <a> — невалидный HTML.
   return (
     <div
       className="card card-hover"
@@ -382,7 +379,7 @@ function CharacterCard({ character }: CharacterCardProps) {
         }}
       >
         <div
-          className={confirmDeleteVisible ? undefined : 'char-card__actions'}
+          className={revealActionsOnHover ? 'char-card__actions' : undefined}
           style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4, zIndex: 2 }}
         >
           <CharacterDeleteControls actions={actions} darkOverlay />
@@ -460,8 +457,6 @@ function CharactersListTable({ characters }: CharactersListTableProps) {
             <th>Персонаж</th>
             <th>Чаты</th>
             <th>Изменён</th>
-            {/* Ширина фиксирована под самое широкое состояние: подтверждение
-                удаления не должно двигать остальные колонки. */}
             <th style={{ width: 200 }} />
           </tr>
         </thead>

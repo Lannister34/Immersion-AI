@@ -39,7 +39,6 @@ export function chatReplyPromptPreviewQueryOptions(
         ...(normalizedDraftUserMessage ? { draftUserMessage: normalizedDraftUserMessage } : {}),
         ...(normalizedOverrides.length > 0 ? { messageOverrides: normalizedOverrides } : {}),
       }),
-    // Черновики генерируют много одноразовых ключей — не держим их в кеше дольше 30 секунд.
     gcTime: 30_000,
   });
 }

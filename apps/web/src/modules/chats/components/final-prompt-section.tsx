@@ -5,7 +5,6 @@ import type { AutoSavedGenerationSettings } from '../mutations/use-auto-saved-ge
 import { MarkDot } from './mark-dot';
 
 export interface FinalPromptSectionProps {
-  /** Промпт, собранный backend: он же заготовка для ручной правки. */
   assembledPrompt: string | undefined;
   form: AutoSavedGenerationSettings;
 }

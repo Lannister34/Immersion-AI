@@ -117,7 +117,6 @@ export function LorebooksScreen() {
     setImportError(null);
     importMutation.mutate(file, {
       onError: (error) => {
-        // ApiError наследует Error — сообщение берём из любого Error, включая ошибки парсинга файла.
         setImportError(error instanceof Error ? error.message : 'Не удалось импортировать лорбук.');
       },
     });
@@ -340,8 +339,6 @@ function LorebookRow({ lorebook }: LorebookRowProps) {
     setConfirmDelete(false);
   };
 
-  // Ссылка — оверлей поверх строки, кнопки-действия подняты выше по z-index:
-  // <button> внутри <a> — невалидный HTML.
   return (
     <div
       style={{

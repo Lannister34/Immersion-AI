@@ -135,11 +135,8 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
   const [avatarCopyState, setAvatarCopyState] = useState<AvatarCopyState>('idle');
   const [pendingAvatar, setPendingAvatar] = useState<File | null>(null);
   const appliedInitialStateRef = useRef(initialState);
-  // Если карточка уже создалась, а аватар не долетел, повторное сохранение
-  // должно дописать её, а не создать вторую.
   const createdIdRef = useRef<string | null>(null);
 
-  // Сбрасываем форму на серверное состояние только пока пользователь её не редактировал.
   useEffect(() => {
     const previousInitialState = appliedInitialStateRef.current;
     appliedInitialStateRef.current = initialState;
@@ -148,8 +145,6 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
 
   const isDirty = !formsEqual(form, initialState);
 
-  // Значение читаем из события синхронно: внутри отложенного апдейтера
-  // event.currentTarget уже null, и чтение .value роняет экран.
   const setField = <K extends keyof CharacterFormState>(field: K, value: CharacterFormState[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
@@ -175,8 +170,6 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
       queryClient.setQueryData(characterDetailQueryKey(response.character.id), response);
       await queryClient.invalidateQueries({ queryKey: characterListQueryKey });
       if (isNew) {
-        // После создания возвращаемся в библиотеку: карточка уже сохранена,
-        // открытая форма создаёт впечатление незавершённого действия.
         await navigate({ to: '/characters' });
       }
     },
@@ -205,8 +198,6 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
 
   const draftMutation = useMutation({
     mutationFn: (concept: string) => {
-      // Введённое имя закрепляем на сервере: он вернёт его без изменений,
-      // а остальные поля сгенерирует заново.
       const pinnedName = form.name.trim();
       return generateCharacterDraft({
         concept,

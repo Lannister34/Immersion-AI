@@ -18,7 +18,6 @@ export function useDeleteCharacter(characterId: string, options: UseDeleteCharac
       queryClient.removeQueries({ queryKey: characterDetailQueryKey(characterId) });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: characterListQueryKey }),
-        // Сводки чатов содержат имя персонажа — иначе оно остаётся в списке после удаления.
         queryClient.invalidateQueries({ queryKey: chatListQueryKey }),
       ]);
       await options.onSuccess?.();

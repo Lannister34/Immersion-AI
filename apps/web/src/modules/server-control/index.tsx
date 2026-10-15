@@ -71,7 +71,6 @@ const RUNTIME_STATUS_PILL: Record<RuntimeOverviewResponse['serverStatus']['statu
   error: 'pill pill--danger',
 };
 
-// Статус в строке модели повторяет статус процесса, чтобы не расходиться с шапкой.
 const ACTIVE_MODEL_STATUS_LABELS: Record<RuntimeOverviewResponse['serverStatus']['status'], string> = {
   idle: 'остановлена',
   starting: 'запускается',
@@ -473,8 +472,6 @@ function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFo
   const appliedBaselineRef = useRef(baseline);
   const appliedProviderRef = useRef(selectedProvider);
 
-  // Смена провайдера всегда загружает его сохранённый конфиг; защита от сброса
-  // фоновым refetch действует только внутри одного и того же провайдера.
   useEffect(() => {
     const previousBaseline = appliedBaselineRef.current;
     const providerChanged = appliedProviderRef.current !== selectedProvider;
@@ -556,7 +553,6 @@ function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFo
             className="input"
             id="provider-url"
             onChange={(event) => {
-              // Значение читаем синхронно: в отложенном апдейтере event.currentTarget уже null.
               const { value } = event.currentTarget;
               setForm((current) => ({ ...current, url: value }));
             }}

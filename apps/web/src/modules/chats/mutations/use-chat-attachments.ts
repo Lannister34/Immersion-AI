@@ -18,11 +18,6 @@ export interface ChatAttachmentsDraft {
   remove: (attachmentId: string) => void;
 }
 
-/**
- * Картинки уходят на сервер сразу при выборе: к моменту отправки сообщения
- * остаётся только сослаться на них по id, а ошибка формата или размера
- * всплывает там же, где пользователь выбрал файл.
- */
 export function useChatAttachments(chatId: string): ChatAttachmentsDraft {
   const [attachments, setAttachments] = useState<ChatMessageAttachmentDto[]>([]);
   const [pickError, setPickError] = useState<string | null>(null);

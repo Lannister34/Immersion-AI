@@ -118,7 +118,6 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
   const [draftConcept, setDraftConcept] = useState('');
   const appliedInitialStateRef = useRef(initialState);
 
-  // Сбрасываем форму на серверное состояние только пока пользователь её не редактировал.
   useEffect(() => {
     const previousInitialState = appliedInitialStateRef.current;
     appliedInitialStateRef.current = initialState;
@@ -127,8 +126,6 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
 
   const isDirty = useMemo(() => !formsEqual(form, initialState), [form, initialState]);
 
-  // Значение читаем из события синхронно: внутри отложенного апдейтера
-  // event.currentTarget уже null, и чтение .value роняет экран.
   const setField = <K extends keyof LorebookFormState>(field: K, value: LorebookFormState[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
@@ -161,7 +158,6 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
   const generateEntriesMutation = useMutation({
     mutationFn: (concept: string) => generateLorebookDraft(concept),
     onSuccess: (draft) => {
-      // Сгенерированные записи добавляем к существующим, пользовательские не трогаем.
       setForm((current) => ({
         ...current,
         entries: [

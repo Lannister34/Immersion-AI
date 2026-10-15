@@ -12,8 +12,6 @@ export function useGenerateFirstMessage(chatId: string) {
   return useMutation<GenerateFirstMessageResponse, Error>({
     mutationFn: () => generateFirstMessage(chatId),
     onSuccess: async (response) => {
-      // Не затираем кэш, если пока шла генерация в нём уже появились сообщения
-      // (например, пользователь успел отправить своё в другой вкладке).
       queryClient.setQueryData<GenerateFirstMessageResponse['session']>(sessionKey, (current) =>
         current === undefined || current.messages.length === 0 ? response.session : current,
       );

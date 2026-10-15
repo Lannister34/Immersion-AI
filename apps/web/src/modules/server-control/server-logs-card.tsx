@@ -8,7 +8,6 @@ import { runtimeLogsQueryOptions } from './queries/runtime-logs-query';
 
 const LOGS_POLL_INTERVAL_MS = 2000;
 
-// Порог «липкого низа»: пока пользователь ближе к низу, новые строки докручивают лог автоматически.
 const STICKY_BOTTOM_THRESHOLD_PX = 40;
 
 type CopyFeedback = 'idle' | 'copied' | 'failed';
@@ -24,7 +23,6 @@ export function ServerLogsCard({ status }: ServerLogsCardProps) {
   const scrollRef = useRef<HTMLPreElement>(null);
   const stickToBottomRef = useRef(true);
 
-  // Автораскрытие при переходе в ошибку: причина неудачного старта должна быть видна сразу.
   if (status !== lastStatus) {
     setLastStatus(status);
     if (status === 'error') {
@@ -41,8 +39,6 @@ export function ServerLogsCard({ status }: ServerLogsCardProps) {
   const lines = logsQuery.data?.lines ?? [];
   const lineCount = lines.length;
 
-  // Докручиваем к свежим строкам, только если пользователь и так был у низа лога.
-  // Если он читает старые строки выше — позицию не трогаем.
   useEffect(() => {
     if (lines.length === 0) return;
     const element = scrollRef.current;

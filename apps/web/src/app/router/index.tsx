@@ -61,8 +61,6 @@ interface ChatListSearch {
   character?: string;
 }
 
-// Фильтр по персонажу живёт в URL: ссылка из библиотеки персонажей
-// переживает перезагрузку и делится как обычная ссылка.
 function validateChatListSearch(search: Record<string, unknown>): ChatListSearch {
   const character = typeof search.character === 'string' ? search.character.trim() : '';
 

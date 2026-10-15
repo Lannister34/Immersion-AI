@@ -63,7 +63,6 @@ export function SamplerCard({ data }: SamplerCardProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Keep selection valid when the underlying list changes (e.g., after delete).
   useEffect(() => {
     if (isCreating) return;
     if (selectedId && sampler.presets.some((preset) => preset.id === selectedId)) return;

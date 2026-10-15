@@ -137,7 +137,6 @@ export function useChatReplyGeneration(chatId: string) {
     onSuccess: applyStartedJob,
     onError: invalidateAfterJobStartError,
   });
-  // Ответ на уже сохранённое сообщение пользователя: новое сообщение не добавляем.
   const answerGenerationMutation = useMutation({
     mutationFn: () =>
       startChatReplyGenerationJob({

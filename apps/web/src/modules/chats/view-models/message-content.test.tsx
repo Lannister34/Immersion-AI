@@ -50,6 +50,24 @@ describe('renderMessageContent', () => {
       'text: тихо',
     ]);
   });
+
+  it('highlights speech in guillemets as well as in straight quotes', () => {
+    expect(
+      describeNodes('Она шепнула «уходи» и отвернулась', { actionsItalic: true, quotesHighlighted: true }),
+    ).toEqual(['text:Она шепнула ', 'span:«,уходи,»', 'text: и отвернулась']);
+  });
+
+  it('does not highlight a quote that a line break interrupts', () => {
+    expect(describeNodes('Он сказал "привет\nи ушёл"', { actionsItalic: true, quotesHighlighted: true })).toEqual([
+      'text:Он сказал "привет\nи ушёл"',
+    ]);
+  });
+
+  it('keeps HTML as literal text instead of interpreting it', () => {
+    expect(describeNodes('<b>жирный</b> <img src=x onerror=alert(1)>')).toEqual([
+      'text:<b>жирный</b> <img src=x onerror=alert(1)>',
+    ]);
+  });
 });
 
 describe('stripMessageMarkup', () => {
@@ -63,5 +81,9 @@ describe('stripMessageMarkup', () => {
 
   it('keeps a standalone asterisk that is not markup', () => {
     expect(stripMessageMarkup('5 * 3 = 15')).toBe('5 * 3 = 15');
+  });
+
+  it('folds line breaks into a single preview line', () => {
+    expect(stripMessageMarkup('Первая строка\n\n  вторая\tстрока ')).toBe('Первая строка вторая строка');
   });
 });

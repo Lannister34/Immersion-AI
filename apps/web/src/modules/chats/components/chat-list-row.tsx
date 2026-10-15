@@ -14,7 +14,6 @@ export interface ChatListRowProps {
 export function ChatListRow({ chat }: ChatListRowProps) {
   const displayName = chat.characterName ?? chat.title;
   const subline = chat.characterName ? chat.title : 'свободный чат';
-  // Превью показываем без служебных символов разметки: звёздочек и бэктиков.
   const preview = chat.lastMessagePreview ? stripMessageMarkup(chat.lastMessagePreview) : 'Сообщений пока нет.';
   const [confirmDelete, setConfirmDelete] = useState(false);
   const deleteMutation = useDeleteChat(chat.id);
@@ -31,8 +30,6 @@ export function ChatListRow({ chat }: ChatListRowProps) {
     setConfirmDelete(false);
   };
 
-  // Кнопки-действия лежат рядом со ссылкой (не внутри <a>): ссылка — оверлей,
-  // действия подняты выше по z-index. Клик по строке ведёт в чат, по кнопке — действие.
   return (
     <div
       style={{

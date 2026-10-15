@@ -11,7 +11,6 @@ import { MarkDot } from './mark-dot';
 import { ModelTab } from './model-tab';
 
 export interface RightPanelProps {
-  /** Системный промпт, который backend собрал для этого чата. */
   assembledPrompt: string | undefined;
   characterAvatarUrl: string | null;
   characterId: string | null;
@@ -51,8 +50,6 @@ export function RightPanel({
   settingsOverview,
   tab,
 }: RightPanelProps) {
-  // Черновик один на панель: обе вкладки правят одну и ту же настройку чата
-  // и сохраняются одним запросом.
   const form = useAutoSavedGenerationSettings(chatId, generationSettings);
   const hasContextOverride =
     form.draft.systemPrompt.trim().length > 0 || form.draft.additionalInstructions.trim().length > 0;

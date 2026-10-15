@@ -2,7 +2,6 @@ export const TEMPLATE_PLACEHOLDERS = ['{{user}}', '{{char}}'] as const;
 
 export type TemplatePlaceholder = (typeof TEMPLATE_PLACEHOLDERS)[number];
 
-// Допускаем пробелы внутри скобок: карточки из SillyTavern встречаются в обоих видах.
 const PLACEHOLDER_PATTERN = /(\{\{\s*(?:user|char)\s*\}\})/giu;
 
 export interface TemplateTextSegment {
@@ -10,7 +9,6 @@ export interface TemplateTextSegment {
   value: string;
 }
 
-/** Разбивает текст на обычные куски и плейсхолдеры — для подсветки. */
 export function splitTemplateText(text: string): TemplateTextSegment[] {
   return text
     .split(PLACEHOLDER_PATTERN)
@@ -26,7 +24,6 @@ export interface TemplateInsertResult {
   value: string;
 }
 
-/** Вставляет плейсхолдер вместо выделения и возвращает позицию курсора после него. */
 export function insertTemplatePlaceholder(
   value: string,
   selectionStart: number,

@@ -62,6 +62,8 @@ function describeGenerateTitleError(error: unknown): string | null {
   return getApiErrorMessage(error, 'Не удалось сгенерировать название.');
 }
 
+const ignoreErrorShownByGenerationState = (): void => undefined;
+
 export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const [draftMessage, setDraftMessage] = useState('');
   const attachmentsDraft = useChatAttachments(chatId);
@@ -75,7 +77,6 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const setPanelWidth = useUiShellStore((state) => state.setChatPanelWidth);
   const navigate = useNavigate();
 
-  // Тянем за левый край панели: ширина считается от правого края окна.
   const startPanelResize = (event: ReactPointerEvent<HTMLElement>) => {
     event.preventDefault();
     const onPointerMove = (moveEvent: PointerEvent) => {
@@ -112,12 +113,9 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const generateFirstMessageMutation = useGenerateFirstMessage(chatId);
 
   const transcriptRef = useRef<HTMLDivElement | null>(null);
-  // Прилипание к низу: пока пользователь у последнего сообщения, лента следует
-  // за новыми сообщениями и растущим ответом; если он ушёл читать выше — нет.
   const stickToBottomRef = useRef(true);
   const transcriptMessageCount = chatSessionQuery.data?.messages.length;
-  // Любое из значений меняет высоту ленты: новое сообщение, растущий ответ, индикатор печати.
-  const transcriptSignature = [
+  const transcriptHeightSignature = [
     transcriptMessageCount ?? -1,
     chatSessionQuery.data?.messages.at(-1)?.content.length ?? 0,
     chatReplyGeneration.activeJob ? 1 : 0,
@@ -133,11 +131,11 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
 
   useEffect(() => {
     const element = transcriptRef.current;
-    if (transcriptSignature.startsWith('-1:') || !stickToBottomRef.current || !element) {
+    if (transcriptHeightSignature.startsWith('-1:') || !stickToBottomRef.current || !element) {
       return;
     }
     element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
-  }, [transcriptSignature]);
+  }, [transcriptHeightSignature]);
 
   if (chatSessionQuery.isLoading) {
     return (
@@ -216,7 +214,6 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
     !blockReason &&
     lastTranscriptMessage?.role === 'assistant' &&
     lastTranscriptMessage.content.trim().length > 0;
-  // Транскрипт заканчивается репликой пользователя — модель может ответить без нового сообщения.
   const canAnswer =
     !isStreaming &&
     !chatReplyGeneration.isPending &&
@@ -241,20 +238,12 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
 
   const onContinue = async () => {
     if (!canContinue) return;
-    try {
-      await chatReplyGeneration.continueLast();
-    } catch {
-      // Ошибка показывается через generationErrorMessage.
-    }
+    await chatReplyGeneration.continueLast().catch(ignoreErrorShownByGenerationState);
   };
 
   const onAnswer = async () => {
     if (!canAnswer) return;
-    try {
-      await chatReplyGeneration.answerLast();
-    } catch {
-      // Ошибка показывается через generationErrorMessage.
-    }
+    await chatReplyGeneration.answerLast().catch(ignoreErrorShownByGenerationState);
   };
 
   const onComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -268,7 +257,6 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const messageCount = session.messages.length;
   const lastUpdated = session.chat.updatedAt;
   const tokenStats = toContextStats(promptPreviewQuery.data);
-  // Панель показывает собранный системный промпт как заготовку для ручной правки.
   const assembledPrompt = promptPreviewQuery.data?.request.messages.find(
     (message) => message.role === 'system',
   )?.content;
@@ -310,11 +298,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
             await deleteMessageMutation.mutateAsync({ messageIndex });
           }}
           onRegenerate={async () => {
-            try {
-              await chatReplyGeneration.regenerate();
-            } catch {
-              // surface via generationErrorMessage
-            }
+            await chatReplyGeneration.regenerate().catch(ignoreErrorShownByGenerationState);
           }}
           onSave={async (content) => {
             await updateMessageMutation.mutateAsync({

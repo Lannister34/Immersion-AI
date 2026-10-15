@@ -43,7 +43,6 @@ function getImportErrorMessage(error: unknown): string {
 }
 
 export interface ChatListScreenProps {
-  /** Фильтр по персонажу приходит из search-параметра маршрута. */
   characterFilter: string | null;
 }
 
@@ -81,7 +80,6 @@ export function ChatListScreen({ characterFilter }: ChatListScreenProps) {
         await navigate({ to: '/chat/$chatId', params: { chatId: response.chat.id } });
         return;
       }
-      // Частичный импорт: не уводим со списка молча, а показываем, что пропущено.
       setImportNotice({
         chatId: response.chat.id,
         importedMessages: response.importedMessages,

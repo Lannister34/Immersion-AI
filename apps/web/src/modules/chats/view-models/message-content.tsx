@@ -11,7 +11,6 @@ export const DEFAULT_MESSAGE_FORMATTING: MessageFormatting = {
 const CODE_PATTERN = /`([^`\n]+)`/g;
 const BOLD_PATTERN = /\*\*([\s\S]+?)\*\*/g;
 const ACTION_PATTERN = /\*([^*]+?)\*/g;
-// Речь в прямых и типографских кавычках; перенос строки прерывает реплику.
 const QUOTE_PATTERN = /[«"]([^«»"\n]+)[»"]/g;
 
 function splitSegments(nodes: ReactNode[], pattern: RegExp, render: SegmentRenderer): ReactNode[] {
@@ -43,11 +42,6 @@ function splitSegments(nodes: ReactNode[], pattern: RegExp, render: SegmentRende
   return result;
 }
 
-/**
- * Разметка в стиле SillyTavern: `код`, **жирный**, *действия*, речь в кавычках.
- * Незакрытые звёздочки остаются обычным текстом, HTML не интерпретируется —
- * узлы строятся React-ом, а не через innerHTML.
- */
 export function renderMessageContent(
   text: string,
   formatting: MessageFormatting = DEFAULT_MESSAGE_FORMATTING,
@@ -80,11 +74,8 @@ export function renderMessageContent(
   return nodes;
 }
 
-// Обрезанное превью часто теряет закрывающую звёздочку: убираем висячие символы
-// разметки, прилипшие к слову, но не трогаем одиночные (например, «5 * 3»).
 const DANGLING_MARKUP_PATTERN = /(?<=\S)[*`]|[*`](?=\S)/gu;
 
-/** Одна строка без разметки — для превью в списках. */
 export function stripMessageMarkup(text: string): string {
   return text
     .replace(CODE_PATTERN, '$1')

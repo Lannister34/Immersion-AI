@@ -1,28 +1,21 @@
 import { type ChatSamplingOverridesDto, ChatSamplingOverridesDtoSchema } from '@immersion/contracts/chats';
 import type { ChatReplyPromptPreviewResponse } from '@immersion/contracts/generation';
 
-/** Значения, которые действуют, пока чат ничего не переопределяет. */
 export type InheritedSampling = ChatReplyPromptPreviewResponse['effectiveSettings']['sampling'];
 
 export type SamplingOverrideKey = keyof ChatSamplingOverridesDto;
 export type NumericSamplingKey = Exclude<SamplingOverrideKey, 'contextTrimStrategy'>;
 
-/** Черновик держим строками: пустая строка — «наследовать», а не 0. */
 export type SamplingOverridesDraft = Record<SamplingOverrideKey, string>;
 
 export type SamplingOverrideErrors = Partial<Record<SamplingOverrideKey, string>>;
 
 export interface NumericSamplingField {
-  /** Одна строка по-русски: что параметр делает с ответом. */
   hint: string;
-  /** Только целые значения. */
   integer: boolean;
   key: NumericSamplingKey;
-  /** Человеческое имя; технические top_p и rep_pen в интерфейс не выносим. */
   label: string;
-  /** Практичный потолок для кнопок шага; руками можно ввести и больше. */
   max: number;
-  /** Нижняя граница контракта; null — ограничения нет. */
   min: number | null;
   step: number;
 }
@@ -111,7 +104,6 @@ export const NUMERIC_SAMPLING_FIELDS: NumericSamplingField[] = [
   },
 ];
 
-/** Стратегия обрезки живёт рядом с числовыми полями, но выбирается списком. */
 export const CONTEXT_TRIM_FIELD = {
   hint: 'Что выбросить, когда история не влезает в окно',
   label: 'Обрезка контекста',
@@ -163,12 +155,6 @@ function decimalsOf(step: number): number {
   return String(step).split('.')[1]?.length ?? 0;
 }
 
-/**
- * Шаг кнопкой «−»/«+»: считаем от действующего значения, а не от нуля, и
- * подтягиваем к практичному диапазону — но только в ту сторону, куда нажали.
- * Значение вне диапазона (например, окно контекста больше обычного) кнопка
- * не должна утаскивать обратно.
- */
 export function stepSamplingValue(
   field: NumericSamplingField,
   currentText: string,
@@ -188,10 +174,8 @@ export function stepSamplingValue(
 export interface SamplingFieldViewModel {
   error: string | undefined;
   field: NumericSamplingField;
-  /** Значение из пресета — для подписи кнопки возврата. */
   inheritedText: string;
   isOverridden: boolean;
-  /** То, что стоит в поле: своё значение чата либо унаследованное. */
   value: string;
 }
 
@@ -199,11 +183,6 @@ function formatInherited(value: number | undefined): string {
   return value === undefined ? '' : String(value);
 }
 
-/**
- * Поле всегда показывает действующее значение: пока чат ничего не менял — из
- * пресета, дальше — своё. Отдельного «включить параметр» нет, правка сама
- * создаёт переопределение.
- */
 export function toSamplingFieldViewModels(
   draft: SamplingOverridesDraft,
   errors: SamplingOverrideErrors,
@@ -226,7 +205,6 @@ export function toSamplingFieldViewModels(
 
 export interface SamplingDraftParseResult {
   errors: SamplingOverrideErrors;
-  /** null, когда хотя бы одно поле не прошло проверку. */
   overrides: ChatSamplingOverridesDto | null;
 }
 
@@ -234,7 +212,6 @@ function describeRangeError(min: number): string {
   return min > 0 ? `Минимум ${min}` : 'Не может быть отрицательным';
 }
 
-/** Разбирает черновик в DTO: пустые поля становятся null («наследовать»). */
 export function parseSamplingDraft(draft: SamplingOverridesDraft): SamplingDraftParseResult {
   const errors: SamplingOverrideErrors = {};
   const candidate: Record<string, unknown> = {
@@ -242,7 +219,6 @@ export function parseSamplingDraft(draft: SamplingOverridesDraft): SamplingDraft
   };
 
   for (const field of NUMERIC_SAMPLING_FIELDS) {
-    // Запятая как десятичный разделитель — привычный ввод в русской раскладке.
     const raw = draft[field.key].trim().replace(',', '.');
 
     if (raw.length === 0) {
@@ -277,7 +253,6 @@ export function parseSamplingDraft(draft: SamplingOverridesDraft): SamplingDraft
   const parsed = ChatSamplingOverridesDtoSchema.safeParse(candidate);
 
   if (!parsed.success) {
-    // Контракт — последний рубеж: сюда попадают только неучтённые ограничения.
     const failedKey = parsed.error.issues[0]?.path[0];
 
     return {
