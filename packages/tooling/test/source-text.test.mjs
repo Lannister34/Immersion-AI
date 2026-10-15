@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { REPOSITORY, repositoryGit } from './repository-git.mjs';
 
-const REPOSITORY = fileURLToPath(new URL('../../../', import.meta.url));
 const TAB = 0x09;
 const LINE_FEED = 0x0a;
 const CARRIAGE_RETURN = 0x0d;
@@ -30,17 +28,10 @@ function findControlBytes(content) {
   return found;
 }
 
-function git(args, input) {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith('GIT_')));
-  const result = spawnSync('git', args, { cwd: REPOSITORY, encoding: 'utf8', env, input, maxBuffer: 64 * 1024 * 1024 });
-  assert.equal(result.status, 0, `git ${args.join(' ')} failed: ${result.stderr}`);
-  return result.stdout;
-}
-
 function trackedTextFiles() {
-  const files = git(['ls-files', '-z']).split('\0').filter(Boolean);
+  const files = repositoryGit(['ls-files', '-z']).split('\0').filter(Boolean);
   const declaredBinary = new Set(
-    git(['check-attr', '--stdin', '-z', 'text'], files.join('\0'))
+    repositoryGit(['check-attr', '--stdin', '-z', 'text'], files.join('\0'))
       .split('\0')
       .reduce((rows, value, index) => {
         if (index % 3 === 0) {

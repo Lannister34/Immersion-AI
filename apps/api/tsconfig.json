@@ -1,8 +1,7 @@
 {
   "extends": "../../packages/tooling/tsconfig/node-app.json",
   "compilerOptions": {
-    "rootDir": "./src",
-    "outDir": "./dist"
+    "noEmit": true
   },
   "include": ["src/**/*"],
   "references": [
