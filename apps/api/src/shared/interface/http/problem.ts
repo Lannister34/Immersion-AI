@@ -1,7 +1,7 @@
 import { ApiProblemSchema } from '@immersion/contracts/common';
 import { ZodError } from 'zod';
 
-import { UnsafeRepositoryFileIdError } from '../../../lib/contained-path.js';
+import { UnsafeRepositoryFileIdError } from '../../../platform/storage/contained-path.js';
 
 export interface ProblemReply {
   statusCode: number;

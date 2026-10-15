@@ -1,4 +1,5 @@
-import { getSharedApiLogger } from '../../../lib/logger.js';
+import { createSerialQueue } from '../../../platform/concurrency/serial-queue.js';
+import { getSharedApiLogger } from '../../../platform/logging/shared-api-logger.js';
 import type {
   ChatFileStatRecord,
   ChatSearchTextRecord,
@@ -42,7 +43,7 @@ function matchesNeedle(searchText: ChatSearchTextRecord, needle: string): boolea
 
 export class InMemoryChatIndex {
   private readonly slots = new Map<string, ChatIndexSlot>();
-  private refreshQueue: Promise<void> = Promise.resolve();
+  private readonly refreshQueue = createSerialQueue();
 
   constructor(private readonly source: ChatIndexSourcePort) {}
 
@@ -83,10 +84,7 @@ export class InMemoryChatIndex {
   }
 
   private refresh(): Promise<void> {
-    const run = this.refreshQueue.catch(() => undefined).then(() => this.refreshFromFiles());
-    this.refreshQueue = run;
-
-    return run;
+    return this.refreshQueue.run(() => this.refreshFromFiles());
   }
 
   private async refreshFromFiles(): Promise<void> {

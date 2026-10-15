@@ -5,8 +5,8 @@ import path from 'node:path';
 import type { ScenarioDetailDto, ScenarioSummaryDto } from '@immersion/contracts/scenarios';
 
 import { readDataRoot } from '../../../config/read-api-config.js';
-import { writeJsonFileAtomically } from '../../../lib/atomic-file.js';
-import { resolveContainedFilePath } from '../../../lib/contained-path.js';
+import { writeJsonFileAtomically } from '../../../platform/storage/atomic-file.js';
+import { resolveContainedFilePath } from '../../../platform/storage/contained-path.js';
 
 const SCENARIOS_DIRECTORY = 'scenarios';
 const FILE_EXTENSION = '.json';

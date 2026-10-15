@@ -3,8 +3,9 @@ import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 
 import { readDataRoot } from '../../config/read-api-config.js';
-import { writeJsonFileAtomically } from '../../lib/atomic-file.js';
-import { getSharedApiLogger } from '../../lib/logger.js';
+import { createSerialQueue } from '../../platform/concurrency/serial-queue.js';
+import { getSharedApiLogger } from '../../platform/logging/shared-api-logger.js';
+import { writeJsonFileAtomically } from '../../platform/storage/atomic-file.js';
 
 function readJsonObject(filePath: string) {
   if (!fs.existsSync(filePath)) {
@@ -42,10 +43,10 @@ export type LegacyUserSettingsMutator = (
   current: Record<string, unknown>,
 ) => Record<string, unknown> | Promise<Record<string, unknown>>;
 
-let userSettingsWriteQueue: Promise<unknown> = Promise.resolve();
+const userSettingsWriteQueue = createSerialQueue();
 
 export async function updateLegacyUserSettingsSource(mutate: LegacyUserSettingsMutator) {
-  const operation = async () => {
+  return userSettingsWriteQueue.run(async () => {
     const filePath = resolveLegacyUserSettingsPath();
     const next = await mutate(readJsonObject(filePath));
 
@@ -53,13 +54,7 @@ export async function updateLegacyUserSettingsSource(mutate: LegacyUserSettingsM
     await writeJsonFileAtomically(filePath, next);
 
     return next;
-  };
-
-  const run = userSettingsWriteQueue.catch(() => undefined).then(operation);
-
-  userSettingsWriteQueue = run;
-
-  return run;
+  });
 }
 
 export function readLegacyAppSettingsSource() {

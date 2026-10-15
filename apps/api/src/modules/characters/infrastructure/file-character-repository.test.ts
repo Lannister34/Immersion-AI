@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getSharedApiLogger } from '../../../lib/logger.js';
+import { getSharedApiLogger } from '../../../platform/logging/shared-api-logger.js';
 import { failFileStatOf } from '../../../test-support/failing-file-stat.js';
 import { findCharacterAvatarFilePath } from './file-character-repository.js';
 

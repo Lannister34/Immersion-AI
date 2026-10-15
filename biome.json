@@ -77,5 +77,27 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["apps/api/src/platform/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/modules/**", "**/shared/**", "**/routes/**", "**/app.js", "**/server.js"],
+                    "message": "A platform primitive knows no feature module: platform/ imports only config/, other platform/ files and test support (ADR-0004, decision 7)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

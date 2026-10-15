@@ -4,10 +4,11 @@ import path from 'node:path';
 import { ChatGenerationSettingsDtoSchema } from '@immersion/contracts/chats';
 
 import { readDataRoot } from '../../../config/read-api-config.js';
-import { writeFileAtomically } from '../../../lib/atomic-file.js';
-import { resolveContainedFilePath } from '../../../lib/contained-path.js';
-import { isErrnoCode } from '../../../lib/errno-code.js';
-import { getSharedApiLogger } from '../../../lib/logger.js';
+import { createKeyedSerialQueue } from '../../../platform/concurrency/keyed-serial-queue.js';
+import { isErrnoCode } from '../../../platform/errno-code.js';
+import { getSharedApiLogger } from '../../../platform/logging/shared-api-logger.js';
+import { writeFileAtomically } from '../../../platform/storage/atomic-file.js';
+import { resolveContainedFilePath } from '../../../platform/storage/contained-path.js';
 import {
   ChatLastMessageChangedError,
   ChatTitleConflictError,
@@ -40,7 +41,7 @@ import { joinContinuationContent } from '../application/continuation-content.js'
 import { deriveLastMessagePreview } from '../application/last-message-preview.js';
 
 const GENERIC_CHAT_DIRECTORY = '_no_character_';
-const chatWriteQueues = new Map<string, Promise<unknown>>();
+const chatWriteQueue = createKeyedSerialQueue<string>();
 const DEFAULT_CHAT_TITLE_PREFIX = 'Новый чат';
 
 interface StoredChatMetadata {
@@ -148,21 +149,6 @@ export async function readChatAttachmentFile(chatId: string, attachmentId: strin
 
 export async function deleteChatAttachmentFiles(chatId: string): Promise<void> {
   await fs.rm(resolveChatAttachmentsDirectory(chatId), { force: true, recursive: true });
-}
-
-async function withChatWriteQueue<T>(chatId: string, operation: () => Promise<T>): Promise<T> {
-  const previous = chatWriteQueues.get(chatId) ?? Promise.resolve();
-  const next = previous.catch(() => undefined).then(operation);
-
-  chatWriteQueues.set(chatId, next);
-
-  try {
-    return await next;
-  } finally {
-    if (chatWriteQueues.get(chatId) === next) {
-      chatWriteQueues.delete(chatId);
-    }
-  }
 }
 
 function parseJsonRecord(line: string, filePath: string, lineNumber: number) {
@@ -601,7 +587,7 @@ export class FileChatRepository implements ChatRepository {
     messages: AppendChatMessageInput[],
     options?: { requireEmptyTranscript?: boolean },
   ) {
-    return withChatWriteQueue(chatId, async () => {
+    return chatWriteQueue.run(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 
       if (!currentSession) {
@@ -638,7 +624,7 @@ export class FileChatRepository implements ChatRepository {
   }
 
   async appendContinuationToLastAssistantMessage(chatId: string, input: AppendContinuationToLastAssistantMessageInput) {
-    return withChatWriteQueue(chatId, async () => {
+    return chatWriteQueue.run(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 
       if (!currentSession) {
@@ -688,7 +674,7 @@ export class FileChatRepository implements ChatRepository {
   }
 
   async forkGenericChat(input: ForkGenericChatInput): Promise<ChatSummaryRecord | null> {
-    return withChatWriteQueue(input.sourceChatId, async () => {
+    return chatWriteQueue.run(input.sourceChatId, async () => {
       const sourceSession = await readChatFile(input.sourceChatId);
       if (!sourceSession) {
         return null;
@@ -732,7 +718,7 @@ export class FileChatRepository implements ChatRepository {
   }
 
   async deleteGenericChat(chatId: string): Promise<boolean> {
-    return withChatWriteQueue(chatId, async () => {
+    return chatWriteQueue.run(chatId, async () => {
       const filePath = resolveChatFilePath(chatId);
       try {
         await fs.unlink(filePath);
@@ -887,7 +873,7 @@ export class FileChatRepository implements ChatRepository {
   }
 
   async updateGenericChatGenerationSettings(chatId: string, settings: ChatGenerationSettingsRecord, updatedAt: string) {
-    return withChatWriteQueue(chatId, async () => {
+    return chatWriteQueue.run(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 
       if (!currentSession) {
@@ -914,7 +900,7 @@ export class FileChatRepository implements ChatRepository {
   }
 
   async updateGenericChatLorebooks(chatId: string, lorebookIds: string[], updatedAt: string) {
-    return withChatWriteQueue(chatId, async () => {
+    return chatWriteQueue.run(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 
       if (!currentSession) {
@@ -950,7 +936,7 @@ export class FileChatRepository implements ChatRepository {
     updatedAt: string,
     options?: { expectedCurrentTitle?: string },
   ) {
-    return withChatWriteQueue(chatId, async () => {
+    return chatWriteQueue.run(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 
       if (!currentSession) {
@@ -998,7 +984,7 @@ export class FileChatRepository implements ChatRepository {
     },
     updatedAt: string,
   ) {
-    return withChatWriteQueue(chatId, async () => {
+    return chatWriteQueue.run(chatId, async () => {
       const currentSession = await readChatFile(chatId);
       if (!currentSession) {
         return null;
@@ -1058,7 +1044,7 @@ export class FileChatRepository implements ChatRepository {
   }
 
   async updateGenericChatMessage(chatId: string, messageIndex: number, content: string, updatedAt: string) {
-    return withChatWriteQueue(chatId, async () => {
+    return chatWriteQueue.run(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 
       if (!currentSession) {
@@ -1105,7 +1091,7 @@ export class FileChatRepository implements ChatRepository {
   }
 
   async deleteGenericChatMessage(chatId: string, messageIndex: number, updatedAt: string) {
-    return withChatWriteQueue(chatId, async () => {
+    return chatWriteQueue.run(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 
       if (!currentSession) {
@@ -1145,7 +1131,7 @@ export class FileChatRepository implements ChatRepository {
     updatedAt: string,
     options: TruncateGenericChatMessagesOptions = {},
   ) {
-    return withChatWriteQueue(chatId, async () => {
+    return chatWriteQueue.run(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 
       if (!currentSession) {
