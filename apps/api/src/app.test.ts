@@ -8,8 +8,16 @@ import { SettingsOverviewResponseSchema } from '@immersion/contracts/settings';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildApiApp } from './app.js';
+import { parseApiConfig } from './config/api-config.js';
+import { findProjectRoot } from './config/find-project-root.js';
 
 const fixtureDataRoot = fileURLToPath(new URL('../testdata/smoke-data', import.meta.url));
+
+function buildConfiguredApp(environment: Record<string, string>) {
+  return buildApiApp(
+    parseApiConfig({ IMMERSION_DATA_ROOT: fixtureDataRoot, ...environment }, findProjectRoot(import.meta.dirname)),
+  );
+}
 
 describe('buildApiApp', () => {
   let previousDataRoot: string | undefined;
@@ -56,6 +64,49 @@ describe('buildApiApp', () => {
 
     expect(response.statusCode).toBe(302);
     expect(response.headers.location).toBe('http://192.168.31.216:4788/chat');
+
+    await app.close();
+  });
+
+  it('redirects the API root to the configured web port', async () => {
+    const app = buildConfiguredApp({ IMMERSION_WEB_PORT: '5173' });
+    const response = await app.inject({
+      headers: {
+        host: '127.0.0.1:4787',
+      },
+      method: 'GET',
+      url: '/',
+    });
+
+    expect(response.statusCode).toBe(302);
+    expect(response.headers.location).toBe('http://127.0.0.1:5173/chat');
+
+    await app.close();
+  });
+
+  it('allows cross-origin calls from the configured web origins only', async () => {
+    const app = buildConfiguredApp({ IMMERSION_WEB_PORT: '5173' });
+    const allowed = await app.inject({
+      headers: { origin: 'http://127.0.0.1:5173' },
+      method: 'GET',
+      url: '/health',
+    });
+    const refused = await app.inject({
+      headers: { origin: 'http://127.0.0.1:4173' },
+      method: 'GET',
+      url: '/health',
+    });
+
+    expect(allowed.headers['access-control-allow-origin']).toBe('http://127.0.0.1:5173');
+    expect(refused.headers['access-control-allow-origin']).toBeUndefined();
+
+    await app.close();
+  });
+
+  it('creates its logger at the configured level', async () => {
+    const app = buildConfiguredApp({ IMMERSION_LOG_LEVEL: 'silent' });
+
+    expect(app.log.level).toBe('silent');
 
     await app.close();
   });

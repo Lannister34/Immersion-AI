@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 
+import { readDataRoot } from '../../config/read-api-config.js';
 import { writeJsonFileAtomically } from '../../lib/atomic-file.js';
-import { resolveDataRoot } from '../../lib/data-root.js';
 import { getSharedApiLogger } from '../../lib/logger.js';
 
 function readJsonObject(filePath: string) {
@@ -31,7 +31,7 @@ function readJsonObject(filePath: string) {
 }
 
 function resolveLegacyUserSettingsPath() {
-  return path.join(resolveDataRoot(), 'user-settings.json');
+  return path.join(readDataRoot(), 'user-settings.json');
 }
 
 export function readLegacyUserSettingsSource() {
@@ -63,5 +63,5 @@ export async function updateLegacyUserSettingsSource(mutate: LegacyUserSettingsM
 }
 
 export function readLegacyAppSettingsSource() {
-  return readJsonObject(path.join(resolveDataRoot(), 'settings.json'));
+  return readJsonObject(path.join(readDataRoot(), 'settings.json'));
 }

@@ -4,9 +4,9 @@ import path from 'node:path';
 
 import type { ScenarioDetailDto, ScenarioSummaryDto } from '@immersion/contracts/scenarios';
 
+import { readDataRoot } from '../../../config/read-api-config.js';
 import { writeJsonFileAtomically } from '../../../lib/atomic-file.js';
 import { resolveContainedFilePath } from '../../../lib/contained-path.js';
-import { resolveDataRoot } from '../../../lib/data-root.js';
 
 const SCENARIOS_DIRECTORY = 'scenarios';
 const FILE_EXTENSION = '.json';
@@ -22,7 +22,7 @@ interface StoredScenario {
 }
 
 function resolveScenariosDirectory() {
-  return path.join(resolveDataRoot(), SCENARIOS_DIRECTORY);
+  return path.join(readDataRoot(), SCENARIOS_DIRECTORY);
 }
 
 function asString(value: unknown): string | null {

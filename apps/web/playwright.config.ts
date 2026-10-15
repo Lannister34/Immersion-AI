@@ -29,6 +29,7 @@ export default defineConfig({
       cwd: fileURLToPath(new URL('../..', import.meta.url)),
       env: {
         IMMERSION_API_PORT: '4797',
+        IMMERSION_WEB_PORT: '4173',
         IMMERSION_DATA_ROOT: smokeDataDirectory,
       },
       reuseExistingServer: false,

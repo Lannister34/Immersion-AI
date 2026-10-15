@@ -4,9 +4,9 @@ import path from 'node:path';
 
 import type { LorebookDetailDto, LorebookEntryDto, LorebookSummaryDto } from '@immersion/contracts/lorebooks';
 
+import { readDataRoot } from '../../../config/read-api-config.js';
 import { writeJsonFileAtomically } from '../../../lib/atomic-file.js';
 import { resolveContainedFilePath } from '../../../lib/contained-path.js';
-import { resolveDataRoot } from '../../../lib/data-root.js';
 
 const LOREBOOKS_DIRECTORY = 'worlds';
 const FILE_EXTENSION = '.json';
@@ -28,7 +28,7 @@ interface StoredLorebook {
 }
 
 function resolveLorebooksDirectory() {
-  return path.join(resolveDataRoot(), LOREBOOKS_DIRECTORY);
+  return path.join(readDataRoot(), LOREBOOKS_DIRECTORY);
 }
 
 function asString(value: unknown): string | null {
