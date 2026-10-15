@@ -1,16 +1,13 @@
-import { ChatIdSchema } from '@immersion/contracts/chats';
 import { ApiProblemSchema } from '@immersion/contracts/common';
 import {
   ChatReplyGenerationErrorResponseSchema,
   ChatReplyPromptPreviewCommandSchema,
   ChatReplyPromptPreviewResponseSchema,
   GenerationJobEventSchema,
-  GenerationJobIdSchema,
   GenerationJobResponseSchema,
   ListGenerationJobsResponseSchema,
 } from '@immersion/contracts/generation';
 import type { FastifyPluginAsync } from 'fastify';
-import { z } from 'zod';
 
 import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
 import { ChatMessageNotFoundError, ChatNotFoundError } from '../../../chats/application/append-chat-messages.js';
@@ -43,14 +40,7 @@ import { previewChatReplyPrompt } from '../../application/preview-chat-reply-pro
 import { regenerateChatReplyJob } from '../../application/regenerate-chat-reply-job.js';
 import { startChatReplyGenerationJob } from '../../application/start-chat-reply-generation-job.js';
 import { InMemoryGenerationJobRegistry } from '../../infrastructure/in-memory-generation-job-registry.js';
-
-const GenerationJobRouteParamsSchema = z.object({
-  jobId: GenerationJobIdSchema,
-});
-
-const GenerationJobsQuerySchema = z.object({
-  chatId: ChatIdSchema.optional(),
-});
+import { GenerationJobRouteParamsSchema, GenerationJobsQuerySchema } from './request-schemas.js';
 
 const toProblem = createToProblem((error) => {
   if (error instanceof ChatNotFoundError) {

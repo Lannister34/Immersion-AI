@@ -1,7 +1,5 @@
 import {
   BranchChatCommandSchema,
-  ChatAttachmentIdSchema,
-  ChatIdSchema,
   CreateChatCommandSchema,
   ImportChatCommandSchema,
   UpdateChatBindingsCommandSchema,
@@ -10,7 +8,6 @@ import {
   UpdateChatTitleCommandSchema,
 } from '@immersion/contracts/chats';
 import type { FastifyPluginAsync } from 'fastify';
-import { z } from 'zod';
 import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
 import { CharacterNotFoundError } from '../../../characters/index.js';
 import { ScenarioNotFoundError } from '../../../scenarios/index.js';
@@ -38,28 +35,13 @@ import {
 import { updateChatLorebooks } from '../../application/update-chat-lorebooks.js';
 import { updateChatMessage } from '../../application/update-chat-message.js';
 import { updateChatTitle } from '../../application/update-chat-title.js';
-
-const ChatRouteParamsSchema = z.object({
-  chatId: ChatIdSchema,
-});
-
-const ChatAttachmentRouteParamsSchema = z.object({
-  attachmentId: ChatAttachmentIdSchema,
-  chatId: ChatIdSchema,
-});
-
-const ChatMessageRouteParamsSchema = z.object({
-  chatId: ChatIdSchema,
-  messageIndex: z.coerce.number().int().positive(),
-});
-
-const DeleteChatMessageQuerySchema = z.object({
-  mode: z.enum(['single', 'from-here']).default('single'),
-});
-
-const ChatListQuerySchema = z.object({
-  q: z.string().trim().max(200).optional(),
-});
+import {
+  ChatAttachmentRouteParamsSchema,
+  ChatListQuerySchema,
+  ChatMessageRouteParamsSchema,
+  ChatRouteParamsSchema,
+  DeleteChatMessageQuerySchema,
+} from './request-schemas.js';
 
 const toProblem = createToProblem((error) => {
   if (error instanceof ChatNotFoundError) {

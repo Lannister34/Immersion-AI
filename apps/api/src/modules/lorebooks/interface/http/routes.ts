@@ -1,20 +1,12 @@
-import {
-  LorebookDetailResponseSchema,
-  LorebookIdSchema,
-  SaveLorebookCommandSchema,
-} from '@immersion/contracts/lorebooks';
+import { LorebookDetailResponseSchema, SaveLorebookCommandSchema } from '@immersion/contracts/lorebooks';
 import type { FastifyPluginAsync } from 'fastify';
-import { z } from 'zod';
 
 import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
 import { deleteLorebook } from '../../application/delete-lorebook.js';
 import { getLorebook, LorebookNotFoundError } from '../../application/get-lorebook.js';
 import { listLorebooks } from '../../application/list-lorebooks.js';
 import { createLorebook, updateLorebook } from '../../application/save-lorebook.js';
-
-const LorebookRouteParamsSchema = z.object({
-  lorebookId: LorebookIdSchema,
-});
+import { LorebookRouteParamsSchema } from './request-schemas.js';
 
 const toProblem = createToProblem((error) => {
   if (error instanceof LorebookNotFoundError) {

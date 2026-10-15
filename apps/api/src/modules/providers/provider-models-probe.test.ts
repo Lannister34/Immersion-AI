@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { probeProviderModels } from './application/test-provider-connection.js';
+import { probeProviderModels } from './application/probe-provider-models.js';
 import { getProviderApiKind, getProviderDefaultModel, isProviderApiKeyRequired } from './domain/provider-catalog.js';
 
 interface CapturedCall {

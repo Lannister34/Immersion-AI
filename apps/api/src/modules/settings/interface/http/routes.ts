@@ -6,7 +6,6 @@ import {
   UpsertModelBindingCommandSchema,
 } from '@immersion/contracts/settings';
 import type { FastifyPluginAsync } from 'fastify';
-import { z } from 'zod';
 
 import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
 import { getSettingsOverview } from '../../application/get-settings-overview.js';
@@ -24,6 +23,7 @@ import {
   updateSamplerPreset,
 } from '../../application/sampler-preset-mutations.js';
 import { updateSettingsProfile } from '../../application/update-settings-profile.js';
+import { ModelBindingRouteParamsSchema, PresetRouteParamsSchema } from './request-schemas.js';
 
 const toProblem = createToProblem((error) => {
   if (error instanceof SamplerPresetNotFoundError) {
@@ -39,10 +39,6 @@ const toProblem = createToProblem((error) => {
   }
 
   return null;
-});
-
-const PresetRouteParamsSchema = z.object({
-  presetId: z.string().trim().min(1),
 });
 
 export const settingsRoutes: FastifyPluginAsync = async (app) => {
@@ -103,10 +99,6 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
       const mapped = toProblem(error);
       return reply.status(mapped.statusCode).send(mapped.body);
     }
-  });
-
-  const ModelBindingRouteParamsSchema = z.object({
-    modelName: z.string().trim().min(1),
   });
 
   app.put('/sampler/bindings/:modelName', async (request, reply) => {

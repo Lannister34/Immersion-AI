@@ -3,7 +3,10 @@ import {
   readLegacyUserSettingsSource,
   updateLegacyUserSettingsSource,
 } from '../../../shared/infrastructure/legacy-settings-source.js';
-import { normalizeStoredProviderSettings, type StoredUserSettingsRecord } from '../domain/provider-settings.js';
+import {
+  normalizeStoredProviderSettings,
+  type StoredUserSettingsRecord,
+} from '../domain/normalize-stored-provider-settings.js';
 
 export type ProviderSettingsChange = (current: UpdateProviderSettingsCommand) => UpdateProviderSettingsCommand;
 

@@ -4,7 +4,8 @@ import { createToProblem } from '../../../../shared/interface/http/problem.js';
 import { getProviderSettings } from '../../application/get-provider-settings.js';
 import { getProvidersOverview } from '../../application/get-providers-overview.js';
 import { patchProviderSettings } from '../../application/patch-provider-settings.js';
-import { probeProviderModels, testProviderConnection } from '../../application/test-provider-connection.js';
+import { probeProviderModels } from '../../application/probe-provider-models.js';
+import { testProviderConnection } from '../../application/test-provider-connection.js';
 import { updateProviderSettings } from '../../application/update-provider-settings.js';
 import { providerDefinitions } from '../../domain/provider-catalog.js';
 
