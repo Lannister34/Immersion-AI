@@ -17,10 +17,11 @@ import {
   ListGenerationJobsResponseSchema,
   StartChatReplyGenerationJobResponseSchema,
 } from '@immersion/contracts/generation';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 
 import { buildApiApp } from './app.js';
 import { appendChatMessages } from './modules/chats/application/append-chat-messages.js';
+import { getProviderVisionProbe } from './modules/providers/index.js';
 
 const fixtureDataRoot = fileURLToPath(new URL('../testdata/smoke-data', import.meta.url));
 
@@ -114,6 +115,7 @@ interface SmokeUserSettingsFixture {
 describe('generation routes', () => {
   let previousDataRoot: string | undefined;
   let temporaryDataRoot: string;
+  let visionSupportProbe: MockInstance<ReturnType<typeof getProviderVisionProbe>['getVisionSupport']>;
   const originalFetch = globalThis.fetch;
 
   beforeEach(async () => {
@@ -122,6 +124,7 @@ describe('generation routes', () => {
     await fs.cp(fixtureDataRoot, temporaryDataRoot, { recursive: true });
     process.env.IMMERSION_DATA_ROOT = temporaryDataRoot;
     await writeExternalProviderSettings('http://127.0.0.1:6006');
+    visionSupportProbe = vi.spyOn(getProviderVisionProbe(), 'getVisionSupport').mockResolvedValue('unknown');
   });
 
   afterEach(async () => {
@@ -380,7 +383,8 @@ describe('generation routes', () => {
     throw new Error(`Generation job ${jobId} did not reach status ${expectedStatus}.`);
   }
 
-  it('reports generation readiness for a configured external provider', async () => {
+  it('reports generation readiness for a configured external provider with the vision support its probe found', async () => {
+    visionSupportProbe.mockResolvedValue('supported');
     const app = buildApiApp();
     const response = await app.inject({
       method: 'GET',
@@ -389,12 +393,18 @@ describe('generation routes', () => {
     const payload = GenerationReadinessResponseSchema.parse(response.json());
 
     expect(response.statusCode).toBe(200);
-    expect(payload).toMatchObject({
+    expect(payload).toEqual({
       activeProvider: 'custom',
       issue: null,
       mode: 'external',
       runtime: null,
       status: 'ready',
+      visionSupport: 'supported',
+    });
+    expect(visionSupportProbe).toHaveBeenCalledWith({
+      baseUrl: 'http://127.0.0.1:6006',
+      model: 'smoke-model',
+      provider: 'custom',
     });
 
     await app.close();
