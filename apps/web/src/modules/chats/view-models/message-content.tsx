@@ -1,17 +1,14 @@
 import type { MessageFormatting } from '@immersion/contracts/settings';
 import type { ReactNode } from 'react';
 
+import { ACTION_PATTERN, BOLD_PATTERN, CODE_PATTERN, QUOTE_PATTERN } from './message-markup-patterns';
+
 type SegmentRenderer = (inner: string, key: string) => ReactNode;
 
 export const DEFAULT_MESSAGE_FORMATTING: MessageFormatting = {
   actionsItalic: true,
   quotesHighlighted: false,
 };
-
-const CODE_PATTERN = /`([^`\n]+)`/g;
-const BOLD_PATTERN = /\*\*([\s\S]+?)\*\*/g;
-const ACTION_PATTERN = /\*([^*]+?)\*/g;
-const QUOTE_PATTERN = /[«"]([^«»"\n]+)[»"]/g;
 
 function splitSegments(nodes: ReactNode[], pattern: RegExp, render: SegmentRenderer): ReactNode[] {
   const result: ReactNode[] = [];
@@ -72,16 +69,4 @@ export function renderMessageContent(
   }
 
   return nodes;
-}
-
-const DANGLING_MARKUP_PATTERN = /(?<=\S)[*`]|[*`](?=\S)/gu;
-
-export function stripMessageMarkup(text: string): string {
-  return text
-    .replace(CODE_PATTERN, '$1')
-    .replace(BOLD_PATTERN, '$1')
-    .replace(ACTION_PATTERN, '$1')
-    .replace(DANGLING_MARKUP_PATTERN, '')
-    .replace(/\s+/gu, ' ')
-    .trim();
 }

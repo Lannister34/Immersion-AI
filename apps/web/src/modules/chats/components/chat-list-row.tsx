@@ -5,7 +5,7 @@ import { formatRelative } from '../../../shared/lib/format-relative';
 import { Avatar } from '../../../shared/ui/avatar';
 import { TrashIcon, XIcon } from '../../../shared/ui/icons';
 import { useDeleteChat } from '../mutations/use-delete-chat';
-import { stripMessageMarkup } from '../view-models/message-content';
+import { stripMessageMarkup } from '../view-models/strip-message-markup';
 
 export interface ChatListRowProps {
   chat: ChatSummaryDto;
