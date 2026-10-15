@@ -29,7 +29,6 @@ async function generationSettingsSaved(page: Page, isTheSave: (body: ChatGenerat
 
 test.describe.configure({ mode: 'serial' });
 
-/** Название чата — заголовок экрана; рядом с ним живёт кнопка переименования. */
 function chatTitle(page: Page) {
   return page.getByRole('heading', { level: 1 });
 }
@@ -60,14 +59,13 @@ test('redirects root to chats and exposes the full sidebar navigation', async ({
   await expect(page.getByRole('link', { name: 'API / Сервер' })).toBeVisible();
 });
 
-test('shows the LLM-runtime page with the LLM-runtime heading and mode switcher', async ({ page }) => {
+test('shows the LLM-runtime page with its mode switcher and the server logs of the built-in mode', async ({ page }) => {
   await page.goto('/server');
 
   await expect(page.getByRole('heading', { exact: true, name: 'LLM-runtime' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Встроенный' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Внешний API' })).toBeVisible();
 
-  // Карточка логов живёт только во встроенном режиме; фикстура стартует во внешнем.
   await page.getByRole('button', { name: 'Встроенный' }).click();
 
   const logsToggle = page.getByRole('button', { name: /Логи сервера/ });
@@ -93,10 +91,9 @@ test('adds and removes a models directory on /server without a save step, keepin
   await page.getByRole('button', { name: 'Добавить' }).click();
   expect((await addedConfig).status()).toBe(200);
 
-  // Шапка таблицы моделей переключается на счётчик каталогов после сохранения.
   await expect(page.getByText('2 каталога')).toBeVisible();
-  // Каталог из фикстуры существует, добавленный — нет: ровно один бейдж «не найден».
-  await expect(page.getByText('не найден', { exact: true })).toHaveCount(1);
+  const missingDirectoryBadges = page.getByText('не найден', { exact: true });
+  await expect(missingDirectoryBadges).toHaveCount(1);
 
   await page.reload();
   await page.getByRole('button', { name: 'Параметры' }).click();
@@ -222,7 +219,6 @@ test('overrides a model parameter and chat instructions from the settings panel'
   await page.locator('#chat-additional-instructions').fill('Отвечай коротко.');
   await savedInstructions;
 
-  // После перезагрузки панель открывается на «Модели»: вкладка — состояние сеанса, а не URL.
   await page.reload();
   const contextTab = page.getByRole('button', { name: 'Контекст', exact: true });
   await expect(contextTab).toBeVisible({ timeout: 10_000 });
@@ -230,7 +226,7 @@ test('overrides a model parameter and chat instructions from the settings panel'
   await expect(page.locator('#chat-additional-instructions')).toHaveValue('Отвечай коротко.');
 });
 
-test('creates a character together with the avatar picked before the first save', async ({ page }) => {
+test('creates a character together with the avatar picked before the first save, then deletes it', async ({ page }) => {
   await page.goto('/characters/new');
 
   await page.locator('#character-name').fill('Смоук аватар');
@@ -251,7 +247,6 @@ test('creates a character together with the avatar picked before the first save'
   const cardLink = page.getByRole('link', { name: 'Открыть карточку: Смоук аватар' });
   await expect(cardLink).toBeVisible();
 
-  // Прибираем за собой: смоук-фикстура переживает весь прогон целиком.
   await cardLink.click();
   await expect(page).toHaveURL(/\/characters\/.+/);
   await expect(page.locator('#character-name')).toHaveValue('Смоук аватар');

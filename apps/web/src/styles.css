@@ -1,8 +1,6 @@
-/* Immersion AI — design tokens (ported from docs/design/source/project/styles/tokens.css) */
 :root {
   color-scheme: dark;
 
-  /* Background ramp — neutral, very low chroma cool */
   --bg: oklch(0.155 0.004 270);
   --bg-2: oklch(0.185 0.004 270);
   --surface: oklch(0.215 0.005 270);
@@ -11,20 +9,17 @@
   --hairline: oklch(0.3 0.006 270 / 0.7);
   --hairline-strong: oklch(0.38 0.008 270);
 
-  /* Text ramp */
   --text: oklch(0.96 0.005 270);
   --text-1: oklch(0.86 0.008 270);
   --muted: oklch(0.66 0.01 270);
   --muted-dim: oklch(0.5 0.01 270);
   --muted-faint: oklch(0.38 0.008 270);
 
-  /* Accent — refined violet */
   --accent: oklch(0.72 0.18 295);
   --accent-2: oklch(0.66 0.2 295);
   --accent-soft: oklch(0.72 0.18 295 / 0.16);
   --accent-fg: oklch(0.99 0 0);
 
-  /* Status */
   --ok: oklch(0.78 0.16 155);
   --ok-soft: oklch(0.78 0.16 155 / 0.18);
   --warn: oklch(0.82 0.16 75);
@@ -33,18 +28,15 @@
   --danger-soft: oklch(0.7 0.2 25 / 0.18);
   --info: oklch(0.78 0.13 230);
 
-  /* Radii */
   --r-xs: 4px;
   --r-sm: 6px;
   --r-md: 10px;
   --r-lg: 14px;
   --r-xl: 20px;
 
-  /* Shadows */
   --shadow-1: 0 1px 0 0 oklch(1 0 0 / 0.04) inset, 0 1px 2px oklch(0 0 0 / 0.4);
   --shadow-2: 0 12px 40px oklch(0 0 0 / 0.55), 0 1px 0 0 oklch(1 0 0 / 0.04) inset;
 
-  /* Type */
   --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
@@ -99,9 +91,6 @@ input,
 textarea,
 select {
   font: inherit;
-  /* letter-spacing поля не наследуют: у textarea остаётся normal, и подложка
-     подсветки {{user}}/{{char}} расходится с текстом тем сильнее, чем длиннее
-     строка. */
   letter-spacing: inherit;
   word-spacing: inherit;
 }
@@ -160,7 +149,6 @@ select:disabled {
   letter-spacing: 0.02em;
 }
 
-/* Shell artboard frame */
 .frame {
   display: grid;
   grid-template-columns: 224px minmax(0, 1fr);
@@ -185,7 +173,6 @@ select:disabled {
   grid-template-columns: 56px minmax(0, 1fr);
 }
 
-/* Sidebar */
 .sb {
   background: var(--bg-2);
   border-right: 1px solid var(--hairline);
@@ -375,7 +362,6 @@ select:disabled {
   color: var(--text);
 }
 
-/* Status dot */
 .dot {
   width: 8px;
   height: 8px;
@@ -432,7 +418,6 @@ select:disabled {
   }
 }
 
-/* Main */
 .main {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -477,7 +462,6 @@ select:disabled {
   text-decoration: none;
 }
 
-/* Действия на карточке персонажа проявляются при наведении или фокусе. */
 .char-card__actions {
   opacity: 0;
   transition: opacity 0.15s ease;
@@ -525,7 +509,6 @@ select:disabled {
   color: var(--muted-dim);
 }
 
-/* Buttons */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -590,7 +573,6 @@ select:disabled {
   font-size: var(--fz-xs);
 }
 
-/* Pills / badges */
 .pill {
   display: inline-flex;
   align-items: center;
@@ -648,7 +630,6 @@ select:disabled {
   border: 1px solid var(--hairline);
 }
 
-/* Card */
 .card {
   background: var(--surface);
   border: 1px solid var(--hairline);
@@ -660,7 +641,6 @@ select:disabled {
   background: var(--surface-2);
 }
 
-/* Page */
 .page {
   display: grid;
   min-height: 0;
@@ -709,7 +689,6 @@ select:disabled {
   padding: 14px 22px 22px;
 }
 
-/* Filters bar */
 .filters {
   display: flex;
   align-items: center;
@@ -736,7 +715,6 @@ select:disabled {
   background: var(--accent-soft);
 }
 
-/* Section heading */
 .section-h {
   display: flex;
   align-items: center;
@@ -756,7 +734,6 @@ select:disabled {
   margin: 8px 0;
 }
 
-/* Avatar */
 .avatar {
   border-radius: 50%;
   background: var(--surface-2);
@@ -805,7 +782,6 @@ select:disabled {
   font-size: var(--fz-2xl);
 }
 
-/* Generic helpers */
 .row {
   display: flex;
   align-items: center;
@@ -814,8 +790,6 @@ select:disabled {
 
 .col {
   display: grid;
-  /* Колонка не должна раздуваться под самую длинную строку внутри: без
-     minmax(0, …) её ширину задаёт max-content вложенного текста. */
   grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   min-width: 0;
@@ -899,7 +873,6 @@ select:disabled {
   margin-top: 20px;
 }
 
-/* Toggle */
 .toggle {
   display: inline-flex;
   align-items: center;
@@ -933,7 +906,6 @@ select:disabled {
   margin-left: 14px;
 }
 
-/* Token bar */
 .tokenbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -960,7 +932,6 @@ select:disabled {
   background: var(--warn);
 }
 
-/* Table */
 .tbl {
   width: 100%;
   border-collapse: separate;
@@ -988,7 +959,6 @@ select:disabled {
   background: var(--surface);
 }
 
-/* Form fields */
 .field {
   display: grid;
   gap: 4px;
@@ -1024,7 +994,6 @@ select:disabled {
   resize: vertical;
 }
 
-/* Right panel (chat) */
 .rp {
   border-left: 1px solid var(--hairline);
   background: var(--bg-2);
@@ -1081,13 +1050,10 @@ select:disabled {
 .rp__body {
   overflow: auto;
   display: grid;
-  /* Без minmax(0, …) колонка растягивается под самую длинную строку внутри
-     вкладки, и панель начинает ездить вбок вместе с текстом. */
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
 }
 
-/* Панель тянется за левый край; ручка живёт в шапке панели. */
 .rp__resize {
   display: flex;
   align-items: center;
@@ -1109,7 +1075,6 @@ select:disabled {
   color: var(--text-1);
 }
 
-/* Строка параметра модели: имя с подсказкой, значение, возврат к пресету. */
 .rp-param {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto 22px;
@@ -1119,7 +1084,6 @@ select:disabled {
   border-bottom: 1px solid oklch(0.3 0.006 270 / 0.35);
 }
 
-/* Значение с шагом: «−» и «+» меняют его на step поля. */
 .rp-param__stepper {
   display: flex;
   align-items: center;
@@ -1224,7 +1188,6 @@ select:disabled {
   color: var(--text-1);
 }
 
-/* Точка «в этом чате есть своё значение». */
 .mark-dot {
   display: inline-block;
   width: 5px;
@@ -1234,7 +1197,6 @@ select:disabled {
   flex: none;
 }
 
-/* Привязки чата: персонаж, сценарий, лорбуки. */
 .rp-binding {
   display: flex;
   align-items: center;
@@ -1259,7 +1221,6 @@ select:disabled {
   flex: none;
 }
 
-/* Раскрывающийся блок итогового промпта. */
 .disclosure {
   display: flex;
   align-items: center;
@@ -1291,7 +1252,6 @@ select:disabled {
   transform: rotate(90deg);
 }
 
-/* Кнопка-счётчик контекста в шапке чата и её всплывающая статистика. */
 .tokenbtn {
   display: grid;
   grid-template-columns: 200px auto;
@@ -1329,7 +1289,6 @@ select:disabled {
   box-shadow: var(--shadow-2);
 }
 
-/* Bubbles */
 .bubble {
   padding: 10px 14px;
   border-radius: 14px;
@@ -1346,7 +1305,6 @@ select:disabled {
   border: 1px solid transparent;
 }
 
-/* Ползунок параметра генерации: тонкая дорожка и акцентный бегунок. */
 .range {
   appearance: none;
   width: 100%;
@@ -1381,7 +1339,6 @@ select:disabled {
   opacity: 0.4;
 }
 
-/* Поле с подсветкой плейсхолдеров: подложка и ввод делят метрики класса .textarea. */
 .tpl-field {
   position: relative;
 }
@@ -1410,14 +1367,11 @@ select:disabled {
   transition: background 0.12s ease-out;
 }
 
-/* При наведении и во время ввода подсветка ярче: так плейсхолдеры легко найти
-   глазами, но они не спорят с текстом, когда поле просто лежит на экране. */
 .tpl-field:hover .tpl-mark,
 .tpl-field:focus-within .tpl-mark {
   background: oklch(0.72 0.18 295 / 0.45);
 }
 
-/* Действия в *звёздочках* — приглушённый курсив, как принято в ролевых чатах. */
 .bubble__action {
   color: var(--muted);
   font-style: italic;
@@ -1448,8 +1402,6 @@ select:disabled {
   font-size: var(--fz-sm);
 }
 
-/* Message bubble actions reveal on hover or focus, stay visible while a sub-action
-   is open (edit mode, delete confirm, branch input). */
 .bubble-row__actions {
   opacity: 0;
   transition: opacity 120ms ease-out;
@@ -1470,7 +1422,6 @@ select:disabled {
   animation: caret 1s infinite;
 }
 
-/* Empty state */
 .empty {
   display: grid;
   place-items: center;
@@ -1492,7 +1443,6 @@ select:disabled {
   max-width: 420px;
 }
 
-/* Прикреплённые к сообщению картинки: превью в композере и в бабле. */
 .composer-thumb {
   position: relative;
   display: block;

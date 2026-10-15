@@ -11,7 +11,6 @@ echo  ██║██║ ╚═╝ ██║██║ ╚═╝ ██║██�
 echo  ╚═╝╚═╝     ╚═╝╚═╝     ╚═╝╚══════╝╚═╝  ╚═╝╚══════╝╚═╝ ╚═════╝ ╚═╝  ╚═══╝
 echo.
 
-:: Check Node.js
 where node >nul 2>&1
 if %errorlevel% neq 0 (
     echo  [ERROR] Node.js not found. Install it from https://nodejs.org/
@@ -39,7 +38,6 @@ echo  ✓ Ready! Opening http://localhost:4788
 echo  Press Ctrl+C to stop the app.
 echo.
 
-:: Open browser after a short delay
 start "" cmd /c "timeout /t 3 /nobreak >nul && start http://localhost:4788"
 
 echo  [2/2] Starting API and web...
