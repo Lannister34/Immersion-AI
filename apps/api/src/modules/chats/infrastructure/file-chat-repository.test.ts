@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getSharedApiLogger } from '../../../lib/logger.js';
 import { failFileStatOf } from '../../../test-support/failing-file-stat.js';
+import { ChatTranscriptChangedError } from '../application/chat-conflicts.js';
 import { FileChatRepository } from './file-chat-repository.js';
 
 describe('FileChatRepository', () => {
@@ -206,6 +207,94 @@ describe('FileChatRepository', () => {
 
     const session = await repository.getGenericChatSession(chatId);
     expect(session?.messages.map((message) => message.content)).toEqual(['only']);
+  });
+
+  it.each([
+    {
+      name: 'the reply was edited since the read',
+      messagesOnDisk: [
+        { role: 'user' as const, content: 'вопрос' },
+        { role: 'assistant' as const, content: 'ответ после правки' },
+      ],
+      expectedRemovedMessages: [{ role: 'assistant' as const, content: 'ответ' }],
+    },
+    {
+      name: 'a message was appended since the read',
+      messagesOnDisk: [
+        { role: 'user' as const, content: 'вопрос' },
+        { role: 'assistant' as const, content: 'ответ' },
+        { role: 'user' as const, content: 'новый вопрос' },
+      ],
+      expectedRemovedMessages: [{ role: 'assistant' as const, content: 'ответ' }],
+    },
+    {
+      name: 'a message to remove was deleted since the read',
+      messagesOnDisk: [
+        { role: 'user' as const, content: 'вопрос' },
+        { role: 'assistant' as const, content: 'ответ' },
+      ],
+      expectedRemovedMessages: [
+        { role: 'assistant' as const, content: 'ответ' },
+        { role: 'assistant' as const, content: 'продолжение' },
+      ],
+    },
+  ])('refuses to truncate when $name, leaving the file untouched', async ({
+    expectedRemovedMessages,
+    messagesOnDisk,
+  }) => {
+    const chatId = 'guarded-truncate-chat';
+    const repository = new FileChatRepository();
+
+    await repository.createGenericChat({
+      id: chatId,
+      title: 'Guarded truncate chat',
+      userName: 'Tester',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    await repository.appendGenericChatMessages(
+      chatId,
+      messagesOnDisk.map((message) => ({ ...message, createdAt: '2026-01-01T00:00:01.000Z' })),
+    );
+    const fileBefore = await fs.readFile(resolveChatFilePath(chatId), 'utf8');
+
+    await expect(
+      repository.truncateGenericChatMessagesFromIndex(chatId, 2, '2026-01-01T00:00:03.000Z', {
+        expectedRemovedMessages,
+      }),
+    ).rejects.toBeInstanceOf(ChatTranscriptChangedError);
+
+    expect(await fs.readFile(resolveChatFilePath(chatId), 'utf8')).toBe(fileBefore);
+  });
+
+  it('truncates when the messages to remove are exactly the expected ones', async () => {
+    const chatId = 'matching-truncate-chat';
+    const repository = new FileChatRepository();
+
+    await repository.createGenericChat({
+      id: chatId,
+      title: 'Matching truncate chat',
+      userName: 'Tester',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    await repository.appendGenericChatMessages(chatId, [
+      { role: 'user', content: 'вопрос', createdAt: '2026-01-01T00:00:01.000Z' },
+      { role: 'assistant', content: 'ответ', createdAt: '2026-01-01T00:00:02.000Z' },
+      { role: 'assistant', content: 'продолжение', createdAt: '2026-01-01T00:00:03.000Z' },
+    ]);
+
+    const truncatedSession = await repository.truncateGenericChatMessagesFromIndex(
+      chatId,
+      2,
+      '2026-01-01T00:00:04.000Z',
+      {
+        expectedRemovedMessages: [
+          { role: 'assistant', content: 'ответ' },
+          { role: 'assistant', content: 'продолжение' },
+        ],
+      },
+    );
+
+    expect(truncatedSession?.messages.map((message) => message.content)).toEqual(['вопрос']);
   });
 
   it('forks a chat with messages up to the chosen index without touching the source', async () => {

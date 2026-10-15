@@ -12,6 +12,13 @@ export class ChatLastMessageChangedError extends Error {
   }
 }
 
+export class ChatTranscriptChangedError extends Error {
+  constructor(readonly chatId: string) {
+    super(`Chat transcript changed since it was read: ${chatId}`);
+    this.name = 'ChatTranscriptChangedError';
+  }
+}
+
 export class ChatTitleConflictError extends Error {
   constructor(readonly chatId: string) {
     super(`Chat title was changed concurrently: ${chatId}`);

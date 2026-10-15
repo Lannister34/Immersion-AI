@@ -11,6 +11,7 @@ import { getSharedApiLogger } from '../../../lib/logger.js';
 import {
   ChatLastMessageChangedError,
   ChatTitleConflictError,
+  ChatTranscriptChangedError,
   ChatTranscriptNotEmptyError,
 } from '../application/chat-conflicts.js';
 import type { ChatFileStatRecord, ChatSummaryWithSearchText } from '../application/chat-read-model.js';
@@ -33,6 +34,7 @@ import type {
   ChatRepository,
   ForkGenericChatInput,
   ListGenericChatsOptions,
+  TruncateGenericChatMessagesOptions,
 } from '../application/chat-repository.js';
 import { joinContinuationContent } from '../application/continuation-content.js';
 import { deriveLastMessagePreview } from '../application/last-message-preview.js';
@@ -1137,7 +1139,12 @@ export class FileChatRepository implements ChatRepository {
     });
   }
 
-  async truncateGenericChatMessagesFromIndex(chatId: string, fromIndex: number, updatedAt: string) {
+  async truncateGenericChatMessagesFromIndex(
+    chatId: string,
+    fromIndex: number,
+    updatedAt: string,
+    options: TruncateGenericChatMessagesOptions = {},
+  ) {
     return withChatWriteQueue(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 
@@ -1147,6 +1154,21 @@ export class FileChatRepository implements ChatRepository {
 
       if (fromIndex < 1 || fromIndex > currentSession.messages.length) {
         return null;
+      }
+
+      const { expectedRemovedMessages } = options;
+      const removedMessages = currentSession.messages.slice(fromIndex - 1);
+
+      if (
+        expectedRemovedMessages &&
+        (removedMessages.length !== expectedRemovedMessages.length ||
+          removedMessages.some(
+            (message, index) =>
+              message.role !== expectedRemovedMessages[index]?.role ||
+              message.content !== expectedRemovedMessages[index]?.content,
+          ))
+      ) {
+        throw new ChatTranscriptChangedError(chatId);
       }
 
       const filePath = resolveChatFilePath(chatId);

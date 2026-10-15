@@ -2,6 +2,7 @@ import type { ChatFileStatRecord, ChatSummaryWithSearchText } from './chat-read-
 import type {
   AppendChatMessageInput,
   ChatGenerationSettingsRecord,
+  ChatMessageRecord,
   ChatSessionRecord,
   ChatSummaryRecord,
   CreateGenericChatInput,
@@ -26,6 +27,10 @@ export interface AppendContinuationToLastAssistantMessageInput {
   updatedAt: string;
 }
 
+export interface TruncateGenericChatMessagesOptions {
+  expectedRemovedMessages?: ReadonlyArray<Pick<ChatMessageRecord, 'content' | 'role'>>;
+}
+
 export interface ChatRepository {
   appendContinuationToLastAssistantMessage(
     chatId: string,
@@ -43,6 +48,7 @@ export interface ChatRepository {
     chatId: string,
     fromIndex: number,
     updatedAt: string,
+    options?: TruncateGenericChatMessagesOptions,
   ): Promise<ChatSessionRecord | null>;
   updateGenericChatGenerationSettings(
     chatId: string,

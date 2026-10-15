@@ -275,6 +275,12 @@ describe('generation routes', () => {
     }));
   }
 
+  async function readTranscript(app: ReturnType<typeof buildApiApp>, chatId: string) {
+    const response = await app.inject({ method: 'GET', url: `/api/chats/${chatId}` });
+
+    return getMessagesByRole(GetChatSessionResponseSchema.parse(response.json()).messages);
+  }
+
   function getProviderRequestBody(request: ProviderRequestRecord | undefined): ProviderRequestBodyRecord {
     if (!request?.body || typeof request.body !== 'object' || Array.isArray(request.body)) {
       throw new Error('Provider request body was not recorded.');
@@ -1497,6 +1503,183 @@ describe('generation routes', () => {
     expect(response.json()).toMatchObject({
       code: 'no_assistant_message_to_regenerate',
     });
+
+    await app.close();
+  });
+
+  it('refuses to regenerate while a continue job is active, keeping the reply being continued', async () => {
+    const provider = mockProviderDelayedSuccess('и это делает её прочной.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    await appendChatMessages(chat.id, [
+      { role: 'user', content: 'Расскажи про обжиг керамики.', createdAt: '2026-01-01T00:00:00.000Z' },
+      { role: 'assistant', content: 'Обжиг превращает глину в керамику,', createdAt: '2026-01-01T00:00:01.000Z' },
+    ]);
+    const continueResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: { chatId: chat.id, mode: 'continue' },
+    });
+    const continuePayload = StartChatReplyGenerationJobResponseSchema.parse(continueResponse.json());
+    await provider.providerStarted;
+
+    const regenerateResponse = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs/regenerate',
+      payload: { chatId: chat.id },
+    });
+
+    expect(regenerateResponse.statusCode).toBe(409);
+    expect(regenerateResponse.json()).toMatchObject({
+      code: 'active_generation_job_exists',
+      job: { id: continuePayload.job.id },
+    });
+    expect(await readTranscript(app, chat.id)).toEqual([
+      { role: 'user', content: 'Расскажи про обжиг керамики.' },
+      { role: 'assistant', content: 'Обжиг превращает глину в керамику,' },
+    ]);
+
+    provider.releaseProvider();
+    await waitForGenerationJobStatus(app, continuePayload.job.id, 'completed');
+
+    expect(await readTranscript(app, chat.id)).toEqual([
+      { role: 'user', content: 'Расскажи про обжиг керамики.' },
+      { role: 'assistant', content: 'Обжиг превращает глину в керамику, и это делает её прочной.' },
+    ]);
+    expect(provider.requests).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it('refuses to regenerate an assistant reply with no user turn before it, keeping the greeting', async () => {
+    const providerRequests = mockProviderSuccess('Не должно вызываться.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    await appendChatMessages(chat.id, [
+      { role: 'assistant', content: 'Добро пожаловать на маяк.', createdAt: '2026-01-01T00:00:00.000Z' },
+    ]);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs/regenerate',
+      payload: { chatId: chat.id },
+    });
+    const jobsResponse = await app.inject({ method: 'GET', url: `/api/generation/jobs?chatId=${chat.id}` });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      code: 'no_assistant_message_to_regenerate',
+      message: 'Перегенерировать нечего: чат не заканчивается ответом персонажа на сообщение пользователя.',
+    });
+    expect(await readTranscript(app, chat.id)).toEqual([{ role: 'assistant', content: 'Добро пожаловать на маяк.' }]);
+    expect(ListGenerationJobsResponseSchema.parse(jobsResponse.json()).items).toEqual([]);
+    expect(providerRequests).toHaveLength(0);
+
+    await app.close();
+  });
+
+  it.each([
+    {
+      code: 'generation_provider_unavailable',
+      makeGenerationImpossible: async () => {
+        await writeProviderSettings({ backendMode: 'builtin' });
+      },
+    },
+    {
+      code: 'invalid_chat_generation_settings',
+      makeGenerationImpossible: async (app: ReturnType<typeof buildApiApp>, chatId: string) => {
+        await updateChatGenerationSettings(app, chatId, {
+          additionalInstructions: null,
+          samplerPresetId: 'smoke-model-preset',
+          systemPrompt: null,
+          sampling: EMPTY_CHAT_SAMPLING_OVERRIDES,
+        });
+        await writeProviderSettings({
+          activePresetId: 'default',
+          modelPresetMap: {},
+          samplerPresets: [
+            {
+              context_trim_strategy: 'trim_middle',
+              id: 'default',
+              max_context_length: 8192,
+              max_length: 640,
+              min_p: 0.03,
+              name: 'Default',
+              presence_penalty: 0.15,
+              rep_pen: 1.08,
+              rep_pen_range: 1024,
+              temperature: 0.72,
+              top_k: 42,
+              top_p: 0.91,
+            },
+          ],
+        });
+      },
+    },
+  ])('refuses to regenerate with $code before deleting the reply', async ({ code, makeGenerationImpossible }) => {
+    const providerRequests = mockProviderSuccess('Не должно вызываться.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    await appendChatMessages(chat.id, [
+      { role: 'user', content: 'Расскажи анекдот.', createdAt: '2026-01-01T00:00:00.000Z' },
+      { role: 'assistant', content: 'Заходит как-то улитка в бар.', createdAt: '2026-01-01T00:00:01.000Z' },
+    ]);
+    await makeGenerationImpossible(app, chat.id);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs/regenerate',
+      payload: { chatId: chat.id },
+    });
+    const jobsResponse = await app.inject({ method: 'GET', url: `/api/generation/jobs?chatId=${chat.id}` });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ code });
+    expect(await readTranscript(app, chat.id)).toEqual([
+      { role: 'user', content: 'Расскажи анекдот.' },
+      { role: 'assistant', content: 'Заходит как-то улитка в бар.' },
+    ]);
+    expect(ListGenerationJobsResponseSchema.parse(jobsResponse.json()).items).toEqual([]);
+    expect(providerRequests).toHaveLength(0);
+
+    await app.close();
+  });
+
+  it('regenerates every trailing assistant message in one step from the user turn before them', async () => {
+    const providerRequests = mockProviderSuccess('Новый ответ.');
+    const app = buildApiApp();
+    const chat = await createChat(app);
+    await appendChatMessages(chat.id, [
+      { role: 'user', content: 'Первый вопрос.', createdAt: '2026-01-01T00:00:00.000Z' },
+      { role: 'assistant', content: 'Первый ответ.', createdAt: '2026-01-01T00:00:01.000Z' },
+      { role: 'user', content: 'Второй вопрос.', createdAt: '2026-01-01T00:00:02.000Z' },
+      { role: 'assistant', content: 'Начало ответа.', createdAt: '2026-01-01T00:00:03.000Z' },
+      { role: 'assistant', content: 'Конец ответа.', createdAt: '2026-01-01T00:00:04.000Z' },
+    ]);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs/regenerate',
+      payload: { chatId: chat.id },
+    });
+    const payload = StartChatReplyGenerationJobResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(202);
+    expect(getMessagesByRole(payload.session.messages)).toEqual([
+      { role: 'user', content: 'Первый вопрос.' },
+      { role: 'assistant', content: 'Первый ответ.' },
+      { role: 'user', content: 'Второй вопрос.' },
+    ]);
+
+    await waitForGenerationJobStatus(app, payload.job.id, 'completed');
+
+    expect(await readTranscript(app, chat.id)).toEqual([
+      { role: 'user', content: 'Первый вопрос.' },
+      { role: 'assistant', content: 'Первый ответ.' },
+      { role: 'user', content: 'Второй вопрос.' },
+      { role: 'assistant', content: 'Новый ответ.' },
+    ]);
+    expect(providerRequests).toHaveLength(1);
 
     await app.close();
   });

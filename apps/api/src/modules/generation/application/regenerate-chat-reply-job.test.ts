@@ -1,0 +1,83 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath, URL } from 'node:url';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { appendChatMessages, ChatTranscriptChangedError, createChat, getChatSession } from '../../chats/index.js';
+import { InMemoryGenerationJobRegistry } from '../infrastructure/in-memory-generation-job-registry.js';
+import type { ChatCompletionClient } from './chat-completion-client.js';
+import type { CreateChatReplyGenerationJobInput } from './generation-job-registry.js';
+import { regenerateChatReplyJob } from './regenerate-chat-reply-job.js';
+
+const SMOKE_DATA_ROOT = fileURLToPath(new URL('../../../../testdata/smoke-data', import.meta.url));
+
+class ClaimRacingGenerationJobRegistry extends InMemoryGenerationJobRegistry {
+  writeOnClaimDone: Promise<unknown> = Promise.resolve();
+
+  constructor(private readonly writeOnClaim: () => Promise<unknown>) {
+    super();
+  }
+
+  override createChatReplyJob(input: CreateChatReplyGenerationJobInput) {
+    const job = super.createChatReplyJob(input);
+
+    this.writeOnClaimDone = this.writeOnClaim();
+
+    return job;
+  }
+}
+
+describe('regenerateChatReplyJob', () => {
+  let previousDataRoot: string | undefined;
+  let temporaryDataRoot: string;
+
+  beforeEach(async () => {
+    previousDataRoot = process.env.IMMERSION_DATA_ROOT;
+    temporaryDataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'immersion-api-regenerate-'));
+    await fs.cp(SMOKE_DATA_ROOT, temporaryDataRoot, { recursive: true });
+    process.env.IMMERSION_DATA_ROOT = temporaryDataRoot;
+  });
+
+  afterEach(async () => {
+    if (previousDataRoot) {
+      process.env.IMMERSION_DATA_ROOT = previousDataRoot;
+    } else {
+      delete process.env.IMMERSION_DATA_ROOT;
+    }
+
+    await fs.rm(temporaryDataRoot, { recursive: true, force: true });
+  });
+
+  it('refuses to delete the reply when the transcript changes after the job is claimed', async () => {
+    const completeChat = vi.fn<ChatCompletionClient['completeChat']>();
+    const { chat } = await createChat({ title: 'Regenerate race' });
+    await appendChatMessages(chat.id, [
+      { role: 'user', content: 'Расскажи анекдот.', createdAt: '2026-01-01T00:00:00.000Z' },
+      { role: 'assistant', content: 'Заходит как-то улитка в бар.', createdAt: '2026-01-01T00:00:01.000Z' },
+    ]);
+    const registry = new ClaimRacingGenerationJobRegistry(() =>
+      appendChatMessages(chat.id, [
+        { role: 'user', content: 'Я успел написать раньше.', createdAt: '2026-01-01T00:00:02.000Z' },
+      ]),
+    );
+
+    await expect(
+      regenerateChatReplyJob(
+        { chatId: chat.id },
+        { chatCompletionClient: { completeChat }, generationJobRegistry: registry },
+      ),
+    ).rejects.toBeInstanceOf(ChatTranscriptChangedError);
+    await registry.writeOnClaimDone;
+    const session = await getChatSession(chat.id);
+
+    expect(session?.messages.map(({ content, role }) => ({ content, role }))).toEqual([
+      { role: 'user', content: 'Расскажи анекдот.' },
+      { role: 'assistant', content: 'Заходит как-то улитка в бар.' },
+      { role: 'user', content: 'Я успел написать раньше.' },
+    ]);
+    expect(registry.list({ chatId: chat.id }).map((job) => job.status)).toEqual(['failed']);
+    expect(completeChat).not.toHaveBeenCalled();
+  });
+});

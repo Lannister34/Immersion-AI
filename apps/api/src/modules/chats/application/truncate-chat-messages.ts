@@ -2,9 +2,10 @@ import type { ChatSessionDto } from '@immersion/contracts/chats';
 
 import { FileChatRepository } from '../infrastructure/file-chat-repository.js';
 import { ChatMessageNotFoundError, ChatNotFoundError } from './append-chat-messages.js';
+import type { TruncateGenericChatMessagesOptions } from './chat-repository.js';
 import { toChatSessionResponse } from './chat-session-response.js';
 
-interface TruncateChatMessagesInput {
+interface TruncateChatMessagesInput extends TruncateGenericChatMessagesOptions {
   chatId: string;
   fromIndex: number;
   now: () => Date;
@@ -14,6 +15,7 @@ export async function truncateChatMessages({
   chatId,
   fromIndex,
   now,
+  ...options
 }: TruncateChatMessagesInput): Promise<ChatSessionDto> {
   const chatRepository = new FileChatRepository();
   const existing = await chatRepository.getGenericChatSession(chatId);
@@ -26,7 +28,12 @@ export async function truncateChatMessages({
     throw new ChatMessageNotFoundError(chatId, fromIndex);
   }
 
-  const session = await chatRepository.truncateGenericChatMessagesFromIndex(chatId, fromIndex, now().toISOString());
+  const session = await chatRepository.truncateGenericChatMessagesFromIndex(
+    chatId,
+    fromIndex,
+    now().toISOString(),
+    options,
+  );
 
   if (!session) {
     throw new ChatMessageNotFoundError(chatId, fromIndex);
