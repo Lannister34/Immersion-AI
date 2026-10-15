@@ -18,7 +18,6 @@ module.exports = {
         NODE_ENV: 'development',
         IMMERSION_API_PORT: 4787,
         IMMERSION_WEB_PORT: 4788,
-        IMMERSION_DATA_ROOT: process.env.IMMERSION_DATA_ROOT || path.resolve(projectRoot, 'data'),
       },
     },
     {

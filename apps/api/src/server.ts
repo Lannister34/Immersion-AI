@@ -1,7 +1,22 @@
 import { buildApiApp } from './app.js';
+import { type ApiConfig, ApiConfigError } from './config/api-config.js';
+import { readApiConfig } from './config/read-api-config.js';
 import { getLlmProcessManager, setupGracefulShutdown } from './modules/runtime/infrastructure/llm-process-manager.js';
 
-const app = buildApiApp();
+let config: ApiConfig;
+
+try {
+  config = readApiConfig();
+} catch (error) {
+  if (!(error instanceof ApiConfigError)) {
+    throw error;
+  }
+
+  console.error(error.message);
+  process.exit(1);
+}
+
+const app = buildApiApp(config);
 setupGracefulShutdown();
 void getLlmProcessManager()
   .reconnectToDetachedRuntime()
@@ -12,8 +27,8 @@ void getLlmProcessManager()
 async function startServer() {
   try {
     await app.listen({
-      host: process.env.IMMERSION_API_HOST ?? '127.0.0.1',
-      port: Number.parseInt(process.env.IMMERSION_API_PORT ?? '4787', 10),
+      host: config.host,
+      port: config.port,
     });
   } catch (error) {
     app.log.error(error);

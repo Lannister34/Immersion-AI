@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { resolveDataRoot } from '../../../lib/data-root.js';
+import { readDataRoot } from '../../../config/read-api-config.js';
 import { FileChatRepository } from '../infrastructure/file-chat-repository.js';
 import { ChatNotFoundError } from './append-chat-messages.js';
 
@@ -29,7 +29,7 @@ export async function exportChat(chatId: string): Promise<ChatExportPayload> {
     throw new ChatNotFoundError(chatId);
   }
 
-  const filePath = path.join(resolveDataRoot(), 'chats', GENERIC_CHAT_DIRECTORY, `${chatId}.jsonl`);
+  const filePath = path.join(readDataRoot(), 'chats', GENERIC_CHAT_DIRECTORY, `${chatId}.jsonl`);
   const body = await fs.readFile(filePath, 'utf8');
   const baseName = sanitizeForFileName(session.chat.title) || `chat-${chatId.slice(0, 8)}`;
 

@@ -33,6 +33,23 @@ The web client runs at http://localhost:4788 and talks to the API at http://loca
 
 **Windows:** run `start.bat` — it installs dependencies and opens the app for you.
 
+## Configuration
+
+The API reads these environment variables once, at startup. A blank value counts as unset, and an
+invalid value stops the API with a message that names the variable.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `IMMERSION_API_HOST` | `127.0.0.1` | Address the API listens on |
+| `IMMERSION_API_PORT` | `4787` | API port, 1–65535 |
+| `IMMERSION_WEB_PORT` | `4788` | Web client port: the API root redirects there, and the default origins use it |
+| `IMMERSION_WEB_ORIGINS` | `http://localhost:<web port>,http://127.0.0.1:<web port>` | Comma-separated http(s) origins, without a path, that browsers may call the API from |
+| `IMMERSION_DATA_ROOT` | `data` in the repository root | Folder for chats, characters, settings and logs; a relative path resolves against the repository root |
+| `IMMERSION_LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent` |
+
+Earlier versions started with `npm run dev:api` or `start.bat` kept data in `apps/data`: move that
+folder to `data` in the repository root to keep your library.
+
 ## Using Immersion as a backend
 
 The API exposes an OpenAI-compatible endpoint, so any OpenAI client can generate through
@@ -133,6 +150,23 @@ npm run dev:web
 Клиент открывается на http://localhost:4788 и работает с API на http://localhost:4787.
 
 **Windows:** запустите `start.bat` — он поставит зависимости и откроет приложение.
+
+## Настройка
+
+API читает эти переменные окружения один раз, при запуске. Пустое значение считается незаданным, а
+неверное останавливает API с сообщением, в котором названа переменная.
+
+| Переменная | По умолчанию | Назначение |
+| --- | --- | --- |
+| `IMMERSION_API_HOST` | `127.0.0.1` | Адрес, на котором слушает API |
+| `IMMERSION_API_PORT` | `4787` | Порт API, 1–65535 |
+| `IMMERSION_WEB_PORT` | `4788` | Порт веб-клиента: туда перенаправляет корень API, и из него собираются origin по умолчанию |
+| `IMMERSION_WEB_ORIGINS` | `http://localhost:<порт клиента>,http://127.0.0.1:<порт клиента>` | Origin через запятую (http или https, без пути), из которых браузер может обращаться к API |
+| `IMMERSION_DATA_ROOT` | `data` в корне репозитория | Папка с чатами, персонажами, настройками и логами; относительный путь считается от корня репозитория |
+| `IMMERSION_LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` или `silent` |
+
+Прежние версии, запущенные через `npm run dev:api` или `start.bat`, хранили данные в `apps/data`:
+перенесите эту папку в `data` в корне репозитория, чтобы не потерять библиотеку.
 
 ## Immersion как бэкенд
 

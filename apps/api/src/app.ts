@@ -1,6 +1,8 @@
 import cors from '@fastify/cors';
 import Fastify from 'fastify';
 
+import type { ApiConfig } from './config/api-config.js';
+import { readApiConfig } from './config/read-api-config.js';
 import { buildApiLogger } from './lib/logger.js';
 import { charactersRoutes } from './modules/characters/interface/http/routes.js';
 import { chatsRoutes } from './modules/chats/interface/http/routes.js';
@@ -16,38 +18,17 @@ import { rootRoute } from './routes/root.js';
 
 const API_BODY_LIMIT_BYTES = 16 * 1024 * 1024;
 
-const DEFAULT_WEB_ORIGINS = [
-  'http://localhost:4788',
-  'http://127.0.0.1:4788',
-  'http://localhost:4173',
-  'http://127.0.0.1:4173',
-];
-
-export function resolveAllowedWebOrigins(): string[] {
-  const configured = process.env.IMMERSION_WEB_ORIGINS;
-
-  if (!configured) {
-    return DEFAULT_WEB_ORIGINS;
-  }
-
-  const origins = configured
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter((origin) => origin.length > 0);
-
-  return origins.length > 0 ? origins : DEFAULT_WEB_ORIGINS;
-}
-
-export function buildApiApp() {
+// TODO: require the config once every test builds apps through the harness (F-13)
+export function buildApiApp(config: ApiConfig = readApiConfig()) {
   const app = Fastify({
     bodyLimit: API_BODY_LIMIT_BYTES,
-    loggerInstance: buildApiLogger(),
+    loggerInstance: buildApiLogger(config.logLevel),
   });
 
   app.register(cors, {
-    origin: resolveAllowedWebOrigins(),
+    origin: [...config.webOrigins],
   });
-  app.register(rootRoute);
+  app.register(rootRoute, { webPort: config.webPort });
   app.register(healthRoute, { prefix: '/health' });
   app.register(charactersRoutes, { prefix: '/api/characters' });
   app.register(chatsRoutes, { prefix: '/api/chats' });

@@ -1,22 +1,19 @@
 import { type ChildProcess, execSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import type { RuntimeConfigCommand, RuntimeEngineInfo, RuntimeStatusSnapshot } from '@immersion/contracts/runtime';
 
-import { resolveDataRoot } from '../../../lib/data-root.js';
+import { findProjectRoot } from '../../../config/find-project-root.js';
+import { readDataRoot } from '../../../config/read-api-config.js';
 import { getSharedApiLogger } from '../../../lib/logger.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..', '..');
 const PID_FILE_NAME = '.llm-server.json';
 const LOG_FILE_NAME = 'llm-server.log';
 const LOG_TAIL_BYTES = 256 * 1024;
 
 function resolveLogFilePath() {
-  return path.join(resolveDataRoot(), 'logs', LOG_FILE_NAME);
+  return path.join(readDataRoot(), 'logs', LOG_FILE_NAME);
 }
 
 function readLogFileTail(): string[] {
@@ -64,14 +61,15 @@ interface RuntimeBinaryLocation {
 }
 
 export function resolveRuntimeRoots() {
-  const roots = [PROJECT_ROOT];
-  const basename = path.basename(PROJECT_ROOT);
+  const projectRoot = getPrimaryRuntimeRoot();
+  const roots = [projectRoot];
+  const basename = path.basename(projectRoot);
   const legacySiblingName = basename.endsWith('_engineering') ? basename.replace(/_engineering$/, '') : null;
 
   if (legacySiblingName) {
-    const siblingRoot = path.resolve(PROJECT_ROOT, '..', legacySiblingName);
+    const siblingRoot = path.resolve(projectRoot, '..', legacySiblingName);
 
-    if (siblingRoot !== PROJECT_ROOT && fs.existsSync(siblingRoot)) {
+    if (siblingRoot !== projectRoot && fs.existsSync(siblingRoot)) {
       roots.push(siblingRoot);
     }
   }
@@ -80,7 +78,7 @@ export function resolveRuntimeRoots() {
 }
 
 export function getPrimaryRuntimeRoot() {
-  return PROJECT_ROOT;
+  return findProjectRoot(import.meta.dirname);
 }
 
 function findBinary(): RuntimeBinaryLocation | null {
@@ -106,7 +104,7 @@ function findBinary(): RuntimeBinaryLocation | null {
 }
 
 function getPidFilePath() {
-  return path.join(resolveDataRoot(), PID_FILE_NAME);
+  return path.join(readDataRoot(), PID_FILE_NAME);
 }
 
 function savePidFile(data: PidFileData) {
@@ -215,7 +213,7 @@ export class LlmProcessManager {
     return {
       found: binary !== null,
       executablePath: binary?.executablePath ?? null,
-      defaultModelsDir: path.join(binary?.runtimeRoot ?? PROJECT_ROOT, 'models'),
+      defaultModelsDir: path.join(binary?.runtimeRoot ?? getPrimaryRuntimeRoot(), 'models'),
     };
   }
 

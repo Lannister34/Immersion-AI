@@ -3,9 +3,9 @@ import path from 'node:path';
 
 import { ChatGenerationSettingsDtoSchema } from '@immersion/contracts/chats';
 
+import { readDataRoot } from '../../../config/read-api-config.js';
 import { writeFileAtomically } from '../../../lib/atomic-file.js';
 import { resolveContainedFilePath } from '../../../lib/contained-path.js';
-import { resolveDataRoot } from '../../../lib/data-root.js';
 import { isErrnoCode } from '../../../lib/errno-code.js';
 import { getSharedApiLogger } from '../../../lib/logger.js';
 import {
@@ -113,7 +113,7 @@ function getNullableNumber(value: unknown) {
 }
 
 function resolveChatsDirectory() {
-  return path.join(resolveDataRoot(), 'chats', GENERIC_CHAT_DIRECTORY);
+  return path.join(readDataRoot(), 'chats', GENERIC_CHAT_DIRECTORY);
 }
 
 function resolveChatFilePath(chatId: string) {

@@ -8,7 +8,7 @@ import {
   RuntimeOverviewResponseSchema,
 } from '@immersion/contracts/runtime';
 
-import { resolveDataRoot } from '../../../lib/data-root.js';
+import { readDataRoot } from '../../../config/read-api-config.js';
 import { getLlmServerRuntimeConfig } from '../../settings/application/get-llm-server-runtime-config.js';
 import { pairVisionProjectors, type ScannedGgufFile } from '../domain/vision-projector-pairing.js';
 import { getLlmProcessManager } from '../infrastructure/llm-process-manager.js';
@@ -152,7 +152,7 @@ export async function getRuntimeOverview(): Promise<RuntimeOverviewResponse> {
       return directory;
     }
 
-    return path.resolve(resolveDataRoot(), directory);
+    return path.resolve(readDataRoot(), directory);
   });
 
   const scan = await scanModelsCached(modelsDirs);

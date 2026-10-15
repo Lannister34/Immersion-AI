@@ -1,8 +1,11 @@
 import pino from 'pino';
 
-export function buildApiLogger() {
+import type { ApiLogLevel } from '../config/api-config.js';
+import { readApiConfig } from '../config/read-api-config.js';
+
+export function buildApiLogger(level: ApiLogLevel) {
   return pino({
-    level: 'info',
+    level,
     name: 'immersion-api',
   });
 }
@@ -10,7 +13,7 @@ export function buildApiLogger() {
 let sharedApiLogger: pino.Logger | null = null;
 
 export function getSharedApiLogger(): pino.Logger {
-  sharedApiLogger ??= buildApiLogger();
+  sharedApiLogger ??= buildApiLogger(readApiConfig().logLevel);
 
   return sharedApiLogger;
 }

@@ -4,9 +4,9 @@ import path from 'node:path';
 
 import type { CharacterDetailDto } from '@immersion/contracts/characters';
 
+import { readDataRoot } from '../../../config/read-api-config.js';
 import { writeFileAtomically, writeJsonFileAtomically } from '../../../lib/atomic-file.js';
 import { resolveContainedFilePath } from '../../../lib/contained-path.js';
-import { resolveDataRoot } from '../../../lib/data-root.js';
 import { isErrnoCode } from '../../../lib/errno-code.js';
 import { getSharedApiLogger } from '../../../lib/logger.js';
 import {
@@ -28,7 +28,7 @@ export interface CharacterFileSummary {
 }
 
 function resolveCharactersDirectory() {
-  return path.join(resolveDataRoot(), CHARACTERS_DIRECTORY);
+  return path.join(readDataRoot(), CHARACTERS_DIRECTORY);
 }
 
 function isJsonEntry(entry: string): boolean {
