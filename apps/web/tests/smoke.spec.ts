@@ -1,19 +1,7 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-
 import { type ChatGenerationSettingsDto, ChatGenerationSettingsDtoSchema } from '@immersion/contracts/chats';
 import { expect, type Page, test } from '@playwright/test';
 
-const smokeDataRoot = process.env.IMMERSION_SMOKE_DATA_ROOT;
-
-if (!smokeDataRoot) {
-  throw new Error('IMMERSION_SMOKE_DATA_ROOT must point to an isolated smoke-test data directory.');
-}
-
-const smokeUserSettingsPath = path.join(smokeDataRoot, 'user-settings.json');
-const smokeChatsPath = path.join(smokeDataRoot, 'chats');
-
-let baselineUserSettings = '';
+import { resetSmokeData } from './smoke-data-root.js';
 
 async function generationSettingsSaved(page: Page, isTheSave: (body: ChatGenerationSettingsDto) => boolean) {
   const response = await page.waitForResponse((candidate) => {
@@ -33,18 +21,7 @@ function chatTitle(page: Page) {
   return page.getByRole('heading', { level: 1 });
 }
 
-async function resetSmokeData() {
-  await fs.writeFile(smokeUserSettingsPath, baselineUserSettings, 'utf8');
-  await fs.rm(smokeChatsPath, { recursive: true, force: true });
-}
-
-test.beforeAll(async () => {
-  baselineUserSettings = await fs.readFile(smokeUserSettingsPath, 'utf8');
-});
-
 test.beforeEach(resetSmokeData);
-
-test.afterEach(resetSmokeData);
 
 test('redirects root to chats and exposes the full sidebar navigation', async ({ page }) => {
   await page.goto('/');
