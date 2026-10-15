@@ -16,6 +16,7 @@ import { createToProblem, problem } from '../../../../shared/interface/http/prob
 import { ChatMessageNotFoundError, ChatNotFoundError } from '../../../chats/application/append-chat-messages.js';
 import { ChatAttachmentNotFoundError } from '../../../chats/application/chat-attachments.js';
 import { ChatTitleConflictError } from '../../../chats/application/chat-conflicts.js';
+import { ChatTranscriptChangedError } from '../../../chats/index.js';
 import { InvalidChatGenerationSettingsResolutionError } from '../../../prompting/application/resolve-chat-generation-settings.js';
 import { GenerationProviderUnavailableError } from '../../../providers/application/generation-provider.js';
 import { generateCharacterAvatarPrompt } from '../../application/generate-character-avatar-prompt.js';
@@ -31,6 +32,7 @@ import {
   ChatNotEmptyError,
   ChatReplyGenerationFailedError,
   ChatTranscriptEmptyError,
+  NoAssistantMessageToRegenerateError,
   NothingToAnswerError,
   NothingToContinueError,
   ProviderGenerationError,
@@ -38,10 +40,7 @@ import {
 import { ActiveGenerationJobExistsError } from '../../application/generation-job-registry.js';
 import { getGenerationReadiness } from '../../application/get-generation-readiness.js';
 import { previewChatReplyPrompt } from '../../application/preview-chat-reply-prompt.js';
-import {
-  NoAssistantMessageToRegenerateError,
-  regenerateChatReplyJob,
-} from '../../application/regenerate-chat-reply-job.js';
+import { regenerateChatReplyJob } from '../../application/regenerate-chat-reply-job.js';
 import { startChatReplyGenerationJob } from '../../application/start-chat-reply-generation-job.js';
 import { InMemoryGenerationJobRegistry } from '../../infrastructure/in-memory-generation-job-registry.js';
 
@@ -70,7 +69,7 @@ const toProblem = createToProblem((error) => {
     return problem(
       409,
       'no_assistant_message_to_regenerate',
-      'There is no assistant message to regenerate in this chat.',
+      'Перегенерировать нечего: чат не заканчивается ответом персонажа на сообщение пользователя.',
     );
   }
 
@@ -96,6 +95,14 @@ const toProblem = createToProblem((error) => {
 
   if (error instanceof ChatNotEmptyError) {
     return problem(409, 'chat_not_empty', error.message);
+  }
+
+  if (error instanceof ChatTranscriptChangedError) {
+    return problem(
+      409,
+      'chat_transcript_changed',
+      'Чат изменился во время запроса — ничего не удалено. Повторите попытку.',
+    );
   }
 
   if (error instanceof ChatTitleConflictError) {

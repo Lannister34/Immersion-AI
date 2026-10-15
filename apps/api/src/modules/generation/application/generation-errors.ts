@@ -36,6 +36,13 @@ export class NothingToAnswerError extends Error {
   }
 }
 
+export class NoAssistantMessageToRegenerateError extends Error {
+  constructor(chatId: string) {
+    super(`Chat ${chatId} has no assistant message to regenerate.`);
+    this.name = 'NoAssistantMessageToRegenerateError';
+  }
+}
+
 export class ChatReplyGenerationFailedError extends Error {
   declare readonly session: ChatSessionDto;
 
