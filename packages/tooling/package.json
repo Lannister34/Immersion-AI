@@ -5,5 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test \"test/*.test.mjs\""
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
   }
 }

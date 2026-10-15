@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import typescript from 'typescript';
 
 import { tscProjects } from './package-script-tsc-projects.mjs';
 import { REPOSITORY, repositoryGit } from './repository-git.mjs';
-import { typescript } from './repository-typescript.mjs';
 
 const programs = new Map();
 

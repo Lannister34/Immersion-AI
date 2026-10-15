@@ -1,4 +1,4 @@
-import { typescript } from './repository-typescript.mjs';
+import typescript from 'typescript';
 
 const COMMAND_SEPARATOR = /&&|\|\||;/;
 const BUILD_FLAGS = new Set(['-b', '--build']);

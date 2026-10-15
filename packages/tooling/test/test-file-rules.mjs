@@ -1,4 +1,4 @@
-import { typescript } from './repository-typescript.mjs';
+import typescript from 'typescript';
 
 const TEST_FILE = /\.(test|spec)\.[cm]?tsx?$/;
 const TEST_SUPPORT_FOLDER = /(^|\/)test-support\//;
