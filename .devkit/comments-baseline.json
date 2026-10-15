@@ -1,6 +1,1 @@
-{
-  "apps/web/playwright.config.ts": 4,
-  "apps/web/src/styles.css": 44,
-  "apps/web/tests/smoke.spec.ts": 6,
-  "apps/web/vitest.config.ts": 2
-}
+{}

@@ -8,10 +8,6 @@ import { defineConfig } from '@playwright/test';
 const configDirectory = fileURLToPath(new URL('.', import.meta.url));
 const smokeFixtureDirectory = fileURLToPath(new URL('../api/testdata/smoke-data', import.meta.url));
 
-// Config is evaluated in the runner process AND again in every worker process.
-// The data root must be created exactly once (in the runner) and inherited by
-// workers via the environment, otherwise test hooks reset a different copy of
-// the fixture than the one the API server actually serves.
 let smokeDataDirectory = process.env.IMMERSION_SMOKE_DATA_ROOT;
 if (!smokeDataDirectory) {
   smokeDataDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'immersion-web-smoke-'));

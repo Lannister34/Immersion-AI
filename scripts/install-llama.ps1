@@ -7,8 +7,6 @@ $versionFile = Join-Path $binDir '.llama-version'
 $tempDir = Join-Path $env:TEMP 'immersion-llama-setup'
 $apiUrl = 'https://api.github.com/repos/ggml-org/llama.cpp/releases/latest'
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
-
 function Write-Step($msg) { Write-Host "  $msg" -ForegroundColor Cyan }
 function Write-Ok($msg)   { Write-Host "  $msg" -ForegroundColor Green }
 function Write-Err($msg)  { Write-Host "  [ERROR] $msg" -ForegroundColor Red }
@@ -45,7 +43,6 @@ function Install-FromZip {
         Write-Ok "Copied: llama-server.exe + $($dlls.Count) DLLs"
     }
     else {
-        # cudart archive: copy all DLLs
         $dlls = Get-ChildItem -Path $extractPath -Recurse -Filter '*.dll'
         foreach ($dll in $dlls) {
             Copy-Item -Path $dll.FullName -Destination $binDir -Force
@@ -53,8 +50,6 @@ function Install-FromZip {
         Write-Ok "Copied: $($dlls.Count) DLLs"
     }
 }
-
-# ── Interactive menu ───────────────────────────────────────────────────────────
 
 Write-Host ''
 Write-Host '  =========================================' -ForegroundColor Magenta
@@ -84,8 +79,6 @@ Write-Host ''
 Write-Step "Selected: $Backend"
 Write-Host ''
 
-# ── Main ───────────────────────────────────────────────────────────────────────
-
 try {
     if (-not (Test-Path $binDir)) {
         New-Item -ItemType Directory -Path $binDir -Force | Out-Null
@@ -96,7 +89,6 @@ try {
     $tag = $release.tag_name
     Write-Ok "Latest version: $tag"
 
-    # Check current version
     if (Test-Path $versionFile) {
         $currentVersion = (Get-Content $versionFile -Raw).Trim()
         if ($currentVersion -eq $tag) {
@@ -109,8 +101,6 @@ try {
     }
 
     $assets = $release.assets
-
-    # ── Select asset ───────────────────────────────────────────────────────────
 
     $mainAsset = $null
     $cudartAsset = $null
@@ -150,7 +140,6 @@ try {
                 $mainAsset = $cudaAssets[0]
             }
 
-            # Find matching cudart
             if ($mainAsset.name -match 'cuda-([\d.]+)') {
                 $cudaVer = $Matches[1]
                 $cudartAsset = $assets |
@@ -179,8 +168,6 @@ try {
     }
     Write-Host ''
 
-    # ── Download & install ─────────────────────────────────────────────────────
-
     if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
     New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
 
@@ -190,8 +177,6 @@ try {
         Write-Host ''
         Install-FromZip -Url $cudartAsset.browser_download_url -Label 'CUDA runtime' -ZipName 'cudart.zip'
     }
-
-    # ── Verify ─────────────────────────────────────────────────────────────────
 
     $finalExe = Join-Path $binDir 'llama-server.exe'
     if (-not (Test-Path $finalExe)) {
