@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ChatCompletionRequest } from './application/chat-completion-client.js';
-import { AnthropicMessagesClient, buildAnthropicPayload } from './infrastructure/anthropic-messages-client.js';
+import { AnthropicMessagesClient } from './infrastructure/anthropic-messages-client.js';
+import { buildAnthropicPayload } from './infrastructure/anthropic-messages-request.js';
 
 const BASE_REQUEST: Omit<ChatCompletionRequest, 'onDelta'> = {
   endpoint: {
