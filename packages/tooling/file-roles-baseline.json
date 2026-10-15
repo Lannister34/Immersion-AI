@@ -1,7 +1,7 @@
 {
   "apps/api/src/modules/chats/infrastructure/file-chat-repository.ts": "class:1 function:4",
   "apps/api/src/modules/providers/infrastructure/provider-vision-probe.ts": "class:1 function:2",
-  "apps/api/src/modules/runtime/infrastructure/llm-process-manager.ts": "class:1 function:4",
+  "apps/api/src/modules/runtime/infrastructure/llm-process-manager.ts": "class:1 function:3",
   "apps/web/src/app/router/index.tsx": "component:12 function:1",
   "apps/web/src/app/store/ui-shell.ts": "function:1 hook:1",
   "apps/web/src/modules/characters/index.tsx": "component:1 hook:1",
