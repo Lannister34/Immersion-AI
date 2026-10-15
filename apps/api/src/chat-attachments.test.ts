@@ -12,9 +12,14 @@ import { IMAGE_UPLOAD_MAX_BYTES, IMAGE_UPLOAD_MAX_MEGABYTES } from '@immersion/c
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildApiApp } from './app.js';
+import { stubProviderFailure, stubProviderReply } from './test-support/recording-provider-stub.js';
 
-const testSettings = {
-  textgenerationwebui: { server_urls: { koboldcpp: 'http://127.0.0.1:5001' } },
+const PROVIDER_URL = 'http://127.0.0.1:6006';
+
+const externalProviderSettings = {
+  activeProvider: 'custom',
+  backendMode: 'external',
+  providerConfigs: { custom: { model: 'vision-model', url: PROVIDER_URL } },
 };
 
 function buildPngChunk(type: string, data: Buffer): Buffer {
@@ -58,7 +63,11 @@ describe('chat attachments', () => {
   beforeEach(async () => {
     previousDataRoot = process.env.IMMERSION_DATA_ROOT;
     temporaryDataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'immersion-api-attachments-'));
-    await fs.writeFile(path.join(temporaryDataRoot, 'settings.json'), JSON.stringify(testSettings), 'utf8');
+    await fs.writeFile(
+      path.join(temporaryDataRoot, 'user-settings.json'),
+      JSON.stringify(externalProviderSettings),
+      'utf8',
+    );
     process.env.IMMERSION_DATA_ROOT = temporaryDataRoot;
   });
 
@@ -159,7 +168,14 @@ describe('chat attachments', () => {
     await app.close();
   });
 
-  it('keeps the attachment on the user message whatever the provider replies', async () => {
+  it.each([
+    { provider: 'replies', replyStatus: 200, stubProvider: () => stubProviderReply('Чёрный пиксель.') },
+    { provider: 'fails with 500', replyStatus: 502, stubProvider: () => stubProviderFailure(500) },
+  ])('sends the image and keeps the attachment on the user message when the provider $provider', async ({
+    replyStatus,
+    stubProvider,
+  }) => {
+    const providerRequests = stubProvider();
     const app = buildApiApp();
     const chat = await createChat(app);
     const attachment = await uploadPng(app, chat.id);
@@ -169,7 +185,20 @@ describe('chat attachments', () => {
       url: '/api/generation/chat-reply',
       payload: { attachmentIds: [attachment.id], chatId: chat.id, message: 'Что на картинке?' },
     });
-    expect([200, 409, 502]).toContain(generation.statusCode);
+
+    expect(generation.statusCode).toBe(replyStatus);
+    expect(providerRequests.map((request) => request.url)).toEqual([`${PROVIDER_URL}/v1/chat/completions`]);
+    expect(providerRequests[0]?.body).toMatchObject({
+      messages: expect.arrayContaining([
+        {
+          content: [
+            { text: 'Что на картинке?', type: 'text' },
+            { image_url: { url: `data:image/png;base64,${buildPng().toString('base64')}` }, type: 'image_url' },
+          ],
+          role: 'user',
+        },
+      ]),
+    });
 
     const sessionResponse = await app.inject({ method: 'GET', url: `/api/chats/${chat.id}` });
     const session = GetChatSessionResponseSchema.parse(sessionResponse.json());
