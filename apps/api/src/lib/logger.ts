@@ -1,6 +1,6 @@
 import pino from 'pino';
 
-import type { ApiLogLevel } from '../config/api-config.js';
+import type { ApiLogLevel } from '../config/api-environment-schema.js';
 import { readApiConfig } from '../config/read-api-config.js';
 
 export function buildApiLogger(level: ApiLogLevel) {
