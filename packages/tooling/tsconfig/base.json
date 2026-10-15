@@ -23,12 +23,6 @@
       ],
       "@immersion/domain/*": [
         "packages/domain/src/*"
-      ],
-      "@immersion/test-utils": [
-        "packages/test-utils/src/index.ts"
-      ],
-      "@immersion/test-utils/*": [
-        "packages/test-utils/src/*"
       ]
     },
     "lib": [
