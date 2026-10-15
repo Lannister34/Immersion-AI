@@ -1,13 +1,8 @@
-import { GenerationJobIdSchema, GenerationJobResponseSchema } from '@immersion/contracts/generation';
+import { GenerationJobResponseSchema } from '@immersion/contracts/generation';
 import { z } from 'zod';
 
 import { apiPost } from '../../../shared/api/client';
-
-const CancelGenerationJobCommandSchema = z.object({
-  jobId: GenerationJobIdSchema,
-});
-
-type CancelGenerationJobCommand = z.infer<typeof CancelGenerationJobCommandSchema>;
+import { type CancelGenerationJobCommand, CancelGenerationJobCommandSchema } from './cancel-generation-job-command';
 
 export function cancelGenerationJob(command: CancelGenerationJobCommand) {
   const payload = CancelGenerationJobCommandSchema.parse(command);

@@ -1,25 +1,11 @@
-import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 
 import { ChevronRightIcon } from '../../shared/ui/icons';
-
-export type CrumbPath = '/chat' | '/characters' | '/scenarios' | '/lorebooks' | '/settings' | '/server';
-
-export interface Crumb {
-  label: string;
-  strong?: boolean;
-  to?: CrumbPath;
-}
+import { type Crumb, renderCrumb } from './render-crumb';
 
 interface TopbarProps {
   crumbs: Crumb[];
   actions?: ReactNode;
-}
-
-function renderCrumb(crumb: Crumb) {
-  const label = crumb.strong ? <strong>{crumb.label}</strong> : <span>{crumb.label}</span>;
-
-  return crumb.to ? <Link to={crumb.to}>{label}</Link> : label;
 }
 
 export function Topbar({ crumbs, actions }: TopbarProps) {
