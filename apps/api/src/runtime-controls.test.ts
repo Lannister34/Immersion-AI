@@ -1,5 +1,4 @@
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 
 import {
@@ -7,26 +6,16 @@ import {
   RuntimeLogsResponseSchema,
   RuntimeOverviewResponseSchema,
 } from '@immersion/contracts/runtime';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { buildApiApp } from './app.js';
 import { selectRuntimeInstallPlan } from './modules/runtime/application/install-runtime.js';
+import { useTestApi } from './test-support/use-test-api.js';
 
 describe('runtime control routes', () => {
-  let dataRoot = '';
-
-  beforeEach(async () => {
-    dataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'immersion-runtime-'));
-    process.env.IMMERSION_DATA_ROOT = dataRoot;
-  });
-
-  afterEach(async () => {
-    delete process.env.IMMERSION_DATA_ROOT;
-    await fs.rm(dataRoot, { force: true, recursive: true });
-  });
+  const api = useTestApi();
 
   it('returns empty runtime logs while no server output was captured', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'GET',
       url: '/api/runtime/logs',
@@ -36,11 +25,10 @@ describe('runtime control routes', () => {
     expect(response.statusCode).toBe(200);
     expect(logs.lines).toEqual([]);
     expect(logs.status).toBe('idle');
-
-    await app.close();
   });
 
   it('falls back to the log file when the in-memory buffer is empty, as after an API restart that left the model running', async () => {
+    const { app, dataRoot } = api();
     await fs.mkdir(path.join(dataRoot, 'logs'), { recursive: true });
     await fs.writeFile(
       path.join(dataRoot, 'logs', 'llm-server.log'),
@@ -48,7 +36,6 @@ describe('runtime control routes', () => {
       'utf8',
     );
 
-    const app = buildApiApp();
     const response = await app.inject({
       method: 'GET',
       url: '/api/runtime/logs',
@@ -57,30 +44,21 @@ describe('runtime control routes', () => {
 
     expect(response.statusCode).toBe(200);
     expect(logs.lines).toEqual(['llama_model_loader: loaded meta data', '[stderr] warming up the model']);
-
-    await app.close();
   });
 
   it('updates runtime config without overwriting unrelated user settings', async () => {
-    await fs.writeFile(
-      path.join(dataRoot, 'user-settings.json'),
-      JSON.stringify(
-        {
-          userName: 'Misha',
-          llmServerConfig: {
-            modelsDirs: ['old-models'],
-            port: 5001,
-            gpuLayers: 0,
-            contextSize: 8192,
-            flashAttention: false,
-            threads: 0,
-          },
-        },
-        null,
-        2,
-      ),
-      'utf8',
-    );
+    const { app, settings } = api();
+    await settings.write({
+      userName: 'Misha',
+      llmServerConfig: {
+        modelsDirs: ['old-models'],
+        port: 5001,
+        gpuLayers: 0,
+        contextSize: 8192,
+        flashAttention: false,
+        threads: 0,
+      },
+    });
     const command: RuntimeConfigCommand = {
       modelsDirs: ['models'],
       port: 5010,
@@ -90,17 +68,13 @@ describe('runtime control routes', () => {
       threads: 8,
     };
 
-    const app = buildApiApp();
     const response = await app.inject({
       method: 'PUT',
       url: '/api/runtime/config',
       payload: command,
     });
     const overview = RuntimeOverviewResponseSchema.parse(response.json());
-    const stored = JSON.parse(await fs.readFile(path.join(dataRoot, 'user-settings.json'), 'utf8')) as Record<
-      string,
-      unknown
-    >;
+    const stored = await settings.read();
 
     expect(response.statusCode).toBe(200);
     expect(overview.serverConfig).toMatchObject({
@@ -112,17 +86,15 @@ describe('runtime control routes', () => {
     });
     expect(stored.userName).toBe('Misha');
     expect(stored.llmServerConfig).toMatchObject(command);
-
-    await app.close();
   });
 
   it('dedupes updated modelsDirs, scans their models, and marks missing directories without failing the overview', async () => {
+    const { app, dataRoot } = api();
     const modelsDir = path.join(dataRoot, 'gguf-models');
     const missingDir = path.join(dataRoot, 'no-such-dir');
     await fs.mkdir(modelsDir, { recursive: true });
     await fs.writeFile(path.join(modelsDir, 'dummy.gguf'), 'stub');
 
-    const app = buildApiApp();
     const response = await app.inject({
       method: 'PUT',
       url: '/api/runtime/config',
@@ -144,11 +116,10 @@ describe('runtime control routes', () => {
       { path: modelsDir, exists: true },
       { path: missingDir, exists: false },
     ]);
-
-    await app.close();
   });
 
   it('reports each scanned model with its own mmproj projector and hides projectors from the list', async () => {
+    const { app, dataRoot } = api();
     const modelsDir = path.join(dataRoot, 'models-root');
     const visionDir = path.join(modelsDir, 'vl');
     const textDir = path.join(modelsDir, 'text');
@@ -164,7 +135,6 @@ describe('runtime control routes', () => {
     await fs.writeFile(path.join(modelsDir, 'Llama-3-8B-Q4_K_M.gguf'), 'gguf');
     await fs.writeFile(flatProjectorPath, 'gguf');
 
-    const app = buildApiApp();
     const response = await app.inject({
       method: 'PUT',
       url: '/api/runtime/config',
@@ -187,12 +157,10 @@ describe('runtime control routes', () => {
       'vl/Qwen-VL-Q4_K_M.gguf': projectorPath,
       'vl/Qwen-VL-Q8_0.gguf': projectorPath,
     });
-
-    await app.close();
   });
 
   it('rejects blank models directory entries in the config command', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'PUT',
       url: '/api/runtime/config',
@@ -208,12 +176,10 @@ describe('runtime control routes', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({ code: 'validation_error' });
-
-    await app.close();
   });
 
   it('accepts an empty models directory list without falling back to defaults', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'PUT',
       url: '/api/runtime/config',
@@ -232,12 +198,10 @@ describe('runtime control routes', () => {
     expect(overview.serverConfig.modelsDirs).toEqual([]);
     expect(overview.models).toEqual([]);
     expect(overview.modelsDirsStatus).toEqual([]);
-
-    await app.close();
   });
 
   it('rejects model start when the requested model path does not exist', async () => {
-    const app = buildApiApp();
+    const { app, dataRoot } = api();
     const response = await app.inject({
       method: 'POST',
       url: '/api/runtime/start',
@@ -255,14 +219,12 @@ describe('runtime control routes', () => {
     expect(response.json()).toMatchObject({
       code: 'validation_error',
     });
-
-    await app.close();
   });
 
   it('rejects a missing mmproj projector before launch, since llama-server would die after starting and bury the cause in its log', async () => {
+    const { app, dataRoot } = api();
     const modelPath = path.join(dataRoot, 'model.gguf');
     await fs.writeFile(modelPath, 'gguf', 'utf8');
-    const app = buildApiApp();
 
     const response = await app.inject({
       method: 'POST',
@@ -280,12 +242,10 @@ describe('runtime control routes', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().message).toContain('Multimodal projector not found');
-
-    await app.close();
   });
 
   it('returns runtime overview after stop on an idle server', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'POST',
       url: '/api/runtime/stop',
@@ -295,8 +255,6 @@ describe('runtime control routes', () => {
 
     expect(response.statusCode).toBe(200);
     expect(overview.serverStatus.status).toBe('idle');
-
-    await app.close();
   });
 });
 

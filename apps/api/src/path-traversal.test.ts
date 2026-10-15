@@ -1,11 +1,25 @@
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 
 import { CharacterIdSchema } from '@immersion/contracts/characters';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ScenarioDetailResponseSchema } from '@immersion/contracts/scenarios';
+import { beforeEach, describe, expect, it } from 'vitest';
 
-import { buildApiApp } from './app.js';
+import { useTestApi } from './test-support/use-test-api.js';
+
+interface ResourceRoute {
+  readonly method: 'DELETE' | 'GET';
+  readonly module: string;
+}
+
+const TRAVERSAL_ROUTES: readonly ResourceRoute[] = [
+  { method: 'DELETE', module: 'scenarios' },
+  { method: 'GET', module: 'scenarios' },
+  { method: 'DELETE', module: 'lorebooks' },
+  { method: 'GET', module: 'lorebooks' },
+  { method: 'DELETE', module: 'characters' },
+  { method: 'GET', module: 'characters' },
+];
 
 describe('file-backed resource id contract', () => {
   it.each([
@@ -26,47 +40,36 @@ describe('file-backed resource id contract', () => {
 });
 
 describe('path traversal through resource id routes', () => {
-  let dataRoot = '';
+  const api = useTestApi();
 
   beforeEach(async () => {
-    dataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'immersion-traversal-'));
-    process.env.IMMERSION_DATA_ROOT = dataRoot;
+    const { dataRoot, settings } = api();
 
     await fs.mkdir(path.join(dataRoot, 'scenarios'), { recursive: true });
     await fs.mkdir(path.join(dataRoot, 'worlds'), { recursive: true });
     await fs.mkdir(path.join(dataRoot, 'characters'), { recursive: true });
-    await fs.writeFile(path.join(dataRoot, 'user-settings.json'), JSON.stringify({ userName: 'Sentinel' }), 'utf8');
-  });
-
-  afterEach(async () => {
-    delete process.env.IMMERSION_DATA_ROOT;
-    await fs.rm(dataRoot, { force: true, recursive: true });
+    await settings.write({ userName: 'Sentinel' });
   });
 
   const traversalId = encodeURIComponent('../user-settings.json');
 
-  it.each([
-    ['scenarios', 'DELETE'],
-    ['scenarios', 'GET'],
-    ['lorebooks', 'DELETE'],
-    ['lorebooks', 'GET'],
-    ['characters', 'DELETE'],
-    ['characters', 'GET'],
-  ] as const)('rejects a traversal id on /api/%s (%s) without touching the file system', async (module, method) => {
-    const app = buildApiApp();
-    const response = await app.inject({
+  it.each(
+    TRAVERSAL_ROUTES,
+  )('rejects a traversal id on /api/$module ($method) with 400 without touching the file system', async ({
+    method,
+    module,
+  }) => {
+    const response = await api().app.inject({
       method,
       url: `/api/${module}/${traversalId}`,
     });
 
-    expect([400, 404]).toContain(response.statusCode);
-    await expect(fs.readFile(path.join(dataRoot, 'user-settings.json'), 'utf8')).resolves.toContain('Sentinel');
-
-    await app.close();
+    expect(response.statusCode).toBe(400);
+    expect(await api().settings.read()).toEqual({ userName: 'Sentinel' });
   });
 
   it('still serves scenario CRUD for names with spaces and Cyrillic characters', async () => {
-    const app = buildApiApp();
+    const { app } = api();
 
     const createResponse = await app.inject({
       method: 'POST',
@@ -80,7 +83,7 @@ describe('path traversal through resource id routes', () => {
     });
 
     expect(createResponse.statusCode).toBe(201);
-    const created = createResponse.json() as { scenario: { id: string } };
+    const created = ScenarioDetailResponseSchema.parse(createResponse.json());
 
     const getResponse = await app.inject({
       method: 'GET',
@@ -93,7 +96,5 @@ describe('path traversal through resource id routes', () => {
       url: `/api/scenarios/${encodeURIComponent(created.scenario.id)}`,
     });
     expect(deleteResponse.statusCode).toBe(204);
-
-    await app.close();
   });
 });

@@ -1,32 +1,16 @@
 import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { buildApiApp } from './app.js';
+import { useTestApi } from './test-support/use-test-api.js';
 
 describe('user-settings.json writes', () => {
-  let dataRoot = '';
-
-  beforeEach(async () => {
-    dataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'immersion-settings-'));
-    process.env.IMMERSION_DATA_ROOT = dataRoot;
-  });
-
-  afterEach(async () => {
-    delete process.env.IMMERSION_DATA_ROOT;
-    await fs.rm(dataRoot, { force: true, recursive: true });
-  });
+  const api = useTestApi();
 
   it('persists concurrent mutations from different modules without losing updates', async () => {
-    await fs.writeFile(
-      path.join(dataRoot, 'user-settings.json'),
-      JSON.stringify({ userName: 'Misha' }, null, 2),
-      'utf8',
-    );
+    const { app, settings } = api();
+    await settings.write({ userName: 'Misha' });
 
-    const app = buildApiApp();
     const [runtimeResponse, providersResponse] = await Promise.all([
       app.inject({
         method: 'PUT',
@@ -59,10 +43,7 @@ describe('user-settings.json writes', () => {
     expect(runtimeResponse.statusCode).toBe(200);
     expect(providersResponse.statusCode).toBe(200);
 
-    const stored = JSON.parse(await fs.readFile(path.join(dataRoot, 'user-settings.json'), 'utf8')) as Record<
-      string,
-      unknown
-    >;
+    const stored = await settings.read();
 
     expect(stored.userName).toBe('Misha');
     expect(stored.llmServerConfig).toMatchObject({ port: 5010, gpuLayers: 12 });
@@ -70,12 +51,10 @@ describe('user-settings.json writes', () => {
     expect(stored.providerConfigs).toMatchObject({
       custom: { url: 'http://127.0.0.1:9999', model: 'concurrent-model' },
     });
-
-    await app.close();
   });
 
   it('serializes overlapping settings-module mutations', async () => {
-    const app = buildApiApp();
+    const { app, settings } = api();
 
     const createResponses = await Promise.all(
       ['Preset A', 'Preset B', 'Preset C'].map((name) =>
@@ -99,24 +78,17 @@ describe('user-settings.json writes', () => {
       ),
     );
 
-    for (const response of createResponses) {
-      expect(response.statusCode).toBe(201);
-    }
+    expect(createResponses.map((response) => response.statusCode)).toEqual([201, 201, 201]);
 
-    const stored = JSON.parse(await fs.readFile(path.join(dataRoot, 'user-settings.json'), 'utf8')) as {
-      samplerPresets: Array<{ name: string }>;
-    };
-    const names = stored.samplerPresets.map((preset) => preset.name).sort();
+    const stored = await settings.read();
+    const names = (stored.samplerPresets ?? []).map((preset) => preset.name).sort();
 
     expect(names).toEqual(['Preset A', 'Preset B', 'Preset C']);
-
-    await app.close();
   });
 
   it('degrades to defaults instead of failing when user-settings.json is malformed', async () => {
-    await fs.writeFile(path.join(dataRoot, 'user-settings.json'), '{ "userName": "Misha", "trunca', 'utf8');
-
-    const app = buildApiApp();
+    const { app, settings } = api();
+    await fs.writeFile(settings.path, '{ "userName": "Misha", "trunca', 'utf8');
 
     const settingsResponse = await app.inject({ method: 'GET', url: '/api/settings/overview' });
     expect(settingsResponse.statusCode).toBe(200);
@@ -129,7 +101,5 @@ describe('user-settings.json writes', () => {
 
     const readinessResponse = await app.inject({ method: 'GET', url: '/api/generation/readiness' });
     expect(readinessResponse.statusCode).toBe(200);
-
-    await app.close();
   });
 });
