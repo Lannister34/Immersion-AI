@@ -1,0 +1,8 @@
+{
+  "extends": "../../packages/tooling/tsconfig/node-app.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true
+  },
+  "include": ["vitest.config.ts"]
+}
