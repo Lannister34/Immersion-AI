@@ -1,9 +1,4 @@
-import {
-  type PromptVariableKey,
-  type PromptVariableValues,
-  readPromptVariable,
-  resolvePromptVariableKey,
-} from './prompt-variable-registry.js';
+import { type PromptVariableKey, resolvePromptVariableKey } from './prompt-variable-registry.js';
 
 export interface PromptTextNode {
   type: 'text';
@@ -29,37 +24,10 @@ export interface ParsedPromptTemplate {
   nodes: PromptTemplateNode[];
 }
 
-export interface PromptTemplateDiagnostics {
-  cyclicVariables: string[];
-  invalidVariableTemplates: string[];
-  unknownConditions: string[];
-  unresolvedVariables: string[];
-}
-
-export interface PromptTemplateRenderResult {
-  diagnostics: PromptTemplateDiagnostics;
-  output: string;
-}
-
 interface PromptConditionalFrame {
   children: PromptTemplateNode[];
   condition: string;
   nodes: PromptTemplateNode[];
-}
-
-function createDiagnostics(): PromptTemplateDiagnostics {
-  return {
-    cyclicVariables: [],
-    invalidVariableTemplates: [],
-    unknownConditions: [],
-    unresolvedVariables: [],
-  };
-}
-
-function pushUnique(values: string[], value: string) {
-  if (!values.includes(value)) {
-    values.push(value);
-  }
 }
 
 export class PromptTemplateParseError extends Error {
@@ -165,92 +133,4 @@ export function parsePromptTemplate(template: string): ParsedPromptTemplate {
   return {
     nodes: rootFrame.children,
   };
-}
-
-function renderVariableValue(
-  key: PromptVariableKey,
-  values: PromptVariableValues,
-  diagnostics: PromptTemplateDiagnostics,
-  activeKeys: Set<PromptVariableKey>,
-): string {
-  const value = readPromptVariable(values, key);
-
-  if (value.length === 0) {
-    return '';
-  }
-
-  if (!value.includes('{{')) {
-    return value;
-  }
-
-  if (activeKeys.has(key)) {
-    pushUnique(diagnostics.cyclicVariables, key);
-    return value;
-  }
-
-  const nextActiveKeys = new Set(activeKeys);
-  nextActiveKeys.add(key);
-
-  try {
-    return parsePromptTemplate(value)
-      .nodes.map((node) => renderNode(node, values, diagnostics, nextActiveKeys))
-      .join('');
-  } catch (error) {
-    if (error instanceof PromptTemplateParseError) {
-      pushUnique(diagnostics.invalidVariableTemplates, key);
-      return value;
-    }
-
-    throw error;
-  }
-}
-
-function renderNode(
-  node: PromptTemplateNode,
-  values: PromptVariableValues,
-  diagnostics: PromptTemplateDiagnostics,
-  activeKeys: Set<PromptVariableKey>,
-): string {
-  if (node.type === 'text') {
-    return node.value;
-  }
-
-  if (node.type === 'variable') {
-    if (!node.canonicalKey) {
-      diagnostics.unresolvedVariables.push(node.name);
-      return `{{${node.name}}}`;
-    }
-
-    return renderVariableValue(node.canonicalKey, values, diagnostics, activeKeys);
-  }
-
-  if (!node.canonicalKey) {
-    diagnostics.unknownConditions.push(node.condition);
-    return '';
-  }
-
-  const conditionValue = readPromptVariable(values, node.canonicalKey);
-
-  if (conditionValue.length === 0) {
-    return '';
-  }
-
-  return node.children.map((child) => renderNode(child, values, diagnostics, activeKeys)).join('');
-}
-
-export function renderParsedPromptTemplate(
-  template: ParsedPromptTemplate,
-  values: PromptVariableValues,
-): PromptTemplateRenderResult {
-  const diagnostics = createDiagnostics();
-  const output = template.nodes.map((node) => renderNode(node, values, diagnostics, new Set())).join('');
-
-  return {
-    diagnostics,
-    output,
-  };
-}
-
-export function renderPromptTemplate(template: string, values: PromptVariableValues): PromptTemplateRenderResult {
-  return renderParsedPromptTemplate(parsePromptTemplate(template), values);
 }

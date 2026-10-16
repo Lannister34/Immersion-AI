@@ -161,6 +161,7 @@ export type ChatReplyPromptPreviewSource = z.infer<typeof ChatReplyPromptPreview
 export const ChatReplyPromptPreviewRendererDiagnosticsSchema = z.object({
   cyclicVariables: z.array(z.string()),
   invalidVariableTemplates: z.array(z.string()),
+  truncatedExpansions: z.array(z.string()),
   unknownConditions: z.array(z.string()),
   unresolvedVariables: z.array(z.string()),
 });

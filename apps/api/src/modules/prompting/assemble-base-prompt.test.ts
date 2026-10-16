@@ -43,6 +43,7 @@ describe('assemble base prompt', () => {
       diagnostics: {
         cyclicVariables: [],
         invalidVariableTemplates: [],
+        truncatedExpansions: [],
         unknownConditions: [],
         unresolvedVariables: [],
       },
