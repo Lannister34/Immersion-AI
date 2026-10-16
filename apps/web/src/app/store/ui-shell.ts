@@ -1,18 +1,10 @@
 import { create } from 'zustand';
 
+import { CHAT_PANEL_DEFAULT_WIDTH, clampChatPanelWidth } from './chat-panel-width';
+
 export type ChatRightPanelTab = 'model' | 'context';
 
-export const CHAT_PANEL_MIN_WIDTH = 320;
-export const CHAT_PANEL_MAX_WIDTH = 520;
-const CHAT_PANEL_DEFAULT_WIDTH = 360;
 const CHAT_PANEL_WIDTH_STORAGE_KEY = 'immersion.chat-panel-width';
-
-export function clampChatPanelWidth(width: number): number {
-  if (!Number.isFinite(width)) {
-    return CHAT_PANEL_DEFAULT_WIDTH;
-  }
-  return Math.round(Math.min(CHAT_PANEL_MAX_WIDTH, Math.max(CHAT_PANEL_MIN_WIDTH, width)));
-}
 
 function readStoredPanelWidth(): number {
   const stored = window.localStorage.getItem(CHAT_PANEL_WIDTH_STORAGE_KEY);

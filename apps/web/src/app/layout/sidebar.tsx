@@ -34,6 +34,24 @@ interface SidebarNavItem {
   icon: (props: IconProps) => ReactNode;
 }
 
+interface SidebarLinkProps {
+  item: SidebarNavItem;
+  count?: number | undefined;
+}
+
+function SidebarLink({ item, count }: SidebarLinkProps) {
+  const IconComponent = item.icon;
+  return (
+    <Link activeProps={{ 'aria-current': 'page' }} className="sb__link" to={item.to}>
+      <span className="sb__icon">
+        <IconComponent size={16} />
+      </span>
+      <span className="truncate">{item.label}</span>
+      {typeof count === 'number' ? <span className="sb__link__count tnum">{count}</span> : <span />}
+    </Link>
+  );
+}
+
 const workspaceItems: SidebarNavItem[] = [
   { to: '/chat', label: 'Чаты', icon: ChatIcon },
   { to: '/characters', label: 'Персонажи', icon: UserIcon },
@@ -107,23 +125,5 @@ export function Sidebar({ runtime, persona, workspaceCounts }: SidebarProps) {
         ) : null}
       </div>
     </aside>
-  );
-}
-
-interface SidebarLinkProps {
-  item: SidebarNavItem;
-  count?: number | undefined;
-}
-
-function SidebarLink({ item, count }: SidebarLinkProps) {
-  const IconComponent = item.icon;
-  return (
-    <Link activeProps={{ 'aria-current': 'page' }} className="sb__link" to={item.to}>
-      <span className="sb__icon">
-        <IconComponent size={16} />
-      </span>
-      <span className="truncate">{item.label}</span>
-      {typeof count === 'number' ? <span className="sb__link__count tnum">{count}</span> : <span />}
-    </Link>
   );
 }

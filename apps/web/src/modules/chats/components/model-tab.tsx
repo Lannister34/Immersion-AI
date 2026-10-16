@@ -17,13 +17,6 @@ import { MarkDot } from './mark-dot';
 import { SaveAsPresetForm } from './save-as-preset-form';
 import { SaveErrorLine } from './save-error-line';
 
-export interface ModelTabProps {
-  effectiveSampling: InheritedSampling | undefined;
-  form: AutoSavedGenerationSettings;
-  modelBindingPresetId: string | null;
-  settings: SettingsOverviewResponse | undefined;
-}
-
 interface UndoButtonProps {
   inheritedText: string;
   onClick: () => void;
@@ -40,6 +33,13 @@ function UndoButton({ inheritedText, onClick }: UndoButtonProps) {
       <UndoIcon size={13} />
     </button>
   );
+}
+
+interface ModelTabProps {
+  effectiveSampling: InheritedSampling | undefined;
+  form: AutoSavedGenerationSettings;
+  modelBindingPresetId: string | null;
+  settings: SettingsOverviewResponse | undefined;
 }
 
 export function ModelTab({ effectiveSampling, form, modelBindingPresetId, settings }: ModelTabProps) {

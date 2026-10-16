@@ -1,20 +1,13 @@
-import {
-  type SaveScenarioCommand,
-  SaveScenarioCommandSchema,
-  type ScenarioSummaryDto,
-} from '@immersion/contracts/scenarios';
+import { type SaveScenarioCommand, SaveScenarioCommandSchema } from '@immersion/contracts/scenarios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { type ChangeEvent, type ReactNode, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
-import { formatRelative } from '../../shared/lib/format-relative';
 import { pluralRu } from '../../shared/lib/plural';
-import { PlusIcon, SearchIcon, TrashIcon, UploadIcon, XIcon } from '../../shared/ui/icons';
-import { createChat } from '../chats/api/create-chat';
-import { chatListQueryKey } from '../chats/queries/chat-list-query';
+import { PlusIcon, SearchIcon, UploadIcon } from '../../shared/ui/icons';
 import { createScenario } from './api/save-scenario';
-import { useDeleteScenario } from './mutations/use-delete-scenario';
+import { ScenarioRow } from './components/scenario-row';
 import { scenarioListQueryKey, scenarioListQueryOptions } from './queries/scenario-list-query';
 
 export { ScenarioEditorScreen } from './editor';
@@ -36,6 +29,18 @@ function parseScenarioImportFile(raw: string): SaveScenarioCommand {
     name: typeof record.name === 'string' ? record.name : '',
     tags: Array.isArray(record.tags) ? record.tags.filter((tag): tag is string => typeof tag === 'string') : [],
   });
+}
+
+const SCENARIO_SKELETON_CARD_COUNT = 3;
+
+function ScenariosListSkeleton() {
+  return (
+    <div style={{ display: 'grid', gap: 10 }}>
+      {Array.from({ length: SCENARIO_SKELETON_CARD_COUNT }, (_, index) => (
+        <div className="card" key={index} style={{ height: 110, background: 'var(--surface)' }} />
+      ))}
+    </div>
+  );
 }
 
 export function ScenariosScreen() {
@@ -238,153 +243,5 @@ export function ScenariosScreen() {
         <div className="page__body">{body}</div>
       </div>
     </main>
-  );
-}
-
-interface ScenarioRowProps {
-  scenario: ScenarioSummaryDto;
-}
-
-function ScenarioRow({ scenario }: ScenarioRowProps) {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const startChatMutation = useMutation({
-    mutationFn: () => createChat({ scenarioId: scenario.id }),
-    onSuccess: async (response) => {
-      await queryClient.invalidateQueries({ queryKey: chatListQueryKey });
-      await navigate({ to: '/chat/$chatId', params: { chatId: response.chat.id } });
-    },
-  });
-  const deleteMutation = useDeleteScenario(scenario.id, {
-    onSuccess: () => {
-      setConfirmDelete(false);
-    },
-  });
-
-  const handleStartChat = () => {
-    startChatMutation.mutate();
-  };
-
-  const handleAskDelete = () => {
-    setConfirmDelete(true);
-  };
-
-  const handleConfirmDelete = () => {
-    deleteMutation.mutate();
-  };
-
-  const handleCancelDelete = () => {
-    setConfirmDelete(false);
-  };
-
-  return (
-    <div
-      className="card card-hover"
-      style={{
-        padding: 14,
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) 140px',
-        gap: 18,
-        position: 'relative',
-      }}
-    >
-      <Link
-        aria-label={`Открыть сценарий: ${scenario.name}`}
-        params={{ scenarioId: scenario.id }}
-        style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'pointer' }}
-        to="/scenarios/$scenarioId"
-      />
-      <div style={{ minWidth: 0, display: 'grid', gap: 6 }}>
-        <strong style={{ fontSize: 'var(--fz-md)' }}>{scenario.name}</strong>
-        {scenario.preview ? (
-          <div
-            className="muted"
-            style={{
-              fontSize: 'var(--fz-sm)',
-              lineHeight: 1.5,
-              display: '-webkit-box',
-              WebkitLineClamp: 3,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-            }}
-          >
-            {scenario.preview}
-          </div>
-        ) : (
-          <div className="muted" style={{ fontSize: 'var(--fz-sm)' }}>
-            Без описания.
-          </div>
-        )}
-        {scenario.tags.length > 0 ? (
-          <div className="row gap-4" style={{ flexWrap: 'wrap' }}>
-            {scenario.tags.slice(0, 8).map((tag) => (
-              <span className="tag" key={tag}>
-                {tag}
-              </span>
-            ))}
-          </div>
-        ) : null}
-      </div>
-      <div className="col" style={{ alignItems: 'flex-end', gap: 6, justifyContent: 'space-between' }}>
-        <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
-          {formatRelative(scenario.updatedAt)}
-        </span>
-        <div className="row gap-4" style={{ position: 'relative', zIndex: 2 }}>
-          {confirmDelete ? (
-            <>
-              <button
-                className="btn btn--xs btn--danger"
-                disabled={deleteMutation.isPending}
-                onClick={handleConfirmDelete}
-                title="Удалить сценарий"
-                type="button"
-              >
-                {deleteMutation.isPending ? '…' : 'Удалить'}
-              </button>
-              <button
-                className="btn btn--icon btn--xs"
-                disabled={deleteMutation.isPending}
-                onClick={handleCancelDelete}
-                title="Не удалять"
-                type="button"
-              >
-                <XIcon size={11} />
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                className="btn btn--icon btn--xs"
-                onClick={handleAskDelete}
-                title="Удалить сценарий"
-                type="button"
-              >
-                <TrashIcon size={11} />
-              </button>
-              <button
-                className="btn btn--xs btn--primary"
-                disabled={startChatMutation.isPending}
-                onClick={handleStartChat}
-                title="Начать новый чат по сценарию"
-                type="button"
-              >
-                {startChatMutation.isPending ? '…' : 'Начать чат'}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ScenariosListSkeleton() {
-  return (
-    <div style={{ display: 'grid', gap: 10 }}>
-      {[0, 1, 2].map((index) => (
-        <div className="card" key={index} style={{ height: 110, background: 'var(--surface)' }} />
-      ))}
-    </div>
   );
 }
