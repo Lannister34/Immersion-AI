@@ -79,7 +79,6 @@ function devServerConfig(cacheDir: string, port: number, upstreamOrigin: string)
     logLevel: 'silent',
     optimizeDeps: { noDiscovery: true, include: [] },
     server: {
-      host: LOOPBACK,
       port,
       hmr: false,
       ws: false,
@@ -117,6 +116,10 @@ describe('the dev server that vite.config.ts configures', () => {
     if (cacheDir) {
       rmSync(cacheDir, { recursive: true, force: true });
     }
+  });
+
+  it('listens on the IPv4 loopback address alone, not on every interface or wherever localhost resolves', () => {
+    expect(devServer.httpServer?.address()).toMatchObject({ address: LOOPBACK, family: 'IPv4' });
   });
 
   describe('file access', () => {
