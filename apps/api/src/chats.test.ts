@@ -1,5 +1,4 @@
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 
 import {
@@ -13,11 +12,13 @@ import {
   UpdateChatTitleResponseSchema,
 } from '@immersion/contracts/chats';
 import { CHAT_IMPORT_MAX_BYTES } from '@immersion/contracts/common';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
-import { buildApiApp } from './app.js';
+import { readStoredChatFile } from './test-support/stored-chat-file.js';
+import type { StoredUserSettingsFixture } from './test-support/stored-user-settings-fixture-schema.js';
+import { useTestApi } from './test-support/use-test-api.js';
 
-const testUserSettings = {
+const testUserSettings: StoredUserSettingsFixture = {
   activePresetId: 'default',
   modelPresetMap: {
     'smoke-model': 'smoke-model-preset',
@@ -58,34 +59,20 @@ const testUserSettings = {
 };
 
 describe('chat routes', () => {
-  let previousDataRoot: string | undefined;
-  let temporaryDataRoot: string;
+  const api = useTestApi();
 
   beforeEach(async () => {
-    previousDataRoot = process.env.IMMERSION_DATA_ROOT;
-    temporaryDataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'immersion-api-chats-'));
-    await fs.writeFile(path.join(temporaryDataRoot, 'user-settings.json'), JSON.stringify(testUserSettings), 'utf8');
-    process.env.IMMERSION_DATA_ROOT = temporaryDataRoot;
-  });
-
-  afterEach(async () => {
-    if (previousDataRoot) {
-      process.env.IMMERSION_DATA_ROOT = previousDataRoot;
-    } else {
-      delete process.env.IMMERSION_DATA_ROOT;
-    }
-
-    await fs.rm(temporaryDataRoot, { recursive: true, force: true });
+    await api().settings.write(testUserSettings);
   });
 
   async function writeGenericChatFile(chatId: string, lines: string[]) {
-    const chatsDirectory = path.join(temporaryDataRoot, 'chats', '_no_character_');
+    const chatsDirectory = path.join(api().dataRoot, 'chats', '_no_character_');
     await fs.mkdir(chatsDirectory, { recursive: true });
     await fs.writeFile(path.join(chatsDirectory, `${chatId}.jsonl`), `${lines.join('\n')}\n`, 'utf8');
   }
 
   it('creates a generic chat and exposes it through list and session routes', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const createResponse = await app.inject({
       method: 'POST',
       url: '/api/chats',
@@ -99,22 +86,11 @@ describe('chat routes', () => {
     expect(createPayload.chat.title).toBe('Проверка MVP');
     expect(createPayload.chat.messageCount).toBe(0);
 
-    const filePath = path.join(temporaryDataRoot, 'chats', '_no_character_', `${createPayload.chat.id}.jsonl`);
-    await expect(fs.access(filePath)).resolves.toBeUndefined();
-    const headerLine = (await fs.readFile(filePath, 'utf8')).split(/\r?\n/u)[0] ?? '';
-    expect(headerLine).not.toBe('');
-    const headerPayload = JSON.parse(headerLine) as {
-      chat_metadata: {
-        createdAt: string;
-        title: string;
-        updatedAt: string;
-      };
-      character_name: string;
-      generation_settings: unknown;
-      user_name: string;
-    };
+    const filePath = path.join(api().dataRoot, 'chats', '_no_character_', `${createPayload.chat.id}.jsonl`);
+    const storedChat = await readStoredChatFile(filePath);
 
-    expect(headerPayload).toMatchObject({
+    expect(storedChat.messages).toEqual([]);
+    expect(storedChat.header).toMatchObject({
       chat_metadata: {
         title: 'Проверка MVP',
         createdAt: createPayload.chat.createdAt,
@@ -159,12 +135,10 @@ describe('chat routes', () => {
       systemPrompt: null,
     });
     expect(sessionPayload.messages).toEqual([]);
-
-    await app.close();
   });
 
   it('updates and persists chat-owned generation settings', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const createResponse = await app.inject({
       method: 'POST',
       url: '/api/chats',
@@ -223,11 +197,10 @@ describe('chat routes', () => {
 
     expect(sessionPayload.generationSettings).toEqual(updatePayload.generationSettings);
 
-    const filePath = path.join(temporaryDataRoot, 'chats', '_no_character_', `${createPayload.chat.id}.jsonl`);
-    const headerLine = (await fs.readFile(filePath, 'utf8')).split(/\r?\n/u)[0] ?? '';
-    const headerPayload = JSON.parse(headerLine) as Record<string, unknown>;
+    const filePath = path.join(api().dataRoot, 'chats', '_no_character_', `${createPayload.chat.id}.jsonl`);
+    const { header } = await readStoredChatFile(filePath);
 
-    expect(headerPayload.generation_settings).toMatchObject({
+    expect(header.generation_settings).toMatchObject({
       sampler_preset_id: 'smoke-model-preset',
       system_prompt: 'You are concise. Reply to {{user}}.',
       sampling: {
@@ -243,12 +216,10 @@ describe('chat routes', () => {
         top_p: 0.77,
       },
     });
-
-    await app.close();
   });
 
   it('returns 400 for invalid chat generation settings', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const createResponse = await app.inject({
       method: 'POST',
       url: '/api/chats',
@@ -283,12 +254,10 @@ describe('chat routes', () => {
     expect(updateResponse.json()).toMatchObject({
       code: 'validation_error',
     });
-
-    await app.close();
   });
 
   it('returns 400 when chat generation settings reference an unknown sampler preset', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const createResponse = await app.inject({
       method: 'POST',
       url: '/api/chats',
@@ -323,12 +292,10 @@ describe('chat routes', () => {
     expect(updateResponse.json()).toMatchObject({
       code: 'invalid_chat_generation_settings',
     });
-
-    await app.close();
   });
 
   it('does not mutate persisted chat generation settings when update references an unknown preset', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const createResponse = await app.inject({
       method: 'POST',
       url: '/api/chats',
@@ -384,8 +351,6 @@ describe('chat routes', () => {
     const sessionPayload = GetChatSessionResponseSchema.parse(sessionResponse.json());
 
     expect(sessionPayload.generationSettings).toEqual(validPayload);
-
-    await app.close();
   });
 
   it('parses existing legacy generic chat files and sorts summaries by latest activity', async () => {
@@ -430,7 +395,7 @@ describe('chat routes', () => {
       }),
     ]);
 
-    const app = buildApiApp();
+    const { app } = api();
     const listResponse = await app.inject({
       method: 'GET',
       url: '/api/chats',
@@ -466,8 +431,6 @@ describe('chat routes', () => {
       samplerPresetId: null,
       systemPrompt: null,
     });
-
-    await app.close();
   });
 
   it('excludes a malformed chat file from the list but keeps failing the single-chat read', async () => {
@@ -491,7 +454,7 @@ describe('chat routes', () => {
       'not-json',
     ]);
 
-    const app = buildApiApp();
+    const { app } = api();
     const listResponse = await app.inject({
       method: 'GET',
       url: '/api/chats',
@@ -508,12 +471,10 @@ describe('chat routes', () => {
     expect(sessionResponse.json()).toMatchObject({
       code: 'internal_error',
     });
-
-    await app.close();
   });
 
   it('creates a chat bound to a character and seeds its first message', async () => {
-    const charactersDir = path.join(temporaryDataRoot, 'characters');
+    const charactersDir = path.join(api().dataRoot, 'characters');
     await fs.mkdir(charactersDir, { recursive: true });
     await fs.writeFile(
       path.join(charactersDir, 'Aria.json'),
@@ -525,7 +486,7 @@ describe('chat routes', () => {
       'utf8',
     );
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'POST',
       url: '/api/chats',
@@ -549,13 +510,11 @@ describe('chat routes', () => {
       role: 'assistant',
       content: 'Привет, ты в студии впервые?',
     });
-
-    await app.close();
   });
 
   it('does not seed the card greeting when a separate scenario is bound', async () => {
-    const charactersDir = path.join(temporaryDataRoot, 'characters');
-    const scenariosDir = path.join(temporaryDataRoot, 'scenarios');
+    const charactersDir = path.join(api().dataRoot, 'characters');
+    const scenariosDir = path.join(api().dataRoot, 'scenarios');
     await fs.mkdir(charactersDir, { recursive: true });
     await fs.mkdir(scenariosDir, { recursive: true });
     await fs.writeFile(
@@ -577,7 +536,7 @@ describe('chat routes', () => {
       'utf8',
     );
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'POST',
       url: '/api/chats',
@@ -587,13 +546,11 @@ describe('chat routes', () => {
 
     expect(response.statusCode).toBe(201);
     expect(payload.chat.messageCount).toBe(0);
-
-    await app.close();
   });
 
   it('seeds the scenario greeting over the card greeting with {{user}} and {{char}} already rendered', async () => {
-    const charactersDir = path.join(temporaryDataRoot, 'characters');
-    const scenariosDir = path.join(temporaryDataRoot, 'scenarios');
+    const charactersDir = path.join(api().dataRoot, 'characters');
+    const scenariosDir = path.join(api().dataRoot, 'scenarios');
     await fs.mkdir(charactersDir, { recursive: true });
     await fs.mkdir(scenariosDir, { recursive: true });
     await fs.writeFile(
@@ -616,7 +573,7 @@ describe('chat routes', () => {
       'utf8',
     );
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'POST',
       url: '/api/chats',
@@ -634,12 +591,10 @@ describe('chat routes', () => {
       role: 'assistant',
       content: '*Ария расстилает плед.* Ты всё-таки Тестер, да?',
     });
-
-    await app.close();
   });
 
   it('seeds the scenario greeting for a scenario-only chat', async () => {
-    const scenariosDir = path.join(temporaryDataRoot, 'scenarios');
+    const scenariosDir = path.join(api().dataRoot, 'scenarios');
     await fs.mkdir(scenariosDir, { recursive: true });
     await fs.writeFile(
       path.join(scenariosDir, 'Пикник.json'),
@@ -652,7 +607,7 @@ describe('chat routes', () => {
       'utf8',
     );
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'POST',
       url: '/api/chats',
@@ -670,16 +625,14 @@ describe('chat routes', () => {
       role: 'assistant',
       content: 'Ну наконец-то ты здесь!',
     });
-
-    await app.close();
   });
 
   it('keeps the avatar URL of a chat bound before the move to JSON cards', async () => {
-    const charactersDir = path.join(temporaryDataRoot, 'characters');
+    const charactersDir = path.join(api().dataRoot, 'characters');
     await fs.mkdir(charactersDir, { recursive: true });
     await fs.writeFile(path.join(charactersDir, 'Arina.json'), JSON.stringify({ name: 'Арина' }), 'utf8');
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'POST',
       url: '/api/chats',
@@ -691,12 +644,10 @@ describe('chat routes', () => {
     expect(payload.chat.characterAvatarUrl).toBe('/api/characters/Arina.json/avatar');
     expect(payload.chat.title).toBe('Чат с Ариной');
     expect(payload.chat.messageCount).toBe(0);
-
-    await app.close();
   });
 
   it('returns 404 when creating a chat with an unknown characterId', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'POST',
       url: '/api/chats',
@@ -705,12 +656,10 @@ describe('chat routes', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ code: 'character_not_found' });
-
-    await app.close();
   });
 
   it('returns 400 for an invalid create command', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'POST',
       url: '/api/chats',
@@ -723,12 +672,10 @@ describe('chat routes', () => {
     expect(response.json()).toMatchObject({
       code: 'validation_error',
     });
-
-    await app.close();
   });
 
   it('returns 400 for an invalid chat id', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'GET',
       url: '/api/chats/invalid.chat.id',
@@ -738,12 +685,10 @@ describe('chat routes', () => {
     expect(response.json()).toMatchObject({
       code: 'validation_error',
     });
-
-    await app.close();
   });
 
   it('returns 404 for an unknown chat id', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'GET',
       url: '/api/chats/missing-chat',
@@ -753,8 +698,6 @@ describe('chat routes', () => {
     expect(response.json()).toMatchObject({
       code: 'chat_not_found',
     });
-
-    await app.close();
   });
 
   it('patches a single message content and returns the refreshed session', async () => {
@@ -773,7 +716,7 @@ describe('chat routes', () => {
       JSON.stringify({ is_user: true, mes: 'three', send_date: '2026-01-01T00:00:03.000Z' }),
     ]);
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'PATCH',
       url: '/api/chats/edit-route-chat/messages/2',
@@ -784,8 +727,6 @@ describe('chat routes', () => {
     expect(response.statusCode).toBe(200);
     expect(payload.session.messages.map((message) => message.content)).toEqual(['one', 'two-edited', 'three']);
     expect(payload.session.messages.map((message) => message.role)).toEqual(['user', 'assistant', 'user']);
-
-    await app.close();
   });
 
   it('rejects empty content when patching a message', async () => {
@@ -802,7 +743,7 @@ describe('chat routes', () => {
       JSON.stringify({ is_user: true, mes: 'kept', send_date: '2026-01-01T00:00:01.000Z' }),
     ]);
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'PATCH',
       url: '/api/chats/edit-empty-chat/messages/1',
@@ -811,8 +752,6 @@ describe('chat routes', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({ code: 'validation_error' });
-
-    await app.close();
   });
 
   it('returns 404 when patching a non-existent message index', async () => {
@@ -829,7 +768,7 @@ describe('chat routes', () => {
       JSON.stringify({ is_user: true, mes: 'only', send_date: '2026-01-01T00:00:01.000Z' }),
     ]);
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'PATCH',
       url: '/api/chats/edit-missing-chat/messages/9',
@@ -838,12 +777,10 @@ describe('chat routes', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ code: 'chat_message_not_found' });
-
-    await app.close();
   });
 
-  it('switches the chat character via PATCH /bindings and reflects it in the next session read', async () => {
-    const charactersDir = path.join(temporaryDataRoot, 'characters');
+  async function writeChatBoundToArina() {
+    const charactersDir = path.join(api().dataRoot, 'characters');
     await fs.mkdir(charactersDir, { recursive: true });
     await fs.writeFile(
       path.join(charactersDir, 'Arina.json'),
@@ -867,8 +804,12 @@ describe('chat routes', () => {
       }),
       JSON.stringify({ is_user: true, mes: 'hi Arina', send_date: '2026-01-01T00:00:01.000Z' }),
     ]);
+  }
 
-    const app = buildApiApp();
+  it('switches the chat character via PATCH /bindings and reflects it in the next session read', async () => {
+    await writeChatBoundToArina();
+
+    const { app } = api();
     const bindResponse = await app.inject({
       method: 'PATCH',
       url: '/api/chats/bindings-route-chat/bindings',
@@ -884,18 +825,25 @@ describe('chat routes', () => {
     const readResponse = await app.inject({ method: 'GET', url: '/api/chats/bindings-route-chat' });
     const readPayload = GetChatSessionResponseSchema.parse(readResponse.json());
     expect(readPayload.characterId).toBe('Boris.json');
+  });
 
+  it('clears the chat character via PATCH /bindings with a null id and keeps it cleared on the next read', async () => {
+    await writeChatBoundToArina();
+
+    const { app } = api();
     const clearResponse = await app.inject({
       method: 'PATCH',
       url: '/api/chats/bindings-route-chat/bindings',
       payload: { characterId: null },
     });
     const clearPayload = GetChatSessionResponseSchema.parse(clearResponse.json());
+
     expect(clearResponse.statusCode).toBe(200);
     expect(clearPayload.characterId).toBeNull();
     expect(clearPayload.characterName).toBeNull();
 
-    await app.close();
+    const readResponse = await app.inject({ method: 'GET', url: '/api/chats/bindings-route-chat' });
+    expect(GetChatSessionResponseSchema.parse(readResponse.json()).characterId).toBeNull();
   });
 
   it('PATCH /bindings returns 404 when the new character does not exist', async () => {
@@ -907,7 +855,7 @@ describe('chat routes', () => {
       JSON.stringify({ is_user: true, mes: 'hi', send_date: '2026-01-01T00:00:01.000Z' }),
     ]);
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'PATCH',
       url: '/api/chats/bindings-missing-char-chat/bindings',
@@ -915,8 +863,6 @@ describe('chat routes', () => {
     });
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ code: 'character_not_found' });
-
-    await app.close();
   });
 
   it('renames a chat via PATCH /title and surfaces the new title in subsequent reads', async () => {
@@ -933,7 +879,7 @@ describe('chat routes', () => {
       JSON.stringify({ is_user: true, mes: 'hi', send_date: '2026-01-01T00:00:01.000Z' }),
     ]);
 
-    const app = buildApiApp();
+    const { app } = api();
     const renameResponse = await app.inject({
       method: 'PATCH',
       url: '/api/chats/rename-route-chat/title',
@@ -951,8 +897,6 @@ describe('chat routes', () => {
     const listResponse = await app.inject({ method: 'GET', url: '/api/chats' });
     const listPayload = ChatListResponseSchema.parse(listResponse.json());
     expect(listPayload.items.find((item) => item.id === 'rename-route-chat')?.title).toBe('New title');
-
-    await app.close();
   });
 
   it('rejects renaming a chat with an empty title', async () => {
@@ -969,7 +913,7 @@ describe('chat routes', () => {
       JSON.stringify({ is_user: true, mes: 'hi', send_date: '2026-01-01T00:00:01.000Z' }),
     ]);
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'PATCH',
       url: '/api/chats/rename-empty-chat/title',
@@ -978,12 +922,10 @@ describe('chat routes', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({ code: 'validation_error' });
-
-    await app.close();
   });
 
   it('returns 404 when renaming a missing chat', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'PATCH',
       url: '/api/chats/never-was-chat/title',
@@ -992,8 +934,6 @@ describe('chat routes', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ code: 'chat_not_found' });
-
-    await app.close();
   });
 
   it('truncates messages from the chosen index via DELETE', async () => {
@@ -1013,7 +953,7 @@ describe('chat routes', () => {
       JSON.stringify({ is_user: false, mes: 'drop-2', send_date: '2026-01-01T00:00:04.000Z' }),
     ]);
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'DELETE',
       url: '/api/chats/truncate-route-chat/messages/3?mode=from-here',
@@ -1023,8 +963,6 @@ describe('chat routes', () => {
     expect(response.statusCode).toBe(200);
     expect(payload.session.messages.map((message) => message.content)).toEqual(['keep-1', 'keep-2']);
     expect(payload.session.chat.messageCount).toBe(2);
-
-    await app.close();
   });
 
   it('deletes a single message by default and keeps the rest of the transcript', async () => {
@@ -1043,7 +981,7 @@ describe('chat routes', () => {
       JSON.stringify({ is_user: true, mes: 'third', send_date: '2026-01-01T00:00:03.000Z' }),
     ]);
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'DELETE',
       url: '/api/chats/delete-one-chat/messages/2',
@@ -1059,8 +997,6 @@ describe('chat routes', () => {
       'first',
       'third',
     ]);
-
-    await app.close();
   });
 
   it('returns 404 when truncating with an out-of-range index', async () => {
@@ -1077,7 +1013,7 @@ describe('chat routes', () => {
       JSON.stringify({ is_user: true, mes: 'only', send_date: '2026-01-01T00:00:01.000Z' }),
     ]);
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'DELETE',
       url: '/api/chats/truncate-missing-chat/messages/9',
@@ -1085,8 +1021,6 @@ describe('chat routes', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ code: 'chat_message_not_found' });
-
-    await app.close();
   });
 
   it('branches a chat from the chosen message and returns the new summary', async () => {
@@ -1106,7 +1040,7 @@ describe('chat routes', () => {
       JSON.stringify({ is_user: false, mes: 'tail', send_date: '2026-01-01T00:00:04.000Z' }),
     ]);
 
-    const app = buildApiApp();
+    const { app } = api();
     const branchResponse = await app.inject({
       method: 'POST',
       url: '/api/chats/branch-source-chat/branch',
@@ -1139,8 +1073,6 @@ describe('chat routes', () => {
     const forkPayload = GetChatSessionResponseSchema.parse(forkResponse.json());
     expect(forkPayload.messages.map((message) => message.content)).toEqual(['shared-1', 'shared-2', 'shared-3']);
     expect(forkPayload.userName).toBe('Тестер');
-
-    await app.close();
   });
 
   it('honours a custom title when branching', async () => {
@@ -1157,7 +1089,7 @@ describe('chat routes', () => {
       JSON.stringify({ is_user: true, mes: 'one', send_date: '2026-01-01T00:00:01.000Z' }),
     ]);
 
-    const app = buildApiApp();
+    const { app } = api();
     const branchResponse = await app.inject({
       method: 'POST',
       url: '/api/chats/branch-titled-source/branch',
@@ -1167,12 +1099,10 @@ describe('chat routes', () => {
 
     expect(branchResponse.statusCode).toBe(201);
     expect(branchPayload.chat.title).toBe('Альтернативный путь');
-
-    await app.close();
   });
 
   it('returns 404 when branching from a missing chat', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'POST',
       url: '/api/chats/never-existed/branch',
@@ -1181,8 +1111,6 @@ describe('chat routes', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ code: 'chat_not_found' });
-
-    await app.close();
   });
 
   it('returns 404 when branching with an out-of-range index', async () => {
@@ -1199,7 +1127,7 @@ describe('chat routes', () => {
       JSON.stringify({ is_user: true, mes: 'only', send_date: '2026-01-01T00:00:01.000Z' }),
     ]);
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'POST',
       url: '/api/chats/branch-range-chat/branch',
@@ -1208,8 +1136,6 @@ describe('chat routes', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ code: 'chat_message_not_found' });
-
-    await app.close();
   });
 
   it('deletes a chat and removes it from the list', async () => {
@@ -1226,7 +1152,7 @@ describe('chat routes', () => {
       JSON.stringify({ is_user: true, mes: 'bye', send_date: '2026-01-01T00:00:01.000Z' }),
     ]);
 
-    const app = buildApiApp();
+    const { app } = api();
     const deleteResponse = await app.inject({
       method: 'DELETE',
       url: '/api/chats/delete-route-chat',
@@ -1247,8 +1173,6 @@ describe('chat routes', () => {
     });
     const listPayload = ChatListResponseSchema.parse(listResponse.json());
     expect(listPayload.items.find((item) => item.id === 'delete-route-chat')).toBeUndefined();
-
-    await app.close();
   });
 
   it('exports a chat as JSONL with an attachment header derived from the title', async () => {
@@ -1265,7 +1189,7 @@ describe('chat routes', () => {
       JSON.stringify({ is_user: true, mes: 'one', send_date: '2026-01-01T00:00:01.000Z' }),
     ]);
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'GET',
       url: '/api/chats/export-route-chat/export',
@@ -1278,12 +1202,10 @@ describe('chat routes', () => {
     expect(response.body.trim().split('\n')).toHaveLength(2);
     expect(response.body).toContain('chat_metadata');
     expect(response.body).toContain('"mes":"one"');
-
-    await app.close();
   });
 
   it('returns 404 when exporting a missing chat', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'GET',
       url: '/api/chats/never-existed/export',
@@ -1291,12 +1213,10 @@ describe('chat routes', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ code: 'chat_not_found' });
-
-    await app.close();
   });
 
   it('returns 404 when deleting a missing chat', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'DELETE',
       url: '/api/chats/never-existed',
@@ -1304,12 +1224,10 @@ describe('chat routes', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ code: 'chat_not_found' });
-
-    await app.close();
   });
 
   it('returns 404 when updating generation settings for an unknown chat', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'PUT',
       url: '/api/chats/missing-chat/generation-settings',
@@ -1336,8 +1254,6 @@ describe('chat routes', () => {
     expect(response.json()).toMatchObject({
       code: 'chat_not_found',
     });
-
-    await app.close();
   });
 
   it('round-trips a chat through export and import, keeping settings and lorebooks but not the character binding', async () => {
@@ -1361,7 +1277,7 @@ describe('chat routes', () => {
       }),
     ]);
 
-    const app = buildApiApp();
+    const { app } = api();
     const roundtripGenerationSettings = {
       additionalInstructions: 'Не забывай про метель за окном.',
       samplerPresetId: 'smoke-model-preset',
@@ -1433,8 +1349,6 @@ describe('chat routes', () => {
     expect(importedSession.generationSettings).toEqual(sourceSession.generationSettings);
     expect(importedSession.lorebookIds).toEqual(roundtripLorebookIds);
     expect(importedSession.chat.lorebookIds).toEqual(roundtripLorebookIds);
-
-    await app.close();
   });
 
   it('imports a messages-only file without a header', async () => {
@@ -1444,7 +1358,7 @@ describe('chat routes', () => {
       JSON.stringify({ is_user: false, mes: 'Без заголовка', send_date: '2026-02-01T00:00:01.000Z' }),
     ].join('\n');
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'POST',
       url: '/api/chats/import',
@@ -1466,8 +1380,6 @@ describe('chat routes', () => {
     );
     expect(session.messages.map((message) => message.content)).toEqual(['Только сообщения', 'Без заголовка']);
     expect(session.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
-
-    await app.close();
   });
 
   it('counts a malformed first line as skipped instead of rejecting the import', async () => {
@@ -1476,7 +1388,7 @@ describe('chat routes', () => {
       JSON.stringify({ is_user: true, mes: 'Уцелевшее сообщение', send_date: '2026-02-01T00:00:00.000Z' }),
     ].join('\n');
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'POST',
       url: '/api/chats/import',
@@ -1489,14 +1401,12 @@ describe('chat routes', () => {
     const payload = ImportChatResponseSchema.parse(response.json());
     expect(payload.importedMessages).toBe(1);
     expect(payload.skippedLines).toBe(1);
-
-    await app.close();
   });
 
   it('rejects an import file without a single valid message', async () => {
     const content = ['это не JSON', '[1, 2, 3]', '"строка"', ''].join('\n');
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'POST',
       url: '/api/chats/import',
@@ -1507,14 +1417,12 @@ describe('chat routes', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({ code: 'invalid_chat_file' });
-
-    await app.close();
   });
 
   it('rejects an oversized import file', async () => {
     const oversized = Buffer.alloc(CHAT_IMPORT_MAX_BYTES + 1, 0x61);
 
-    const app = buildApiApp();
+    const { app } = api();
     const response = await app.inject({
       method: 'POST',
       url: '/api/chats/import',
@@ -1525,7 +1433,5 @@ describe('chat routes', () => {
 
     expect(response.statusCode).toBe(413);
     expect(response.json()).toMatchObject({ code: 'chat_file_too_large' });
-
-    await app.close();
   });
 });
