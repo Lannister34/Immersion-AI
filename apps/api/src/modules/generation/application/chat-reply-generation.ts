@@ -18,8 +18,8 @@ import {
   resolveGenerationProviderEndpoint,
 } from '../../providers/application/generation-provider.js';
 import { getSettingsOverview } from '../../settings/application/get-settings-overview.js';
-import { createChatCompletionClient } from '../infrastructure/chat-completion-client-factory.js';
-import { getProviderTokenCounter } from '../infrastructure/provider-token-counter.js';
+import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
+import { getProviderTokenCounter } from '../infrastructure/provider-clients/shared-token-counter.js';
 import type { ChatCompletionClient, ChatCompletionResponse } from './chat-completion-client.js';
 import {
   ChatReplyGenerationFailedError,

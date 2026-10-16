@@ -6,7 +6,7 @@ import {
   GenerateCharacterFieldResponseSchema,
 } from '@immersion/contracts/generation';
 
-import { createChatCompletionClient } from '../infrastructure/chat-completion-client-factory.js';
+import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import {
   type DraftGenerationContext,

@@ -4,9 +4,9 @@ import {
   countTokensHeuristic,
   type TokenCounter,
   type TokenCountResult,
-} from '../../prompting/application/token-counter.js';
-import { getProviderSettings } from '../../providers/index.js';
-import { getRunningRuntimeEndpoint } from '../../runtime/index.js';
+} from '../../../prompting/application/token-counter.js';
+import { getProviderSettings } from '../../../providers/index.js';
+import { getRunningRuntimeEndpoint } from '../../../runtime/index.js';
 
 const TOKENIZE_TIMEOUT_MS = 2000;
 const ABSENT_RETRY_MS = 60_000;
@@ -206,14 +206,4 @@ export class ProviderTokenCounter implements TokenCounter {
 
     return count;
   }
-}
-
-let sharedProviderTokenCounter: ProviderTokenCounter | null = null;
-
-export function getProviderTokenCounter(): ProviderTokenCounter {
-  if (!sharedProviderTokenCounter) {
-    sharedProviderTokenCounter = new ProviderTokenCounter();
-  }
-
-  return sharedProviderTokenCounter;
 }

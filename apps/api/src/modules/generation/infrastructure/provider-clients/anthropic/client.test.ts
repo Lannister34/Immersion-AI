@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ChatCompletionRequest } from './application/chat-completion-client.js';
-import { AnthropicMessagesClient, buildAnthropicPayload } from './infrastructure/anthropic-messages-client.js';
+import type { ChatCompletionRequest } from '../../../application/chat-completion-client.js';
+import { AnthropicClient } from './client.js';
+import { buildAnthropicPayload } from './request.js';
 
 const BASE_REQUEST: Omit<ChatCompletionRequest, 'onDelta'> = {
   endpoint: {
@@ -103,10 +104,10 @@ describe('buildAnthropicPayload', () => {
   });
 });
 
-describe('AnthropicMessagesClient', () => {
+describe('AnthropicClient', () => {
   it('posts to /v1/messages with the key in x-api-key and the API version in a header, not in the URL', async () => {
     const captured = mockFetch(jsonReply('Здравствуй.'), 'application/json');
-    const response = await new AnthropicMessagesClient().completeChat(BASE_REQUEST);
+    const response = await new AnthropicClient().completeChat(BASE_REQUEST);
 
     expect(captured[0]?.url).toBe('https://api.anthropic.com/v1/messages');
     expect(captured[0]?.headers.get('x-api-key')).toBe('sk-ant-test');
@@ -117,7 +118,7 @@ describe('AnthropicMessagesClient', () => {
 
   it('clamps temperature to 1 and drops repetition penalties, which the Anthropic API does not accept', async () => {
     const captured = mockFetch(jsonReply('Ага.'), 'application/json');
-    await new AnthropicMessagesClient().completeChat(BASE_REQUEST);
+    await new AnthropicClient().completeChat(BASE_REQUEST);
 
     expect(captured[0]?.body.temperature).toBe(1);
     expect(captured[0]?.body.top_k).toBe(40);
@@ -128,7 +129,7 @@ describe('AnthropicMessagesClient', () => {
 
   it('sends Claude either temperature or top_p, since newer Claude models reject both together', async () => {
     const captured = mockFetch(jsonReply('Ага.'), 'application/json');
-    await new AnthropicMessagesClient().completeChat({
+    await new AnthropicClient().completeChat({
       ...BASE_REQUEST,
       sampling: { ...BASE_REQUEST.sampling, temperature: 0.7, topP: 0.9 },
     });
@@ -139,7 +140,7 @@ describe('AnthropicMessagesClient', () => {
 
   it('keeps thinking blocks out of the reply', async () => {
     mockFetch(jsonReply('Ответ.', 'Взвешиваю варианты.'), 'application/json');
-    const response = await new AnthropicMessagesClient().completeChat(BASE_REQUEST);
+    const response = await new AnthropicClient().completeChat(BASE_REQUEST);
 
     expect(response.content).toBe('Ответ.');
     expect(response.reasoning).toBe('Взвешиваю варианты.');
@@ -156,14 +157,14 @@ describe('AnthropicMessagesClient', () => {
       }),
       'application/json',
     );
-    const response = await new AnthropicMessagesClient().completeChat(BASE_REQUEST);
+    const response = await new AnthropicClient().completeChat(BASE_REQUEST);
 
     expect(response).toEqual({ content: 'Ответ.', reasoning: '' });
   });
 
   it('never forwards server extensions, which the Anthropic API would reject', async () => {
     const captured = mockFetch(jsonReply('Ага.'), 'application/json');
-    await new AnthropicMessagesClient().completeChat({ ...BASE_REQUEST, serverExtensions: { enable_thinking: false } });
+    await new AnthropicClient().completeChat({ ...BASE_REQUEST, serverExtensions: { enable_thinking: false } });
 
     expect(captured[0]?.body).not.toHaveProperty('enable_thinking');
   });
@@ -181,7 +182,7 @@ describe('AnthropicMessagesClient', () => {
     );
     const deltas: Array<[string, string]> = [];
 
-    const response = await new AnthropicMessagesClient().completeChat({
+    const response = await new AnthropicClient().completeChat({
       ...BASE_REQUEST,
       onDelta: (delta, channel) => deltas.push([channel, delta]),
     });
@@ -206,7 +207,7 @@ describe('AnthropicMessagesClient', () => {
     );
     const deltas: Array<[string, string]> = [];
 
-    const response = await new AnthropicMessagesClient().completeChat({
+    const response = await new AnthropicClient().completeChat({
       ...BASE_REQUEST,
       onDelta: (delta, channel) => deltas.push([channel, delta]),
     });
@@ -221,8 +222,8 @@ describe('AnthropicMessagesClient', () => {
   it('fails loudly when the stream reports an error event', async () => {
     mockFetch(sseBody([{ error: { message: 'overloaded_error' }, type: 'error' }]), 'text/event-stream');
 
-    await expect(
-      new AnthropicMessagesClient().completeChat({ ...BASE_REQUEST, onDelta: () => undefined }),
-    ).rejects.toThrow(/overloaded_error/u);
+    await expect(new AnthropicClient().completeChat({ ...BASE_REQUEST, onDelta: () => undefined })).rejects.toThrow(
+      /overloaded_error/u,
+    );
   });
 });

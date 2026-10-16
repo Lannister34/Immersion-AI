@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ChatCompletionRequest } from './application/chat-completion-client.js';
-import { createChatCompletionClient } from './infrastructure/chat-completion-client-factory.js';
+import type { ChatCompletionRequest } from '../../application/chat-completion-client.js';
+import { createChatCompletionClient } from './create-chat-completion-client.js';
 
 function requestFor(endpoint: ChatCompletionRequest['endpoint']): ChatCompletionRequest {
   return {

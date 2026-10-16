@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ProviderTokenCounter } from './provider-token-counter.js';
+import { ProviderTokenCounter } from './token-counter.js';
 
 const BASE_URL = 'http://127.0.0.1:6021';
 const COUNT_CACHE_CAPACITY = 4096;
