@@ -1,8 +1,3 @@
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import { fileURLToPath, URL } from 'node:url';
-
 import { SaveCharacterCommandSchema } from '@immersion/contracts/characters';
 import {
   CharacterDraftFieldNameSchema,
@@ -14,178 +9,33 @@ import {
   GenerateScenarioFirstMessageResponseSchema,
 } from '@immersion/contracts/generation';
 import { SaveScenarioCommandSchema } from '@immersion/contracts/scenarios';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { beforeEach, describe, expect, it } from 'vitest';
 
-import { buildApiApp } from './app.js';
+import { readProviderChatRequest } from './test-support/provider-chat-request.js';
+import type { ProviderChatRequestFixture } from './test-support/provider-chat-request-fixture-schema.js';
+import { openAiChatCompletion, providerFailure } from './test-support/provider-responses.js';
+import { useTestApi } from './test-support/use-test-api.js';
 
-const fixtureDataRoot = fileURLToPath(new URL('../testdata/smoke-data', import.meta.url));
-
-interface ProviderRequestRecord {
-  authorization: string | null;
-  body: unknown;
-  url: string;
-}
-
-interface ProviderRequestMessageRecord {
-  content?: string;
-  role?: string;
-}
-
-interface ProviderRequestBodyRecord {
-  max_tokens?: number;
-  messages?: ProviderRequestMessageRecord[];
-  stream?: boolean;
-  temperature?: number;
-}
-
-interface SmokeUserSettingsFixture {
-  activeProvider?: string;
-  backendMode?: string;
-  providerConfigs?: Record<string, Record<string, string>>;
-}
+const PROVIDER_URL = 'http://127.0.0.1:6006';
+const CHAT_COMPLETIONS_URL = `${PROVIDER_URL}/v1/chat/completions`;
 
 describe('generation draft routes', () => {
-  let previousDataRoot: string | undefined;
-  let temporaryDataRoot: string;
-  const originalFetch = globalThis.fetch;
+  const api = useTestApi({ fixture: 'smoke' });
 
   beforeEach(async () => {
-    previousDataRoot = process.env.IMMERSION_DATA_ROOT;
-    temporaryDataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'immersion-api-generation-drafts-'));
-    await fs.cp(fixtureDataRoot, temporaryDataRoot, { recursive: true });
-    process.env.IMMERSION_DATA_ROOT = temporaryDataRoot;
-    await writeExternalProviderSettings('http://127.0.0.1:6006');
+    await api().settings.useExternalProvider({ url: PROVIDER_URL });
   });
 
-  afterEach(async () => {
-    globalThis.fetch = originalFetch;
-    vi.restoreAllMocks();
-
-    if (previousDataRoot) {
-      process.env.IMMERSION_DATA_ROOT = previousDataRoot;
-    } else {
-      delete process.env.IMMERSION_DATA_ROOT;
-    }
-
-    await fs.rm(temporaryDataRoot, { recursive: true, force: true });
-  });
-
-  function mockProviderSuccess(content: string) {
-    const requests: ProviderRequestRecord[] = [];
-
-    globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-      const headers = new Headers(init?.headers);
-      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : null;
-      requests.push({
-        authorization: headers.get('authorization'),
-        body,
-        url: input instanceof Request ? input.url : input.toString(),
-      });
-
-      return new Response(
-        JSON.stringify({
-          choices: [
-            {
-              message: {
-                content,
-              },
-            },
-          ],
-        }),
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          status: 200,
-        },
-      );
-    }) as typeof fetch;
-
-    return requests;
+  function answerWith(content: string) {
+    api().http.on('POST', CHAT_COMPLETIONS_URL, () => openAiChatCompletion(content));
   }
 
-  function mockProviderFailure() {
-    const requests: ProviderRequestRecord[] = [];
-
-    globalThis.fetch = vi.fn(async () => {
-      requests.push({
-        authorization: null,
-        body: null,
-        url: 'mock-provider-failure',
-      });
-
-      return new Response(JSON.stringify({ error: 'provider failed' }), {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        status: 500,
-      });
-    }) as typeof fetch;
-
-    return requests;
+  function modelBoundPreset() {
+    return api().settings.samplerPreset('smoke-model-preset');
   }
 
-  async function writeExternalProviderSettings(url: string, model = 'smoke-model') {
-    const settingsPath = path.join(temporaryDataRoot, 'user-settings.json');
-    const settings = JSON.parse(await fs.readFile(settingsPath, 'utf8')) as SmokeUserSettingsFixture;
-    const providerConfigs = settings.providerConfigs ?? {};
-
-    await fs.writeFile(
-      settingsPath,
-      JSON.stringify(
-        {
-          ...settings,
-          activeProvider: 'custom',
-          backendMode: 'external',
-          providerConfigs: {
-            ...providerConfigs,
-            custom: {
-              ...providerConfigs.custom,
-              apiKey: 'secret-token',
-              model,
-              url,
-            },
-          },
-        },
-        null,
-        2,
-      ),
-      'utf8',
-    );
-  }
-
-  async function writeBuiltinProviderSettings() {
-    const settingsPath = path.join(temporaryDataRoot, 'user-settings.json');
-    const settings = JSON.parse(await fs.readFile(settingsPath, 'utf8')) as SmokeUserSettingsFixture;
-
-    await fs.writeFile(
-      settingsPath,
-      JSON.stringify(
-        {
-          ...settings,
-          backendMode: 'builtin',
-        },
-        null,
-        2,
-      ),
-      'utf8',
-    );
-  }
-
-  async function writeResponseLanguage(responseLanguage: string) {
-    const settingsPath = path.join(temporaryDataRoot, 'user-settings.json');
-    const settings = z.record(z.string(), z.unknown()).parse(JSON.parse(await fs.readFile(settingsPath, 'utf8')));
-
-    await fs.writeFile(settingsPath, JSON.stringify({ ...settings, responseLanguage }, null, 2), 'utf8');
-  }
-
-  function getProviderRequestBody(request: ProviderRequestRecord | undefined): ProviderRequestBodyRecord {
-    if (!request?.body || typeof request.body !== 'object' || Array.isArray(request.body)) {
-      throw new Error('Provider request body was not recorded.');
-    }
-
-    return request.body as ProviderRequestBodyRecord;
+  function submittedText(request: ProviderChatRequestFixture) {
+    return request.messages.map((message) => message.content).join('\n');
   }
 
   function fenced(json: object): string {
@@ -194,7 +44,7 @@ describe('generation draft routes', () => {
 
   describe('POST /api/generation/character', () => {
     it('generates a character draft from code-fenced provider JSON with the model-bound preset in the profile language', async () => {
-      const providerRequests = mockProviderSuccess(
+      answerWith(
         fenced({
           name: 'Мира',
           description: 'Высокая, тёмные волосы, серые глаза.',
@@ -205,9 +55,7 @@ describe('generation draft routes', () => {
           tags: ['фэнтези', 'мастерская'],
         }),
       );
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/character',
         payload: {
@@ -227,26 +75,21 @@ describe('generation draft routes', () => {
         tags: ['фэнтези', 'мастерская'],
       });
 
-      expect(providerRequests).toHaveLength(1);
-      expect(providerRequests[0]).toMatchObject({
-        authorization: 'Bearer secret-token',
-        url: 'http://127.0.0.1:6006/v1/chat/completions',
-      });
-      const requestBody = getProviderRequestBody(providerRequests[0]);
+      expect(api().http.requestLines()).toEqual([`POST ${CHAT_COMPLETIONS_URL}`]);
+      expect(api().http.requests[0]?.headers.get('authorization')).toBe('Bearer secret-token');
+      const requestBody = readProviderChatRequest(api().http);
       expect(requestBody).toMatchObject({
         max_tokens: 2048,
         stream: false,
-        temperature: 0.44,
+        temperature: (await modelBoundPreset()).temperature,
       });
-      const submittedContent = requestBody.messages?.map((message) => message.content).join('\n') ?? '';
+      const submittedContent = submittedText(requestBody);
       expect(submittedContent).toContain('Молодая скульпторша из Петербурга');
       expect(submittedContent).toContain('Пиши на русском.');
-
-      await app.close();
     });
 
     it('keeps caller-provided fields over generated values and mentions them in the prompt', async () => {
-      const providerRequests = mockProviderSuccess(
+      answerWith(
         fenced({
           name: 'Сгенерированное имя',
           description: 'Сгенерированное описание.',
@@ -257,9 +100,7 @@ describe('generation draft routes', () => {
           tags: [],
         }),
       );
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/character',
         payload: {
@@ -275,18 +116,14 @@ describe('generation draft routes', () => {
       expect(payload.name).toBe('Виктор Крамер');
       expect(payload.description).toBe('Сгенерированное описание.');
 
-      const requestBody = getProviderRequestBody(providerRequests[0]);
-      const submittedContent = requestBody.messages?.map((message) => message.content).join('\n') ?? '';
+      const requestBody = readProviderChatRequest(api().http);
+      const submittedContent = submittedText(requestBody);
       expect(submittedContent).toContain('Виктор Крамер');
-
-      await app.close();
     });
 
     it('returns 502 provider_generation_failed for unparseable provider output', async () => {
-      mockProviderSuccess('Просто текст без какого-либо JSON.');
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      answerWith('Просто текст без какого-либо JSON.');
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/character',
         payload: {
@@ -296,16 +133,12 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(502);
       expect(response.json()).toMatchObject({ code: 'provider_generation_failed' });
-
-      await app.close();
     });
 
     it('returns 409 generation_provider_unavailable when no provider endpoint can be resolved', async () => {
-      await writeBuiltinProviderSettings();
-      const providerRequests = mockProviderSuccess('Should not be called.');
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      await api().settings.patch({ backendMode: 'builtin' });
+      answerWith('Should not be called.');
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/character',
         payload: {
@@ -315,16 +148,12 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({ code: 'generation_provider_unavailable' });
-      expect(providerRequests).toHaveLength(0);
-
-      await app.close();
+      expect(api().http.requestLines()).toEqual([]);
     });
 
     it('returns 400 validation_error without a concept and does not call the provider', async () => {
-      const providerRequests = mockProviderSuccess('Should not be called.');
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      answerWith('Should not be called.');
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/character',
         payload: {},
@@ -332,18 +161,14 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(400);
       expect(response.json()).toMatchObject({ code: 'validation_error' });
-      expect(providerRequests).toHaveLength(0);
-
-      await app.close();
+      expect(api().http.requestLines()).toEqual([]);
     });
   });
 
   describe('POST /api/generation/character-field', () => {
     it('generates a single field value as plain text', async () => {
-      const providerRequests = mockProviderSuccess('\nВысокая женщина с серебристыми волосами.\n');
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      answerWith('\nВысокая женщина с серебристыми волосами.\n');
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/character-field',
         payload: {
@@ -359,26 +184,22 @@ describe('generation draft routes', () => {
       const payload = GenerateCharacterFieldResponseSchema.parse(response.json());
       expect(payload.value).toBe('Высокая женщина с серебристыми волосами.');
 
-      expect(providerRequests).toHaveLength(1);
-      const requestBody = getProviderRequestBody(providerRequests[0]);
+      expect(api().http.requestLines()).toEqual([`POST ${CHAT_COMPLETIONS_URL}`]);
+      const requestBody = readProviderChatRequest(api().http);
       expect(requestBody).toMatchObject({
         max_tokens: 1024,
         stream: false,
-        temperature: 0.44,
+        temperature: (await modelBoundPreset()).temperature,
       });
-      const submittedContent = requestBody.messages?.map((message) => message.content).join('\n') ?? '';
+      const submittedContent = submittedText(requestBody);
       expect(submittedContent).toContain('Сгенерируй поле "description"');
       expect(submittedContent).toContain('Лириэль');
       expect(submittedContent).toContain('Эльфийка-архивариус');
-
-      await app.close();
     });
 
     it('raises the temperature and shows the model the previous value when regenerating an already filled field', async () => {
-      const providerRequests = mockProviderSuccess('Совсем другой вариант описания.');
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      answerWith('Совсем другой вариант описания.');
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/character-field',
         payload: {
@@ -390,21 +211,17 @@ describe('generation draft routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const requestBody = getProviderRequestBody(providerRequests[0]);
+      const requestBody = readProviderChatRequest(api().http);
       expect(requestBody.temperature).toBe(1.1);
-      const submittedContent = requestBody.messages?.map((message) => message.content).join('\n') ?? '';
+      const submittedContent = submittedText(requestBody);
       expect(submittedContent).toContain('НОВЫЙ, ДРУГОЙ вариант');
       expect(submittedContent).toContain('не повторяй его');
       expect(submittedContent).toContain('Старое описание.');
-
-      await app.close();
     });
 
     it('embeds the previous value when regenerating fields outside the card summary block', async () => {
-      const providerRequests = mockProviderSuccess('*Дверь распахивается.* Совсем новое вступление.');
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      answerWith('*Дверь распахивается.* Совсем новое вступление.');
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/character-field',
         payload: {
@@ -416,20 +233,16 @@ describe('generation draft routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const requestBody = getProviderRequestBody(providerRequests[0]);
-      const submittedContent = requestBody.messages?.map((message) => message.content).join('\n') ?? '';
+      const requestBody = readProviderChatRequest(api().http);
+      const submittedContent = submittedText(requestBody);
       expect(submittedContent).toContain('Старая первая фраза, которую нельзя повторять.');
-
-      await app.close();
     });
 
     it.each(
       CharacterDraftFieldNameSchema.options,
     )('caps a generated %s exactly at the character save limit', async (field) => {
-      mockProviderSuccess(`Черта. ${'очень длинный текст '.repeat(1_300)}`);
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      answerWith(`Черта. ${'очень длинный текст '.repeat(1_300)}`);
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/character-field',
         payload: {
@@ -442,15 +255,11 @@ describe('generation draft routes', () => {
       const { value } = GenerateCharacterFieldResponseSchema.parse(response.json());
       expect(SaveCharacterCommandSchema.safeParse({ name: 'Имя', [field]: value }).success).toBe(true);
       expect(SaveCharacterCommandSchema.safeParse({ name: 'Имя', [field]: `${value}!` }).success).toBe(false);
-
-      await app.close();
     });
 
     it('returns 502 provider_generation_failed when the provider fails', async () => {
-      const providerRequests = mockProviderFailure();
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      api().http.on('POST', CHAT_COMPLETIONS_URL, () => providerFailure());
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/character-field',
         payload: {
@@ -461,17 +270,13 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(502);
       expect(response.json()).toMatchObject({ code: 'provider_generation_failed' });
-      expect(providerRequests).toHaveLength(1);
-
-      await app.close();
+      expect(api().http.requestLines()).toEqual([`POST ${CHAT_COMPLETIONS_URL}`]);
     });
 
     it('returns 409 generation_provider_unavailable when no provider endpoint can be resolved', async () => {
-      await writeBuiltinProviderSettings();
-      const providerRequests = mockProviderSuccess('Should not be called.');
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      await api().settings.patch({ backendMode: 'builtin' });
+      answerWith('Should not be called.');
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/character-field',
         payload: {
@@ -481,16 +286,12 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({ code: 'generation_provider_unavailable' });
-      expect(providerRequests).toHaveLength(0);
-
-      await app.close();
+      expect(api().http.requestLines()).toEqual([]);
     });
 
     it('returns 400 validation_error for an unknown field', async () => {
-      const providerRequests = mockProviderSuccess('Should not be called.');
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      answerWith('Should not be called.');
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/character-field',
         payload: {
@@ -500,22 +301,18 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(400);
       expect(response.json()).toMatchObject({ code: 'validation_error' });
-      expect(providerRequests).toHaveLength(0);
-
-      await app.close();
+      expect(api().http.requestLines()).toEqual([]);
     });
   });
 
   describe('POST /api/generation/character-avatar-prompt', () => {
     it('generates a Stable Diffusion portrait prompt from code-fenced provider JSON', async () => {
-      const providerRequests = mockProviderSuccess(
+      answerWith(
         fenced({
           prompt: '1girl, silver hair, grey eyes, (masterpiece, best quality), soft lighting',
         }),
       );
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/character-avatar-prompt',
         payload: {
@@ -530,26 +327,22 @@ describe('generation draft routes', () => {
       const payload = GenerateCharacterAvatarPromptResponseSchema.parse(response.json());
       expect(payload.prompt).toBe('1girl, silver hair, grey eyes, (masterpiece, best quality), soft lighting');
 
-      expect(providerRequests).toHaveLength(1);
-      const requestBody = getProviderRequestBody(providerRequests[0]);
+      expect(api().http.requestLines()).toEqual([`POST ${CHAT_COMPLETIONS_URL}`]);
+      const requestBody = readProviderChatRequest(api().http);
       expect(requestBody).toMatchObject({
         max_tokens: 512,
         stream: false,
       });
-      const systemMessage = requestBody.messages?.find((message) => message.role === 'system');
+      const systemMessage = requestBody.messages.find((message) => message.role === 'system');
       expect(systemMessage?.content).toContain('Stable Diffusion');
-      const userMessage = requestBody.messages?.at(-1);
+      const userMessage = requestBody.messages.at(-1);
       expect(userMessage?.content).toContain('Лириэль');
-
-      await app.close();
     });
 
     it('asks for the prompt in English even when the profile answers in Russian', async () => {
-      await writeResponseLanguage('ru');
-      const providerRequests = mockProviderSuccess(fenced({ prompt: '1girl, silver hair' }));
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      await api().settings.patch({ responseLanguage: 'ru' });
+      answerWith(fenced({ prompt: '1girl, silver hair' }));
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/character-avatar-prompt',
         payload: {
@@ -560,20 +353,16 @@ describe('generation draft routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const requestBody = getProviderRequestBody(providerRequests[0]);
-      const submittedContent = requestBody.messages?.map((message) => message.content).join('\n') ?? '';
+      const requestBody = readProviderChatRequest(api().http);
+      const submittedContent = submittedText(requestBody);
       expect(submittedContent).toContain('You are an expert at writing Stable Diffusion image generation prompts.');
       expect(submittedContent).toContain('Generate a Stable Diffusion portrait prompt for this character');
       expect(submittedContent).not.toContain('Пиши на русском.');
-
-      await app.close();
     });
 
     it('reads the prompt from the legacy "positive" key as well', async () => {
-      mockProviderSuccess(fenced({ positive: '1girl, silver hair, soft lighting' }));
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      answerWith(fenced({ positive: '1girl, silver hair, soft lighting' }));
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/character-avatar-prompt',
         payload: {
@@ -586,15 +375,11 @@ describe('generation draft routes', () => {
       expect(response.statusCode).toBe(200);
       const payload = GenerateCharacterAvatarPromptResponseSchema.parse(response.json());
       expect(payload.prompt).toBe('1girl, silver hair, soft lighting');
-
-      await app.close();
     });
 
     it('returns 502 provider_generation_failed for unparseable provider output', async () => {
-      mockProviderSuccess('Не могу сгенерировать промпт.');
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      answerWith('Не могу сгенерировать промпт.');
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/character-avatar-prompt',
         payload: {
@@ -606,16 +391,12 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(502);
       expect(response.json()).toMatchObject({ code: 'provider_generation_failed' });
-
-      await app.close();
     });
 
     it('returns 409 generation_provider_unavailable when no provider endpoint can be resolved', async () => {
-      await writeBuiltinProviderSettings();
-      const providerRequests = mockProviderSuccess('Should not be called.');
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      await api().settings.patch({ backendMode: 'builtin' });
+      answerWith('Should not be called.');
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/character-avatar-prompt',
         payload: {
@@ -625,15 +406,13 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({ code: 'generation_provider_unavailable' });
-      expect(providerRequests).toHaveLength(0);
-
-      await app.close();
+      expect(api().http.requestLines()).toEqual([]);
     });
   });
 
   describe('POST /api/generation/scenario', () => {
     it('generates a scenario draft, naming the player for the gender hint and restoring leaked declined names to {{user}}', async () => {
-      const providerRequests = mockProviderSuccess(
+      answerWith(
         fenced({
           name: 'Ночная мастерская',
           content: 'Поздний вечер. {{char}} ждёт Тестера у входа в мастерскую.',
@@ -641,9 +420,7 @@ describe('generation draft routes', () => {
           tags: ['слайс-оф-лайф'],
         }),
       );
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/scenario',
         payload: {
@@ -660,31 +437,27 @@ describe('generation draft routes', () => {
         tags: ['слайс-оф-лайф'],
       });
 
-      expect(providerRequests).toHaveLength(1);
-      const requestBody = getProviderRequestBody(providerRequests[0]);
+      expect(api().http.requestLines()).toEqual([`POST ${CHAT_COMPLETIONS_URL}`]);
+      const requestBody = readProviderChatRequest(api().http);
       expect(requestBody).toMatchObject({
         max_tokens: 2048,
         stream: false,
       });
-      const submittedContent = requestBody.messages?.map((message) => message.content).join('\n') ?? '';
+      const submittedContent = submittedText(requestBody);
       expect(submittedContent).toContain('Вечер в мастерской скульптора');
       expect(submittedContent).toContain('Тестер');
       expect(submittedContent).toContain('{{user}} и {{char}}');
-
-      await app.close();
     });
 
     it('keeps a caller-provided scenario name', async () => {
-      mockProviderSuccess(
+      answerWith(
         fenced({
           name: 'Название от модели',
           content: '{{user}} и {{char}} встречаются на рынке.',
           tags: [],
         }),
       );
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/scenario',
         payload: {
@@ -696,15 +469,11 @@ describe('generation draft routes', () => {
       expect(response.statusCode).toBe(200);
       const payload = GenerateScenarioDraftResponseSchema.parse(response.json());
       expect(payload.name).toBe('Моё название');
-
-      await app.close();
     });
 
     it('returns 502 provider_generation_failed for unparseable provider output', async () => {
-      mockProviderSuccess('Сценарий: жили-были, без JSON.');
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      answerWith('Сценарий: жили-были, без JSON.');
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/scenario',
         payload: {
@@ -714,16 +483,12 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(502);
       expect(response.json()).toMatchObject({ code: 'provider_generation_failed' });
-
-      await app.close();
     });
 
     it('returns 409 generation_provider_unavailable when no provider endpoint can be resolved', async () => {
-      await writeBuiltinProviderSettings();
-      const providerRequests = mockProviderSuccess('Should not be called.');
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      await api().settings.patch({ backendMode: 'builtin' });
+      answerWith('Should not be called.');
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/scenario',
         payload: {
@@ -733,9 +498,7 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({ code: 'generation_provider_unavailable' });
-      expect(providerRequests).toHaveLength(0);
-
-      await app.close();
+      expect(api().http.requestLines()).toEqual([]);
     });
   });
 
@@ -748,14 +511,20 @@ describe('generation draft routes', () => {
       ],
       ['en', 'preserve them exactly. Do NOT swap', 'strictly from the concept and scene text — do not swap them'],
     ])('tell the model in %s not to swap {{user}} and {{char}}', async (language, draftRule, greetingRule) => {
-      await writeResponseLanguage(language);
-      const app = buildApiApp();
+      await api().settings.patch({ responseLanguage: language });
       const concept = '{{char}} приходит на приём к {{user}}';
 
-      const draftRequests = mockProviderSuccess(fenced({ name: 'Приём', content: '{{char}} входит.', tags: [] }));
-      const draftResponse = await app.inject({ method: 'POST', url: '/api/generation/scenario', payload: { concept } });
-      const greetingRequests = mockProviderSuccess('*{{char}} стучит в дверь.*');
-      const greetingResponse = await app.inject({
+      api().http.once('POST', CHAT_COMPLETIONS_URL, () =>
+        openAiChatCompletion(fenced({ name: 'Приём', content: '{{char}} входит.', tags: [] })),
+      );
+      api().http.once('POST', CHAT_COMPLETIONS_URL, () => openAiChatCompletion('*{{char}} стучит в дверь.*'));
+
+      const draftResponse = await api().app.inject({
+        method: 'POST',
+        url: '/api/generation/scenario',
+        payload: { concept },
+      });
+      const greetingResponse = await api().app.inject({
         method: 'POST',
         url: '/api/generation/scenario-first-message',
         payload: { concept },
@@ -763,25 +532,16 @@ describe('generation draft routes', () => {
 
       expect(draftResponse.statusCode).toBe(200);
       expect(greetingResponse.statusCode).toBe(200);
-      const submitted = (requests: ProviderRequestRecord[]) =>
-        getProviderRequestBody(requests[0])
-          .messages?.map((message) => message.content)
-          .join('\n') ?? '';
-      expect(submitted(draftRequests)).toContain(draftRule);
-      expect(submitted(greetingRequests)).toContain(greetingRule);
-
-      await app.close();
+      expect(api().http.requestLines()).toEqual([`POST ${CHAT_COMPLETIONS_URL}`, `POST ${CHAT_COMPLETIONS_URL}`]);
+      expect(submittedText(readProviderChatRequest(api().http, 0))).toContain(draftRule);
+      expect(submittedText(readProviderChatRequest(api().http, 1))).toContain(greetingRule);
     });
   });
 
   describe('POST /api/generation/scenario-first-message', () => {
     it('generates a scene greeting as plain text, naming the player for the gender hint and restoring leaked names to {{user}}', async () => {
-      const providerRequests = mockProviderSuccess(
-        '\n*{{char}} машет рукой от мольберта.* Тестер, ты всё-таки пришёл!\n',
-      );
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      answerWith('\n*{{char}} машет рукой от мольберта.* Тестер, ты всё-таки пришёл!\n');
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/scenario-first-message',
         payload: {
@@ -795,27 +555,23 @@ describe('generation draft routes', () => {
       const payload = GenerateScenarioFirstMessageResponseSchema.parse(response.json());
       expect(payload.value).toBe('*{{char}} машет рукой от мольберта.* {{user}}, ты всё-таки пришёл!');
 
-      expect(providerRequests).toHaveLength(1);
-      const requestBody = getProviderRequestBody(providerRequests[0]);
+      expect(api().http.requestLines()).toEqual([`POST ${CHAT_COMPLETIONS_URL}`]);
+      const requestBody = readProviderChatRequest(api().http);
       expect(requestBody).toMatchObject({
         max_tokens: 512,
         stream: false,
-        temperature: 0.44,
+        temperature: (await modelBoundPreset()).temperature,
       });
-      const submittedContent = requestBody.messages?.map((message) => message.content).join('\n') ?? '';
+      const submittedContent = submittedText(requestBody);
       expect(submittedContent).toContain('Вечер в мастерской скульптора');
       expect(submittedContent).toContain('Ночная мастерская');
       expect(submittedContent).toContain('{{char}} ждёт {{user}} у входа в мастерскую.');
       expect(submittedContent).toContain('Тестер');
-
-      await app.close();
     });
 
     it('caps a generated first message exactly at the scenario save limit', async () => {
-      mockProviderSuccess(`*{{char}} начинает рассказ.* ${'очень длинная история '.repeat(1_200)}`);
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      answerWith(`*{{char}} начинает рассказ.* ${'очень длинная история '.repeat(1_200)}`);
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/scenario-first-message',
         payload: {
@@ -827,15 +583,11 @@ describe('generation draft routes', () => {
       const { value } = GenerateScenarioFirstMessageResponseSchema.parse(response.json());
       expect(SaveScenarioCommandSchema.safeParse({ firstMessage: value, name: 'Сцена' }).success).toBe(true);
       expect(SaveScenarioCommandSchema.safeParse({ firstMessage: `${value}!`, name: 'Сцена' }).success).toBe(false);
-
-      await app.close();
     });
 
     it('returns 502 provider_generation_failed when the provider fails', async () => {
-      const providerRequests = mockProviderFailure();
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      api().http.on('POST', CHAT_COMPLETIONS_URL, () => providerFailure());
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/scenario-first-message',
         payload: {
@@ -845,16 +597,12 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(502);
       expect(response.json()).toMatchObject({ code: 'provider_generation_failed' });
-      expect(providerRequests).toHaveLength(1);
-
-      await app.close();
+      expect(api().http.requestLines()).toEqual([`POST ${CHAT_COMPLETIONS_URL}`]);
     });
 
     it('returns 502 provider_generation_failed for an empty provider message', async () => {
-      mockProviderSuccess('   ');
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      answerWith('   ');
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/scenario-first-message',
         payload: {
@@ -864,16 +612,12 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(502);
       expect(response.json()).toMatchObject({ code: 'provider_generation_failed' });
-
-      await app.close();
     });
 
     it('returns 409 generation_provider_unavailable when no provider endpoint can be resolved', async () => {
-      await writeBuiltinProviderSettings();
-      const providerRequests = mockProviderSuccess('Should not be called.');
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      await api().settings.patch({ backendMode: 'builtin' });
+      answerWith('Should not be called.');
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/scenario-first-message',
         payload: {
@@ -883,16 +627,12 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({ code: 'generation_provider_unavailable' });
-      expect(providerRequests).toHaveLength(0);
-
-      await app.close();
+      expect(api().http.requestLines()).toEqual([]);
     });
 
     it('returns 400 validation_error without a concept and does not call the provider', async () => {
-      const providerRequests = mockProviderSuccess('Should not be called.');
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      answerWith('Should not be called.');
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/scenario-first-message',
         payload: {},
@@ -900,15 +640,13 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(400);
       expect(response.json()).toMatchObject({ code: 'validation_error' });
-      expect(providerRequests).toHaveLength(0);
-
-      await app.close();
+      expect(api().http.requestLines()).toEqual([]);
     });
   });
 
   describe('POST /api/generation/lorebook', () => {
     it('generates a lorebook draft and normalizes legacy singular "key" entries', async () => {
-      const providerRequests = mockProviderSuccess(
+      answerWith(
         fenced({
           name: 'Мир Пепельных Земель',
           entries: [
@@ -924,9 +662,7 @@ describe('generation draft routes', () => {
           ],
         }),
       );
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/lorebook',
         payload: {
@@ -950,24 +686,20 @@ describe('generation draft routes', () => {
         },
       ]);
 
-      expect(providerRequests).toHaveLength(1);
-      const requestBody = getProviderRequestBody(providerRequests[0]);
+      expect(api().http.requestLines()).toEqual([`POST ${CHAT_COMPLETIONS_URL}`]);
+      const requestBody = readProviderChatRequest(api().http);
       expect(requestBody).toMatchObject({
         max_tokens: 3000,
         stream: false,
       });
-      const submittedContent = requestBody.messages?.map((message) => message.content).join('\n') ?? '';
+      const submittedContent = submittedText(requestBody);
       expect(submittedContent).toContain('Создай лорбук с 2 записями');
       expect(submittedContent).toContain('Постапокалиптические пустоши');
-
-      await app.close();
     });
 
     it('returns 502 provider_generation_failed for unparseable provider output', async () => {
-      mockProviderSuccess('Лорбук готов! Записи ниже. (шутка)');
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      answerWith('Лорбук готов! Записи ниже. (шутка)');
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/lorebook',
         payload: {
@@ -977,15 +709,11 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(502);
       expect(response.json()).toMatchObject({ code: 'provider_generation_failed' });
-
-      await app.close();
     });
 
     it('returns 502 provider_generation_failed when the JSON contains no usable entries', async () => {
-      mockProviderSuccess(fenced({ name: 'Пустой мир', entries: [] }));
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      answerWith(fenced({ name: 'Пустой мир', entries: [] }));
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/lorebook',
         payload: {
@@ -995,16 +723,12 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(502);
       expect(response.json()).toMatchObject({ code: 'provider_generation_failed' });
-
-      await app.close();
     });
 
     it('returns 409 generation_provider_unavailable when no provider endpoint can be resolved', async () => {
-      await writeBuiltinProviderSettings();
-      const providerRequests = mockProviderSuccess('Should not be called.');
-      const app = buildApiApp();
-
-      const response = await app.inject({
+      await api().settings.patch({ backendMode: 'builtin' });
+      answerWith('Should not be called.');
+      const response = await api().app.inject({
         method: 'POST',
         url: '/api/generation/lorebook',
         payload: {
@@ -1014,9 +738,7 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({ code: 'generation_provider_unavailable' });
-      expect(providerRequests).toHaveLength(0);
-
-      await app.close();
+      expect(api().http.requestLines()).toEqual([]);
     });
   });
 });
