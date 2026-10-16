@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-import { serializedOrigin } from './serialized-origin.js';
+import { isLoopbackAddress } from '../platform/net/loopback-address.js';
+import { serializedOrigins } from './serialized-origins.js';
 
 const API_LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
 
@@ -38,11 +39,22 @@ const WebOriginsSchema = z.string().transform((value, context) => {
     context.addIssue({ code: 'custom', message: `"${origin}" is not an http(s) origin without a path` });
   }
 
-  return origins.filter(isWebOrigin).map(serializedOrigin);
+  return serializedOrigins(origins.filter(isWebOrigin));
 });
 
+function isLoopbackBindHost(host: string): boolean {
+  return host.toLowerCase() === 'localhost' || isLoopbackAddress(host);
+}
+
+const BindHostSchema = z
+  .string()
+  .refine(
+    isLoopbackBindHost,
+    'must be localhost or a loopback address in 127.0.0.0/8 or ::1; the API serves this computer only',
+  );
+
 export const ApiEnvironmentSchema = z.object({
-  IMMERSION_API_HOST: z.string().default('127.0.0.1'),
+  IMMERSION_API_HOST: BindHostSchema.default('127.0.0.1'),
   IMMERSION_API_PORT: PortSchema.default(4787),
   IMMERSION_WEB_PORT: PortSchema.default(4788),
   IMMERSION_WEB_ORIGINS: WebOriginsSchema.optional(),

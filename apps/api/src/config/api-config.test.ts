@@ -1,8 +1,10 @@
+import { createServer } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { isLoopbackAddress } from '../platform/net/loopback-address.js';
 import { ApiConfigError, type ApiEnvironment, parseApiConfig } from './api-config.js';
 
 const projectRoot = path.join(os.tmpdir(), 'Проекты', 'Immersion AI');
@@ -62,6 +64,53 @@ describe('parseApiConfig', () => {
     expect(config).toMatchObject({ host: '::1', port: 4799, logLevel: 'warn' });
   });
 
+  it('refuses a bind host outside loopback, because the API serves this computer only', () => {
+    for (const host of [
+      '0.0.0.0',
+      '::',
+      '192.168.1.5',
+      '::ffff:10.0.0.1',
+      'example.com',
+      'localhost.example.com',
+      '127.1',
+      '[::1]',
+      '::1%lo',
+    ]) {
+      expect(issuesOf({ IMMERSION_API_HOST: host })).toEqual([
+        'IMMERSION_API_HOST: must be localhost or a loopback address in 127.0.0.0/8 or ::1; the API serves this computer only',
+      ]);
+    }
+  });
+
+  it('accepts 127.0.0.1, 127.0.0.2, ::1 and localhost as the bind host', () => {
+    for (const host of ['127.0.0.1', '127.0.0.2', '::1', '::ffff:127.0.0.1', 'localhost', 'LocalHost']) {
+      expect(parseApiConfig({ IMMERSION_API_HOST: host }, projectRoot).host).toBe(host);
+    }
+  });
+
+  it.each([
+    '127.0.0.1',
+    '::1',
+    '::ffff:127.0.0.1',
+    '::ffff:7f00:1',
+    'localhost',
+  ])('lets node:net listen on the accepted bind host %s, and the bound socket is loopback', async (host) => {
+    const server = createServer();
+
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, parseApiConfig({ IMMERSION_API_HOST: host }, projectRoot).host, resolve);
+    });
+
+    try {
+      const bound = server.address();
+
+      expect(typeof bound === 'object' && bound !== null && isLoopbackAddress(bound.address)).toBe(true);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
   it('rejects a port with trailing characters such as 4787abc', () => {
     for (const port of ['4787abc', '47 87', '4787.0', '-1', '+4787', '0x10', '1e3', '٤٧٨٧']) {
       expect(issuesOf({ IMMERSION_API_PORT: port })).toEqual([
@@ -110,6 +159,18 @@ describe('parseApiConfig', () => {
       'http://localhost',
       'http://127.0.0.1',
     ]);
+  });
+
+  it('reports each web origin once, in the form a browser sends in its Origin header', () => {
+    expect(
+      parseApiConfig(
+        {
+          IMMERSION_WEB_ORIGINS:
+            ' HTTP://LocalHost:4788/ ,http://localhost:4788,http://127.0.0.1:80,http://127.0.0.1,https://ПРИМЕР.example/',
+        },
+        projectRoot,
+      ).webOrigins,
+    ).toEqual(['http://localhost:4788', 'http://127.0.0.1', 'https://xn--e1afmkfd.example']);
   });
 
   it('parses a comma list of web origins and rejects one with a path', () => {
@@ -173,6 +234,7 @@ describe('parseApiConfig', () => {
 
   it('lists every invalid key in one error', () => {
     const environment = {
+      IMMERSION_API_HOST: '0.0.0.0',
       IMMERSION_API_PORT: '4787abc',
       IMMERSION_WEB_PORT: '0',
       IMMERSION_WEB_ORIGINS: 'http://localhost:4788/chat',
@@ -180,13 +242,14 @@ describe('parseApiConfig', () => {
     };
 
     expect(issuesOf(environment).map((issue) => issue.slice(0, issue.indexOf(':')))).toEqual([
+      'IMMERSION_API_HOST',
       'IMMERSION_API_PORT',
       'IMMERSION_WEB_PORT',
       'IMMERSION_WEB_ORIGINS',
       'IMMERSION_LOG_LEVEL',
     ]);
     expect(() => parseApiConfig(environment, projectRoot)).toThrow(
-      /^Invalid API configuration:\n {2}IMMERSION_API_PORT: .+\n {2}IMMERSION_WEB_PORT: .+\n {2}IMMERSION_WEB_ORIGINS: .+\n {2}IMMERSION_LOG_LEVEL: .+$/u,
+      /^Invalid API configuration:\n {2}IMMERSION_API_HOST: .+\n {2}IMMERSION_API_PORT: .+\n {2}IMMERSION_WEB_PORT: .+\n {2}IMMERSION_WEB_ORIGINS: .+\n {2}IMMERSION_LOG_LEVEL: .+$/u,
     );
   });
 

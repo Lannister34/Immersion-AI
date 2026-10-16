@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { ApiEnvironmentSchema, type ApiLogLevel } from './api-environment-schema.js';
-import { serializedOrigin } from './serialized-origin.js';
+import { serializedOrigins } from './serialized-origins.js';
 
 export interface ApiConfig {
   readonly host: string;
@@ -45,10 +45,9 @@ export function parseApiConfig(env: ApiEnvironment, projectRoot: string): ApiCon
     host: environment.IMMERSION_API_HOST,
     port: environment.IMMERSION_API_PORT,
     webPort,
-    webOrigins: environment.IMMERSION_WEB_ORIGINS ?? [
-      serializedOrigin(`http://localhost:${webPort}`),
-      serializedOrigin(`http://127.0.0.1:${webPort}`),
-    ],
+    webOrigins:
+      environment.IMMERSION_WEB_ORIGINS ??
+      serializedOrigins([`http://localhost:${webPort}`, `http://127.0.0.1:${webPort}`]),
     projectRoot,
     dataRoot: path.resolve(projectRoot, environment.IMMERSION_DATA_ROOT),
     logLevel: environment.IMMERSION_LOG_LEVEL,

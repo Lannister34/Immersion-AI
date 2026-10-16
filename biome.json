@@ -80,6 +80,35 @@
   },
   "overrides": [
     {
+      "includes": ["apps/api/src/config/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/modules/**",
+                      "**/shared/**",
+                      "**/routes/**",
+                      "**/test-support/**",
+                      "**/app.js",
+                      "**/server.js",
+                      "**/platform/**",
+                      "!**/platform/net/loopback-address.js"
+                    ],
+                    "message": "config/ is the root of the API's import graph: it imports only other config/ files and the leaf platform/net/loopback-address.ts (ADR-0004, decision 7)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["apps/api/src/platform/**"],
       "linter": {
         "rules": {
@@ -91,6 +120,26 @@
                   {
                     "group": ["**/modules/**", "**/shared/**", "**/routes/**", "**/app.js", "**/server.js"],
                     "message": "A platform primitive knows no feature module: platform/ imports only config/, other platform/ files and test support (ADR-0004, decision 7)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/api/src/platform/net/loopback-address.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**", "!node:net"],
+                    "message": "config/ imports the loopback predicate, so it stays a leaf: loopback-address.ts imports only node:net (ADR-0004, decision 7)."
                   }
                 ]
               }
