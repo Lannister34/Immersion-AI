@@ -27,6 +27,7 @@ export interface TestApi {
   readonly clock: ManualClock;
   readonly logs: CapturingLogger;
   readonly settings: UserSettingsFixtureFile;
+  listen(): Promise<string>;
 }
 
 export async function createTestApi(options: TestApiOptions = {}): Promise<TestApi> {
@@ -50,6 +51,7 @@ export async function createTestApi(options: TestApiOptions = {}): Promise<TestA
   const modules = createApiModules(dependencies);
   const app = buildApiApp(dependencies, modules);
   onTestFinished(() => app.close());
+  let listening: Promise<string> | null = null;
 
   return {
     app,
@@ -61,5 +63,10 @@ export async function createTestApi(options: TestApiOptions = {}): Promise<TestA
     clock,
     logs,
     settings: createUserSettingsFixtureFile(project.dataRoot),
+    listen() {
+      listening ??= app.listen({ host: '127.0.0.1', port: 0 });
+
+      return listening;
+    },
   };
 }
