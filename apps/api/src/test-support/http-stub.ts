@@ -16,7 +16,9 @@ export interface HeldHttpRequest {
 export interface HttpStub {
   readonly fetch: Mock<HttpFetch>;
   readonly requests: readonly RecordedHttpRequest[];
+  requestLines(): string[];
   on(method: string, url: HttpUrlPattern, respond: HttpResponder): void;
+  once(method: string, url: HttpUrlPattern, respond: HttpResponder): void;
   hold(method: string, url: HttpUrlPattern): HeldHttpRequest;
 }
 
@@ -87,8 +89,14 @@ export function createHttpStub(): HttpStub {
   return {
     fetch,
     requests,
+    requestLines() {
+      return requests.map((request) => `${request.method} ${request.url}`);
+    },
     on(method, url, respond) {
       routes.push({ method, url, once: false, respond });
+    },
+    once(method, url, respond) {
+      routes.push({ method, url, once: true, respond });
     },
     hold(method, url) {
       const started = createDeferred<RecordedHttpRequest>();
