@@ -22,6 +22,17 @@ describe('createHttpStub', () => {
     expect(http.fetch).toHaveBeenCalledOnce();
   });
 
+  it('lists the requests it saw as method and url lines, in the order they came', async () => {
+    const http = createHttpStub();
+    http.on('GET', /\/v1\/models$/u, () => Response.json({ data: [] }));
+    http.on('POST', PROVIDER_URL, () => Response.json({}));
+
+    await http.fetch('http://127.0.0.1:6006/v1/models', {});
+    await http.fetch(PROVIDER_URL, { method: 'post' });
+
+    expect(http.requestLines()).toEqual(['GET http://127.0.0.1:6006/v1/models', `POST ${PROVIDER_URL}`]);
+  });
+
   it('answers with the first matching responder', async () => {
     const http = createHttpStub();
     http.on('GET', 'http://127.0.0.1:6006/v1/models', () => Response.json({ source: 'exact' }));
@@ -35,6 +46,20 @@ describe('createHttpStub', () => {
     expect(await pattern.json()).toEqual({ source: 'pattern' });
   });
 
+  it('answers with a once responder for the first match only, then falls through to the next one', async () => {
+    const http = createHttpStub();
+    http.once('POST', PROVIDER_URL, () => Response.json({ reply: 'первый' }));
+    http.once('POST', PROVIDER_URL, () => Response.json({ reply: 'второй' }));
+
+    const first = await http.fetch(PROVIDER_URL, { method: 'POST' });
+    const second = await http.fetch(PROVIDER_URL, { method: 'POST' });
+    const third = http.fetch(PROVIDER_URL, { method: 'POST' });
+
+    expect(await first.json()).toEqual({ reply: 'первый' });
+    expect(await second.json()).toEqual({ reply: 'второй' });
+    await expect(third).rejects.toThrow(new TypeError('fetch failed'));
+  });
+
   it('rejects an unmatched request like a refused connection', async () => {
     const http = createHttpStub();
     http.on('GET', PROVIDER_URL, () => Response.json({}));
@@ -42,7 +67,7 @@ describe('createHttpStub', () => {
     const failure = http.fetch(PROVIDER_URL, { method: 'POST' });
 
     await expect(failure).rejects.toThrow(new TypeError('fetch failed'));
-    expect(http.requests.map((request) => `${request.method} ${request.url}`)).toEqual([`POST ${PROVIDER_URL}`]);
+    expect(http.requestLines()).toEqual([`POST ${PROVIDER_URL}`]);
   });
 
   it('reads a JSON body through a schema', async () => {

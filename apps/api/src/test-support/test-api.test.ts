@@ -3,10 +3,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 
+import { HealthResponseSchema } from '@immersion/contracts';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
 import { findProjectRoot } from '../config/find-project-root.js';
 import { readDataRoot } from '../config/read-api-config.js';
+import { requestOverSocket } from './socket-request.js';
 import { createTestApi } from './test-api.js';
 
 const committedSmokeSettings = fileURLToPath(new URL('../../testdata/smoke-data/user-settings.json', import.meta.url));
@@ -83,6 +85,23 @@ describe('createTestApi', () => {
     await expect(createTestApi({ environment: { IMMERSION_DATA_ROOT: '/somewhere/else' } })).rejects.toThrow(
       'createTestApi owns IMMERSION_DATA_ROOT',
     );
+  });
+
+  it('listens once, on a loopback port the system picks, and serves the app there', async () => {
+    const api = await createTestApi({ clock: { start: new Date('2026-10-15T09:30:00.000Z'), stepMs: 0 } });
+
+    const origin = await api.listen();
+    const response = await requestOverSocket(`${origin}/health`);
+
+    expect(origin).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u);
+    expect(origin).not.toBe('http://127.0.0.1:0');
+    expect(await api.listen()).toBe(origin);
+    expect(response.status).toBe(200);
+    expect(HealthResponseSchema.parse(JSON.parse(response.body))).toEqual({
+      service: 'api',
+      status: 'ok',
+      timestamp: '2026-10-15T09:30:00.000Z',
+    });
   });
 
   it('closes the app and removes the temporary project once the test finishes', async () => {

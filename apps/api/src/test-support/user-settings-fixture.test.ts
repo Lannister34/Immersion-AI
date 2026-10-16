@@ -70,6 +70,21 @@ describe('the user-settings fixture file', () => {
     expect(await settings.read()).toEqual({ activePresetId: 'default' });
   });
 
+  it('finds a stored sampler preset by id and fails loudly on an id the file does not have', async () => {
+    const settings = createUserSettingsFixtureFile(await temporaryDataRoot());
+    await settings.write({
+      samplerPresets: [
+        storedSamplerPreset('default', 'По умолчанию'),
+        storedSamplerPreset('холодный', 'Холодный', { temperature: 0.2 }),
+      ],
+    });
+
+    expect(await settings.samplerPreset('холодный')).toEqual(
+      storedSamplerPreset('холодный', 'Холодный', { temperature: 0.2 }),
+    );
+    await expect(settings.samplerPreset('missing')).rejects.toThrow('no sampler preset "missing"');
+  });
+
   it('refuses to patch over a malformed file rather than reading it as empty', async () => {
     const settings = createUserSettingsFixtureFile(await temporaryDataRoot());
     await fs.writeFile(settings.path, '{ "userName": "Misha", "trunca', 'utf8');
