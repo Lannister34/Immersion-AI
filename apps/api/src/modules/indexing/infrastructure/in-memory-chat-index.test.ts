@@ -1,14 +1,12 @@
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
+
+import { useTemporaryDataRoot } from '../../../test-support/use-temporary-data-root.js';
 import { listChatFileStats, readChatSummaryWithSearchText } from '../../chats/index.js';
 import { FileChatRepository } from '../../chats/infrastructure/file-chat-repository.js';
 import { type ChatIndexSourcePort, InMemoryChatIndex } from './in-memory-chat-index.js';
-
-const SMOKE_DATA_ROOT = fileURLToPath(new URL('../../../../testdata/smoke-data', import.meta.url));
 
 interface ChatFileInput {
   characterId?: string;
@@ -20,28 +18,10 @@ interface ChatFileInput {
 }
 
 describe('InMemoryChatIndex', () => {
-  let previousDataRoot: string | undefined;
-  let temporaryDataRoot: string;
-
-  beforeEach(async () => {
-    previousDataRoot = process.env.IMMERSION_DATA_ROOT;
-    temporaryDataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'immersion-api-chat-index-'));
-    await fs.cp(SMOKE_DATA_ROOT, temporaryDataRoot, { recursive: true });
-    process.env.IMMERSION_DATA_ROOT = temporaryDataRoot;
-  });
-
-  afterEach(async () => {
-    if (previousDataRoot) {
-      process.env.IMMERSION_DATA_ROOT = previousDataRoot;
-    } else {
-      delete process.env.IMMERSION_DATA_ROOT;
-    }
-
-    await fs.rm(temporaryDataRoot, { recursive: true, force: true });
-  });
+  const dataRoot = useTemporaryDataRoot('smoke');
 
   function resolveChatFilePath(chatId: string) {
-    return path.join(temporaryDataRoot, 'chats', '_no_character_', `${chatId}.jsonl`);
+    return path.join(dataRoot(), 'chats', '_no_character_', `${chatId}.jsonl`);
   }
 
   async function writeRawChatFile(chatId: string, lines: string[]) {
