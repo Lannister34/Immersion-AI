@@ -1,7 +1,7 @@
 import type { ChatMessageAttachmentDto } from '@immersion/contracts/chats';
 import type { MessageFormatting } from '@immersion/contracts/settings';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { createApiUrl } from '../../../shared/api/client';
 import { getApiErrorMessage } from '../../../shared/api/get-api-error-message';
 import { avatarInitial } from '../../../shared/lib/avatar';
@@ -11,10 +11,12 @@ import { BranchIcon, CopyIcon, EditIcon, RefreshIcon, TrashIcon } from '../../..
 import { chatReplyPromptPreviewQueryOptions } from '../../generation';
 import { toContextStats } from '../view-models/context-stats';
 import { renderMessageContent } from '../view-models/message-content';
+import { planMessageEditSave } from '../view-models/message-edit-save';
 import { ReasoningBlock } from './reasoning-block';
 
 export interface BubbleMessageProps {
   branchTitleDefault: string;
+  canChangeMessages: boolean;
   canRegenerate: boolean;
   attachments: ChatMessageAttachmentDto[];
   characterAvatarUrl: string | null;
@@ -22,14 +24,16 @@ export interface BubbleMessageProps {
   showReasoning: boolean;
   chatId: string;
   formatting: MessageFormatting;
-  isMutating: boolean;
+  isEditing: boolean;
   isSystem: boolean;
   isUser: boolean;
   messageIndex: number;
   onBranch: (title?: string) => Promise<void>;
   onDelete: () => Promise<void>;
+  onEndEdit: () => void;
   onRegenerate: () => Promise<void>;
   onSave: (content: string) => Promise<void>;
+  onStartEdit: () => void;
   text: string;
   time: string;
   who: string;
@@ -40,23 +44,25 @@ export function BubbleMessage({
   reasoning,
   showReasoning,
   branchTitleDefault,
+  canChangeMessages,
   canRegenerate,
   characterAvatarUrl,
   chatId,
   formatting,
-  isMutating,
+  isEditing,
   isSystem,
   isUser,
   messageIndex,
   onBranch,
   onDelete,
+  onEndEdit,
   onRegenerate,
   onSave,
+  onStartEdit,
   text,
   time,
   who,
 }: BubbleMessageProps) {
-  const [mode, setMode] = useState<'view' | 'edit'>('view');
   const [draft, setDraft] = useState(text);
   const [branchDraft, setBranchDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -65,31 +71,34 @@ export function BubbleMessage({
   const trimmedDraft = debouncedDraft.trim();
   const editPreviewQuery = useQuery({
     ...chatReplyPromptPreviewQueryOptions(chatId, undefined, [{ content: trimmedDraft, messageIndex }]),
-    enabled: mode === 'edit' && trimmedDraft.length > 0 && trimmedDraft !== text,
+    enabled: isEditing && trimmedDraft.length > 0 && trimmedDraft !== text,
   });
-  const editPreviewStats = mode === 'edit' ? toContextStats(editPreviewQuery.data) : undefined;
-
-  useEffect(() => {
-    if (mode === 'view') {
-      setDraft(text);
-    }
-  }, [mode, text]);
+  const editPreviewStats = isEditing ? toContextStats(editPreviewQuery.data) : undefined;
 
   if (isSystem) {
     return <div className="bubble--system bubble">{text}</div>;
   }
 
+  const handleStartEdit = () => {
+    setDraft(text);
+    setActionError(null);
+    onStartEdit();
+  };
+
   const handleSave = async () => {
-    const trimmed = draft.trim();
-    if (!trimmed || trimmed === text) {
-      setMode('view');
+    const plan = planMessageEditSave({ draft, isSaving: busy, savedContent: text });
+    if (plan.kind === 'ignore') {
+      return;
+    }
+    if (plan.kind === 'close') {
+      onEndEdit();
       return;
     }
     setBusy(true);
     setActionError(null);
     try {
-      await onSave(trimmed);
-      setMode('view');
+      await onSave(plan.content);
+      onEndEdit();
     } catch (error) {
       setActionError(getApiErrorMessage(error, 'Не удалось сохранить сообщение.'));
     } finally {
@@ -98,9 +107,11 @@ export function BubbleMessage({
   };
 
   const handleCancel = () => {
-    setDraft(text);
+    if (busy) {
+      return;
+    }
     setActionError(null);
-    setMode('view');
+    onEndEdit();
   };
 
   const handleCopy = async () => {
@@ -154,7 +165,7 @@ export function BubbleMessage({
     }
   };
 
-  const isActionsPinned = mode === 'edit' || branchDraft !== null;
+  const isActionsPinned = isEditing || branchDraft !== null;
 
   return (
     <div
@@ -177,7 +188,7 @@ export function BubbleMessage({
       <div
         style={{
           maxWidth: 'min(620px, 80%)',
-          width: mode === 'edit' ? 'min(620px, 80%)' : undefined,
+          width: isEditing ? 'min(620px, 80%)' : undefined,
           display: 'grid',
           gap: 4,
         }}
@@ -193,7 +204,7 @@ export function BubbleMessage({
           <strong style={{ color: 'var(--text)' }}>{who}</strong>
           <span className="mono">{time}</span>
         </div>
-        {mode === 'edit' ? (
+        {isEditing ? (
           <div className={isUser ? 'bubble bubble--user' : 'bubble'} style={{ display: 'grid', gap: 8, padding: 10 }}>
             <textarea
               autoFocus
@@ -270,12 +281,12 @@ export function BubbleMessage({
             </div>
           </>
         )}
-        {mode === 'view' ? (
+        {isEditing ? null : (
           <div className="row gap-4 bubble-row__actions" style={{ justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
             {canRegenerate ? (
               <button
                 className="btn btn--xs"
-                disabled={isMutating || busy}
+                disabled={!canChangeMessages || busy}
                 onClick={() => void handleRegenerate()}
                 title="Перегенерировать"
                 type="button"
@@ -288,8 +299,8 @@ export function BubbleMessage({
             </button>
             <button
               className="btn btn--xs"
-              disabled={isMutating || busy}
-              onClick={() => setMode('edit')}
+              disabled={!canChangeMessages || busy}
+              onClick={handleStartEdit}
               title="Редактировать"
               type="button"
             >
@@ -297,7 +308,7 @@ export function BubbleMessage({
             </button>
             <button
               className="btn btn--xs"
-              disabled={isMutating || busy}
+              disabled={!canChangeMessages || busy}
               onClick={() => void handleDelete()}
               title="Удалить сообщение"
               type="button"
@@ -333,7 +344,7 @@ export function BubbleMessage({
                 />
                 <button
                   className="btn btn--xs btn--primary"
-                  disabled={busy}
+                  disabled={!canChangeMessages || busy}
                   onClick={() => void handleBranchSubmit()}
                   title="Создать ветку"
                   type="button"
@@ -353,7 +364,7 @@ export function BubbleMessage({
             ) : (
               <button
                 className="btn btn--xs"
-                disabled={isMutating || busy}
+                disabled={!canChangeMessages || busy}
                 onClick={handleBranchOpen}
                 title="Разветвить с этой реплики"
                 type="button"
@@ -362,7 +373,7 @@ export function BubbleMessage({
               </button>
             )}
           </div>
-        ) : null}
+        )}
         {actionError ? (
           <div
             style={{

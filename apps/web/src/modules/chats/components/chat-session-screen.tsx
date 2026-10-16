@@ -32,8 +32,11 @@ import { useDeleteChatMessage } from '../mutations/use-delete-chat-message';
 import { useUpdateChatMessage } from '../mutations/use-update-chat-message';
 import { useUpdateChatTitle } from '../mutations/use-update-chat-title';
 import { chatSessionQueryOptions } from '../queries/chat-session-query';
+import { deriveComposerActions } from '../view-models/composer-actions';
 import { toContextStats } from '../view-models/context-stats';
+import { deriveMessageActions } from '../view-models/message-actions';
 import { DEFAULT_MESSAGE_FORMATTING } from '../view-models/message-content';
+import type { MessageEditTarget } from '../view-models/message-edit-target';
 import { BubbleMessage } from './bubble-message';
 import { ChatHeader } from './chat-header';
 import { Composer } from './composer';
@@ -42,6 +45,11 @@ import { StreamingReply } from './streaming-reply';
 
 export interface ChatSessionScreenProps {
   chatId: string;
+}
+
+interface ChatEditState {
+  chatId: string;
+  target: MessageEditTarget;
 }
 
 function formatTime(iso: string): string {
@@ -66,6 +74,10 @@ const ignoreErrorShownByGenerationState = (): void => undefined;
 
 export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const [draftMessage, setDraftMessage] = useState('');
+  const [editState, setEditState] = useState<ChatEditState | null>(null);
+  if (editState !== null && editState.chatId !== chatId) {
+    setEditState(null);
+  }
   const attachmentsDraft = useChatAttachments(chatId);
   const debouncedDraftMessage = useDebouncedValue(draftMessage, 400);
   const panelTab = useUiShellStore((state) => state.chatRightPanelTab);
@@ -200,27 +212,29 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const isStreaming = Boolean(chatReplyGeneration.activeJob);
   const vision = describeVisionSupport(generationReadinessQuery.data?.visionSupport);
   const showReasoning = settingsOverviewQuery.data?.profile.thinkingEnabled ?? true;
-  const canSend =
-    (draftMessage.trim().length > 0 || attachmentsDraft.attachments.length > 0) &&
-    !attachmentsDraft.isUploading &&
-    !chatReplyGeneration.isPending &&
-    !generateFirstMessageMutation.isPending &&
-    !blockReason;
-  const lastTranscriptMessage = session.messages.at(-1);
-  const canContinue =
-    !isStreaming &&
-    !chatReplyGeneration.isPending &&
-    !generateFirstMessageMutation.isPending &&
-    !blockReason &&
-    lastTranscriptMessage?.role === 'assistant' &&
-    lastTranscriptMessage.content.trim().length > 0;
-  const canAnswer =
-    !isStreaming &&
-    !chatReplyGeneration.isPending &&
-    !generateFirstMessageMutation.isPending &&
-    !blockReason &&
-    lastTranscriptMessage?.role === 'user' &&
-    lastTranscriptMessage.content.trim().length > 0;
+  const editing = editState?.chatId === chatId ? editState.target : null;
+  const messageActions = deriveMessageActions({
+    blockReason,
+    editing,
+    hasActiveJob: isStreaming,
+    isGeneratingFirstMessage: generateFirstMessageMutation.isPending,
+    isMutatingMessages:
+      updateMessageMutation.isPending || deleteMessageMutation.isPending || branchChatMutation.isPending,
+    isReplyStarting: chatReplyGeneration.isPending,
+    messages: session.messages,
+  });
+  const composerActions = deriveComposerActions({
+    attachmentCount: attachmentsDraft.attachments.length,
+    blockReason,
+    hasActiveJob: isStreaming,
+    isEditingMessage: editing !== null,
+    isGeneratingFirstMessage: generateFirstMessageMutation.isPending,
+    isReplyStarting: chatReplyGeneration.isPending,
+    isUploadingAttachment: attachmentsDraft.isUploading,
+    text: draftMessage,
+  });
+  const { canAnswer, canContinue } = messageActions;
+  const { canSend } = composerActions;
 
   const onSubmit = async (event?: FormEvent) => {
     event?.preventDefault();
@@ -262,28 +276,22 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   )?.content;
 
   const renderTranscriptMessages = () => {
-    const lastAssistantId = [...session.messages].reverse().find((m) => m.role === 'assistant')?.id;
     const baseTitle = session.chat.title.trim();
     const defaultBranchTitle = baseTitle.endsWith(' (ветка)') ? baseTitle : `${baseTitle || 'Новая ветка'} (ветка)`;
     return session.messages.map((message, index) => {
       const messageIndex = index + 1;
-      const isLastAssistant = message.id === lastAssistantId;
-      const isMutating =
-        updateMessageMutation.isPending ||
-        deleteMessageMutation.isPending ||
-        branchChatMutation.isPending ||
-        isStreaming;
       return (
         <BubbleMessage
           attachments={message.attachments}
           reasoning={message.reasoning}
           showReasoning={showReasoning}
           branchTitleDefault={defaultBranchTitle}
-          canRegenerate={isLastAssistant && !isMutating}
+          canChangeMessages={messageActions.canChangeMessages}
+          canRegenerate={messageIndex === messageActions.regenerableMessageIndex}
           characterAvatarUrl={session.characterAvatarUrl}
           chatId={chatId}
           formatting={settingsOverviewQuery.data?.profile.messageFormatting ?? DEFAULT_MESSAGE_FORMATTING}
-          isMutating={isMutating}
+          isEditing={messageIndex === messageActions.editingMessageIndex}
           isSystem={message.role === 'system'}
           isUser={message.role === 'user'}
           key={message.id}
@@ -297,6 +305,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
           onDelete={async () => {
             await deleteMessageMutation.mutateAsync({ messageIndex });
           }}
+          onEndEdit={() => setEditState(null)}
           onRegenerate={async () => {
             await chatReplyGeneration.regenerate().catch(ignoreErrorShownByGenerationState);
           }}
@@ -306,6 +315,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
               messageIndex,
             });
           }}
+          onStartEdit={() => setEditState({ chatId, target: { baseContent: message.content, messageIndex } })}
           text={message.content}
           time={formatTime(message.createdAt)}
           who={message.role === 'user' ? session.userName : characterDisplay}
@@ -485,6 +495,27 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                   {generationErrorMessage}
                 </div>
               ) : null}
+              {messageActions.isEditStale ? (
+                <div
+                  className="card"
+                  role="alert"
+                  style={{
+                    alignItems: 'center',
+                    display: 'flex',
+                    gap: 8,
+                    padding: '8px 12px',
+                    marginBottom: 8,
+                    fontSize: 'var(--fz-sm)',
+                  }}
+                >
+                  <span className="muted" style={{ marginRight: 'auto' }}>
+                    Сообщение изменилось, правка не сохранена
+                  </span>
+                  <button className="btn btn--xs btn--ghost-bordered" onClick={() => setEditState(null)} type="button">
+                    Закрыть
+                  </button>
+                </div>
+              ) : null}
               <Composer
                 attachments={attachmentsDraft.attachments}
                 attachmentsError={attachmentsDraft.error}
@@ -506,6 +537,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                 onOpenContext={() => openPanelTab('context')}
                 onOpenSettings={() => openPanelTab('model')}
                 onSubmit={onSubmit}
+                sendHint={composerActions.hint}
                 value={draftMessage}
               />
             </div>
