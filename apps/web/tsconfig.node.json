@@ -4,7 +4,7 @@
     "composite": true,
     "noEmit": true
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "playwright.config.ts", "tests/**/*.ts"],
+  "include": ["vite.config.ts", "vitest.config.ts", "playwright.config.ts", "dev-server/**/*.ts", "tests/**/*.ts"],
   "references": [
     { "path": "../../packages/contracts" }
   ]

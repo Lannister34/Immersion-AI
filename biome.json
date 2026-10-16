@@ -12,6 +12,7 @@
       "packages/**/src/**",
       "packages/tooling/test/**",
       "apps/web/tests/**",
+      "apps/web/dev-server/**",
       "apps/*/*.config.ts",
       "scripts/**",
       "*.cjs"
