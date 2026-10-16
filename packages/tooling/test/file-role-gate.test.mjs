@@ -96,8 +96,9 @@ describe('the file-role gate', () => {
     repository.track(
       'apps/web/src/chat-screen.tsx',
       [
+        'function useChatDraft() { return ""; }',
         'function ChatSkeleton() { return <div />; }',
-        'export function ChatScreen() { return <ChatSkeleton />; }',
+        'export function ChatScreen() { useChatDraft(); return <ChatSkeleton />; }',
         '',
       ].join('\n'),
     );
@@ -106,9 +107,9 @@ describe('the file-role gate', () => {
 
     assert.equal(exitCode, 1);
     assert.deepEqual(lines.slice(0, 3), [
-      `apps/web/src/chat-screen.tsx: role mix component:2 where ${BASELINE} allows none`,
-      '  apps/web/src/chat-screen.tsx:1  component ChatSkeleton',
-      '  apps/web/src/chat-screen.tsx:2  exported component ChatScreen',
+      `apps/web/src/chat-screen.tsx: role mix component:1 hook:1 where ${BASELINE} allows none`,
+      '  apps/web/src/chat-screen.tsx:1  hook useChatDraft',
+      '  apps/web/src/chat-screen.tsx:3  exported component ChatScreen',
     ]);
     assert.equal(
       lines.at(-1),
