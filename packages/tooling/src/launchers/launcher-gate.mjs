@@ -4,8 +4,8 @@ import { listTrackedFiles } from '../git/tracked-files.mjs';
 import { TrackedFilesError } from '../git/tracked-files-error.mjs';
 import { isLauncherFile } from './launcher-file.mjs';
 import { LauncherGateError } from './launcher-gate-error.mjs';
-import { describeLauncherRule, describeViolation } from './launcher-report.mjs';
-import { findLauncherViolations } from './launcher-rules.mjs';
+import { describeViolation } from './launcher-report.mjs';
+import { explainLauncherRule, findLauncherViolations } from './launcher-rules.mjs';
 
 const ABSENT_FILE_CODES = new Set(['ENOENT', 'ENOTDIR']);
 
@@ -36,11 +36,15 @@ function readIfPresent(root, file) {
 export function runLauncherGate({ root, cwd, paths }) {
   const candidates = paths === null ? listCandidates(root) : paths.map((file) => toRepositoryPath(root, cwd, file));
   const lines = [];
+  const brokenRules = new Set();
   for (const file of candidates.filter(isLauncherFile)) {
     const text = readIfPresent(root, file);
     if (text === null) continue;
-    for (const violation of findLauncherViolations(text)) lines.push(describeViolation(file, violation));
+    for (const violation of findLauncherViolations(text)) {
+      lines.push(describeViolation(file, violation));
+      brokenRules.add(violation.rule);
+    }
   }
-  if (lines.length > 0) lines.push(describeLauncherRule());
+  for (const rule of brokenRules) lines.push(explainLauncherRule(rule));
   return { exitCode: lines.length > 0 ? 1 : 0, lines };
 }

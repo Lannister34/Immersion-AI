@@ -116,3 +116,71 @@ describe('launcher rules', () => {
     assert.deepEqual(flaggedColumns('echo  ██╗ Запуск && npx --yes concurrently'), ['1:21']);
   });
 });
+
+describe('host binds in launchers', () => {
+  it('flags a dev server bound to every interface, as PM2 started Vite', () => {
+    const oldPm2Args = "      args: '--host 0.0.0.0 --port 4788',";
+
+    assert.deepEqual(findLauncherViolations(oldPm2Args), [
+      { line: 1, column: 14, rule: 'non-loopback-host-bind', excerpt: oldPm2Args.trim() },
+    ]);
+  });
+
+  it('flags a bare --host, which Vite reads as every interface', () => {
+    assert.deepEqual(flaggedColumns('vite --host'), ['1:6']);
+    assert.deepEqual(flaggedColumns('vite --host --port 4788'), ['1:6']);
+    assert.deepEqual(flaggedColumns('"dev": "vite --host",'), ['1:14']);
+    assert.deepEqual(flaggedColumns('vite --host && echo done'), ['1:6']);
+    assert.deepEqual(flaggedColumns('vite --host ^'), ['1:6']);
+    assert.deepEqual(flaggedColumns('vite --host='), ['1:6']);
+  });
+
+  it('flags a --host that names another interface, a wildcard or a name that is not localhost', () => {
+    assert.deepEqual(flaggedColumns('vite --host :: --port 4788'), ['1:6']);
+    assert.deepEqual(flaggedColumns('vite --host=0.0.0.0'), ['1:6']);
+    assert.deepEqual(flaggedColumns('vite "--host=0.0.0.0"'), ['1:7']);
+    assert.deepEqual(flaggedColumns('vite --host 192.168.1.20'), ['1:6']);
+    assert.deepEqual(flaggedColumns('vite --host my-pc.local'), ['1:6']);
+    assert.deepEqual(flaggedColumns('vite --host 127.0.0.1.nip.io'), ['1:6']);
+    assert.deepEqual(flaggedColumns("args: ['--host', '0.0.0.0'],"), ['1:9']);
+    assert.deepEqual(flaggedColumns('vite --host\t"0.0.0.0"'), ['1:6']);
+  });
+
+  it('accepts a loopback --host, as dev:smoke passes', () => {
+    assert.deepEqual(flaggedColumns('"dev:smoke": "vite --host 127.0.0.1 --port 4173",'), []);
+    assert.deepEqual(flaggedColumns('vite --host localhost && vite --host ::1 && vite --host=127.0.0.1'), []);
+    assert.deepEqual(flaggedColumns("args: ['--host', '127.0.0.1', '--port', '4788'],"), []);
+    assert.deepEqual(flaggedColumns('vite --host "localhost"'), []);
+  });
+
+  it('accepts localhost in any letter case, which resolves the same, as the API host check does', () => {
+    assert.deepEqual(flaggedColumns('vite --host LocalHost && vite --HOST=LOCALHOST'), []);
+  });
+
+  it('reads --host only as a whole option, as the CLI does', () => {
+    assert.deepEqual(
+      flaggedColumns(
+        [
+          'vite --hostname 0.0.0.0',
+          'vite --host-check 0.0.0.0',
+          'vite ---host 0.0.0.0',
+          'tool x--host 0.0.0.0',
+          'Write-Host "  [ERROR] $msg" -ForegroundColor Red',
+        ].join('\n'),
+      ),
+      [],
+    );
+  });
+
+  it('flags --host in any letter case, refusing what another CLI might fold to --host', () => {
+    assert.deepEqual(flaggedColumns('vite --HOST 0.0.0.0 && vite --Host'), ['1:6', '1:29']);
+  });
+
+  it('reports a host bind and a downloading run on one line in column order', () => {
+    assert.deepEqual(findLauncherViolations('npx --yes vite --host'), [
+      { line: 1, column: 1, rule: 'downloading-package-run', excerpt: 'npx --yes vite --host' },
+      { line: 1, column: 16, rule: 'non-loopback-host-bind', excerpt: 'npx --yes vite --host' },
+    ]);
+    assert.deepEqual(flaggedColumns('vite --host 0.0.0.0 && npx vite'), ['1:6', '1:24']);
+  });
+});
