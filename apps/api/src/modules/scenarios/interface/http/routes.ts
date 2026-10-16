@@ -1,20 +1,12 @@
-import {
-  SaveScenarioCommandSchema,
-  ScenarioDetailResponseSchema,
-  ScenarioIdSchema,
-} from '@immersion/contracts/scenarios';
+import { SaveScenarioCommandSchema, ScenarioDetailResponseSchema } from '@immersion/contracts/scenarios';
 import type { FastifyPluginAsync } from 'fastify';
-import { z } from 'zod';
 
 import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
 import { deleteScenario } from '../../application/delete-scenario.js';
 import { getScenario, ScenarioNotFoundError } from '../../application/get-scenario.js';
 import { listScenarios } from '../../application/list-scenarios.js';
 import { createScenario, updateScenario } from '../../application/save-scenario.js';
-
-const ScenarioRouteParamsSchema = z.object({
-  scenarioId: ScenarioIdSchema,
-});
+import { ScenarioRouteParamsSchema } from './request-schemas.js';
 
 const toProblem = createToProblem((error) => {
   if (error instanceof ScenarioNotFoundError) {

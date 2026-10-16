@@ -8,11 +8,9 @@ import {
 import type { ChatReplyPromptMessage } from '../../prompting/index.js';
 import { resolveGenerationProviderEndpoint } from '../../providers/index.js';
 import { getSettingsOverview, resolveSamplerPresetForModel } from '../../settings/index.js';
-import {
-  assertSupportedRequest,
-  normalizeOpenAiMessages,
-  type OpenAiChatCompletionRequest,
-} from '../domain/openai-contract.js';
+import { assertSupportedRequest } from '../domain/assert-supported-request.js';
+import { normalizeOpenAiMessages } from '../domain/normalize-openai-messages.js';
+import type { OpenAiChatCompletionRequest } from '../domain/openai-chat-completion-request-schema.js';
 
 const HANDLED_REQUEST_KEYS = new Set([
   'max_completion_tokens',

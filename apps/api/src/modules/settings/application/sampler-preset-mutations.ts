@@ -8,7 +8,8 @@ import type {
 
 import { updateLegacyUserSettingsSource } from '../../../shared/infrastructure/legacy-settings-source.js';
 import { getSettingsOverview } from './get-settings-overview.js';
-import { encodeSamplerPreset, generateUniquePresetId, type StoredSamplerPreset } from './sampler-preset-encoding.js';
+import { encodeSamplerPreset, type StoredSamplerPreset } from './sampler-preset-encoding.js';
+import { generateUniquePresetId } from './sampler-preset-id.js';
 
 export class SamplerPresetNotFoundError extends Error {
   constructor(presetId: string) {

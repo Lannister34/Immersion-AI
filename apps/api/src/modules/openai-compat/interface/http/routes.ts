@@ -14,14 +14,14 @@ import {
   createOpenAiChatCompletion,
   type OpenAiChatCompletionResult,
 } from '../../application/create-chat-completion.js';
-import {
-  type OpenAiChatCompletionChunk,
-  type OpenAiChatCompletionDelta,
-  OpenAiChatCompletionRequestSchema,
-  type OpenAiChatCompletionResponse,
-  type OpenAiFinishReason,
-  UnsupportedOpenAiFeatureError,
-} from '../../domain/openai-contract.js';
+import { OpenAiChatCompletionRequestSchema } from '../../domain/openai-chat-completion-request-schema.js';
+import type {
+  OpenAiChatCompletionChunk,
+  OpenAiChatCompletionDelta,
+  OpenAiChatCompletionResponse,
+  OpenAiFinishReason,
+} from '../../domain/openai-chat-completion-response.js';
+import { UnsupportedOpenAiFeatureError } from '../../domain/unsupported-openai-feature-error.js';
 
 interface OpenAiErrorBody {
   error: {

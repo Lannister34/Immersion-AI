@@ -1,58 +1,12 @@
-import {
-  type ProviderApiKind,
-  type ProviderConnectionIssueCode,
-  type ProviderConnectionResponse,
-  ProviderConnectionResponseSchema,
-  type ProviderMode,
-  type ProviderModelsProbeCommand,
-  type ProviderSettingsSnapshot,
-  type ProviderType,
-} from '@immersion/contracts/providers';
-import { z } from 'zod';
+import type { ProviderConnectionResponse, ProviderSettingsSnapshot } from '@immersion/contracts/providers';
 
-import { buildAnthropicAuthHeaders } from '../domain/anthropic-auth-headers.js';
-import { getProviderApiKind, isProviderApiKeyRequired } from '../domain/provider-catalog.js';
 import { runtimeEndpointAdapter } from '../infrastructure/runtime-endpoint-adapter.js';
+import { fetchProviderModels } from './fetch-provider-models.js';
 import { resolveVersionedUrl } from './generation-provider.js';
 import { getProviderSettings } from './get-provider-settings.js';
-import type { RuntimeEndpointPort } from './runtime-endpoint-port.js';
-
-const ProviderModelsPayloadSchema = z
-  .object({
-    data: z.array(
-      z
-        .object({
-          id: z.string().min(1),
-        })
-        .passthrough(),
-    ),
-  })
-  .passthrough();
-
-export interface TestProviderConnectionDependencies {
-  fetcher?: typeof fetch;
-  runtimeEndpointPort?: RuntimeEndpointPort;
-  timeoutMs?: number;
-}
-
-interface ConnectionSubject {
-  activeProvider: ProviderType;
-  mode: ProviderMode;
-}
-
-function buildHeaders(apiKind: ProviderApiKind, apiKey: string | null) {
-  if (apiKind === 'anthropic') {
-    return {
-      ...buildAnthropicAuthHeaders(apiKey),
-      Accept: 'application/json',
-    };
-  }
-
-  return {
-    ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-    Accept: 'application/json',
-  };
-}
+import { probeProviderModels } from './probe-provider-models.js';
+import { type ConnectionSubject, createErrorResponse } from './provider-connection-response.js';
+import type { TestProviderConnectionDependencies } from './test-provider-connection-dependencies.js';
 
 function toSubject(settings: ProviderSettingsSnapshot): ConnectionSubject {
   return { activeProvider: settings.activeProvider, mode: settings.mode };
@@ -70,125 +24,6 @@ function getConfiguredExternalApiKey(settings: ProviderSettingsSnapshot) {
   const apiKey = config?.apiKey;
 
   return typeof apiKey === 'string' && apiKey.trim().length > 0 ? apiKey.trim() : null;
-}
-
-function createErrorResponse(
-  subject: ConnectionSubject,
-  code: ProviderConnectionIssueCode,
-  message: string,
-  endpoint: string | null,
-): ProviderConnectionResponse {
-  return ProviderConnectionResponseSchema.parse({
-    activeProvider: subject.activeProvider,
-    endpoint,
-    issue: {
-      code,
-      message,
-    },
-    mode: subject.mode,
-    models: [],
-    status: 'error',
-  });
-}
-
-function createOkResponse(
-  subject: ConnectionSubject,
-  endpoint: string,
-  models: Array<{ id: string }>,
-): ProviderConnectionResponse {
-  return ProviderConnectionResponseSchema.parse({
-    activeProvider: subject.activeProvider,
-    endpoint,
-    issue: null,
-    mode: subject.mode,
-    models,
-    status: 'ok',
-  });
-}
-
-async function fetchProviderModels(
-  subject: ConnectionSubject,
-  endpoint: string,
-  apiKind: ProviderApiKind,
-  apiKey: string | null,
-  dependencies: TestProviderConnectionDependencies,
-) {
-  const fetcher = dependencies.fetcher ?? fetch;
-  let response: Response;
-
-  try {
-    response = await fetcher(endpoint, {
-      headers: buildHeaders(apiKind, apiKey),
-      signal: AbortSignal.timeout(dependencies.timeoutMs ?? 5000),
-    });
-  } catch (error) {
-    return createErrorResponse(
-      subject,
-      'provider_unreachable',
-      error instanceof Error ? error.message : 'Provider request failed.',
-      endpoint,
-    );
-  }
-
-  if (!response.ok) {
-    return createErrorResponse(subject, 'provider_http_error', `Provider returned HTTP ${response.status}.`, endpoint);
-  }
-
-  let payload: unknown;
-
-  try {
-    payload = await response.json();
-  } catch {
-    return createErrorResponse(subject, 'provider_invalid_response', 'Provider returned invalid JSON.', endpoint);
-  }
-
-  const parsedPayload = ProviderModelsPayloadSchema.safeParse(payload);
-
-  if (!parsedPayload.success) {
-    return createErrorResponse(
-      subject,
-      'provider_invalid_response',
-      'Provider models response does not match the OpenAI-compatible contract.',
-      endpoint,
-    );
-  }
-
-  return createOkResponse(
-    subject,
-    endpoint,
-    parsedPayload.data.data.map((model) => ({ id: model.id })),
-  );
-}
-
-export async function probeProviderModels(
-  command: ProviderModelsProbeCommand,
-  dependencies: TestProviderConnectionDependencies = {},
-): Promise<ProviderConnectionResponse> {
-  const subject: ConnectionSubject = { activeProvider: command.provider, mode: 'external' };
-  const apiKey = command.apiKey?.trim() || null;
-  let endpoint: string;
-
-  try {
-    endpoint = resolveVersionedUrl(command.url, 'models');
-  } catch {
-    return createErrorResponse(
-      subject,
-      'provider_url_invalid',
-      'URL внешнего API должен быть абсолютным HTTP(S)-адресом.',
-      null,
-    );
-  }
-
-  if (!apiKey && isProviderApiKeyRequired(command.provider)) {
-    return createErrorResponse(
-      subject,
-      'provider_api_key_missing',
-      'API-ключ провайдера не задан — список моделей запросить не у кого.',
-      endpoint,
-    );
-  }
-
-  return fetchProviderModels(subject, endpoint, getProviderApiKind(command.provider), apiKey, dependencies);
 }
 
 export async function testProviderConnection(

@@ -1,12 +1,10 @@
 import {
   CharacterDetailResponseSchema,
-  CharacterIdSchema,
   ImportCharacterCardCommandSchema,
   SaveCharacterCommandSchema,
   UploadCharacterAvatarCommandSchema,
 } from '@immersion/contracts/characters';
 import type { FastifyPluginAsync } from 'fastify';
-import { z } from 'zod';
 
 import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
 import { deleteCharacter } from '../../application/delete-character.js';
@@ -22,10 +20,7 @@ import { importCharacterCard } from '../../application/import-character-card.js'
 import { listCharacters } from '../../application/list-characters.js';
 import { createCharacter, updateCharacter } from '../../application/save-character.js';
 import { InvalidAvatarImageError, uploadCharacterAvatar } from '../../application/upload-character-avatar.js';
-
-const CharacterRouteParamsSchema = z.object({
-  characterId: CharacterIdSchema,
-});
+import { CharacterRouteParamsSchema } from './request-schemas.js';
 
 const toProblem = createToProblem((error) => {
   if (error instanceof CharacterNotFoundError) {

@@ -5,7 +5,8 @@ import {
   UpdateProviderSettingsCommandSchema,
 } from '@immersion/contracts/providers';
 
-import { createDefaultProviderConfig, toProviderSettingsSnapshot } from '../domain/provider-settings.js';
+import { createDefaultProviderConfig } from '../domain/provider-settings.js';
+import { toProviderSettingsSnapshot } from '../domain/provider-settings-snapshot.js';
 import { ProviderSettingsRepository } from './provider-settings-repository.js';
 
 function mergeConfig(current: ProviderConfig, patch: PatchProviderSettingsCommand['config']): ProviderConfig {
