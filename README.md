@@ -40,10 +40,10 @@ invalid value stops the API with a message that names the variable.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `IMMERSION_API_HOST` | `127.0.0.1` | Address the API listens on |
+| `IMMERSION_API_HOST` | `127.0.0.1` | Address the API listens on: loopback only, so `localhost` or an address in `127.0.0.0/8` or `::1`; any other value stops the API |
 | `IMMERSION_API_PORT` | `4787` | API port, 1–65535 |
 | `IMMERSION_WEB_PORT` | `4788` | Web client port: the API root redirects there, and the default origins use it |
-| `IMMERSION_WEB_ORIGINS` | `http://localhost:<web port>,http://127.0.0.1:<web port>` | Comma-separated http(s) origins, without a path, that browsers may call the API from |
+| `IMMERSION_WEB_ORIGINS` | `http://localhost:<web port>,http://127.0.0.1:<web port>` | Comma-separated http(s) origins, without a path, that browsers may call the API from; compared in `scheme://host[:port]` form, so a trailing slash, an upper-case host or a default port still match |
 | `IMMERSION_DATA_ROOT` | `data` in the repository root | Folder for chats, characters, settings and logs; a relative path resolves against the repository root |
 | `IMMERSION_LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent` |
 
@@ -165,10 +165,10 @@ API читает эти переменные окружения один раз,
 
 | Переменная | По умолчанию | Назначение |
 | --- | --- | --- |
-| `IMMERSION_API_HOST` | `127.0.0.1` | Адрес, на котором слушает API |
+| `IMMERSION_API_HOST` | `127.0.0.1` | Адрес, на котором слушает API: только loopback, то есть `localhost` или адрес из `127.0.0.0/8` или `::1`; любое другое значение останавливает API |
 | `IMMERSION_API_PORT` | `4787` | Порт API, 1–65535 |
 | `IMMERSION_WEB_PORT` | `4788` | Порт веб-клиента: туда перенаправляет корень API, и из него собираются origin по умолчанию |
-| `IMMERSION_WEB_ORIGINS` | `http://localhost:<порт клиента>,http://127.0.0.1:<порт клиента>` | Origin через запятую (http или https, без пути), из которых браузер может обращаться к API |
+| `IMMERSION_WEB_ORIGINS` | `http://localhost:<порт клиента>,http://127.0.0.1:<порт клиента>` | Origin через запятую (http или https, без пути), из которых браузер может обращаться к API; сравниваются в виде `схема://хост[:порт]`, поэтому косая черта в конце, хост в верхнем регистре или порт по умолчанию не мешают совпадению |
 | `IMMERSION_DATA_ROOT` | `data` в корне репозитория | Папка с чатами, персонажами, настройками и логами; относительный путь считается от корня репозитория |
 | `IMMERSION_LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` или `silent` |
 
