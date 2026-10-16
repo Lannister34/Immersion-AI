@@ -1,7 +1,7 @@
-import { buildAnthropicAuthHeaders } from '../../providers/index.js';
-import type { ChatCompletionRequest } from '../application/chat-completion-client.js';
-import type { AnthropicImageSource, AnthropicMessage, AnthropicPayload } from './anthropic-messages-request-wire.js';
-import { parseAnthropicImageSource } from './parse-anthropic-image-source.js';
+import { buildAnthropicAuthHeaders } from '../../../providers/index.js';
+import type { ChatCompletionRequest } from '../../application/chat-completion-client.js';
+import { parseAnthropicImageSource } from './parse-image-source.js';
+import type { AnthropicImageSource, AnthropicMessage, AnthropicPayload } from './request-wire.js';
 
 function buildMessageContent(message: ChatCompletionRequest['messages'][number]): AnthropicMessage['content'] {
   const images = (message.images ?? [])
@@ -56,7 +56,7 @@ function buildSamplingPayload(sampling: ChatCompletionRequest['sampling']) {
   };
 }
 
-export function buildAnthropicMessagesHeaders(apiKey: string | null) {
+export function buildAnthropicHeaders(apiKey: string | null) {
   return {
     ...buildAnthropicAuthHeaders(apiKey),
     Accept: 'application/json',
@@ -64,7 +64,7 @@ export function buildAnthropicMessagesHeaders(apiKey: string | null) {
   };
 }
 
-export function buildAnthropicMessagesBody(request: ChatCompletionRequest) {
+export function buildAnthropicBody(request: ChatCompletionRequest) {
   const { conversation, system } = buildAnthropicPayload(request.messages);
 
   return {

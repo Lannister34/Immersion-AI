@@ -1,13 +1,13 @@
 import type { ReplyChannel } from '@immersion/domain/generation';
 
-import type { ChatCompletionResponse } from '../application/chat-completion-client.js';
-import { ProviderGenerationError } from '../application/generation-errors.js';
+import type { ChatCompletionResponse } from '../../application/chat-completion-client.js';
+import { ProviderGenerationError } from '../../application/generation-errors.js';
+import type { ProviderStreamSink } from '../provider-reply-reader.js';
 import {
   type AnthropicMessageResponse,
   AnthropicMessageResponseSchema,
   AnthropicStreamEventSchema,
-} from './anthropic-messages-response-wire.js';
-import type { ProviderStreamSink } from './provider-reply-reader.js';
+} from './response-wire.js';
 
 function readResponseBlocks(payload: AnthropicMessageResponse): ChatCompletionResponse {
   const parts: Record<ReplyChannel, string[]> = { reasoning: [], reply: [] };

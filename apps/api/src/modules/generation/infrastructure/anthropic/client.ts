@@ -1,24 +1,24 @@
-import { resolveAnthropicMessagesUrl } from '../../providers/index.js';
+import { resolveAnthropicMessagesUrl } from '../../../providers/index.js';
 import type {
   ChatCompletionClient,
   ChatCompletionRequest,
   ChatCompletionResponse,
-} from '../application/chat-completion-client.js';
-import { ProviderGenerationError } from '../application/generation-errors.js';
-import { readAnthropicJsonReply, readAnthropicStreamData } from './anthropic-messages-reply.js';
-import { buildAnthropicMessagesBody, buildAnthropicMessagesHeaders } from './anthropic-messages-request.js';
-import { buildRequestSignal, isAbortError, readProviderErrorText } from './provider-http.js';
-import { readProviderReply } from './provider-reply-reader.js';
+} from '../../application/chat-completion-client.js';
+import { ProviderGenerationError } from '../../application/generation-errors.js';
+import { buildRequestSignal, isAbortError, readProviderErrorText } from '../provider-http.js';
+import { readProviderReply } from '../provider-reply-reader.js';
+import { readAnthropicJsonReply, readAnthropicStreamData } from './reply.js';
+import { buildAnthropicBody, buildAnthropicHeaders } from './request.js';
 
-export class AnthropicMessagesClient implements ChatCompletionClient {
+export class AnthropicClient implements ChatCompletionClient {
   async completeChat(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
     let response: Response;
 
     try {
       response = await fetch(resolveAnthropicMessagesUrl(request.endpoint), {
         method: 'POST',
-        headers: buildAnthropicMessagesHeaders(request.endpoint.apiKey),
-        body: JSON.stringify(buildAnthropicMessagesBody(request)),
+        headers: buildAnthropicHeaders(request.endpoint.apiKey),
+        body: JSON.stringify(buildAnthropicBody(request)),
         signal: buildRequestSignal(request.signal),
       });
     } catch (error) {

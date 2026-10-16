@@ -1,5 +1,5 @@
-import type { ChatCompletionRequest } from '../application/chat-completion-client.js';
-import { isOpenAiReasoningModel } from './openai-reasoning-model.js';
+import type { ChatCompletionRequest } from '../../application/chat-completion-client.js';
+import { isOpenAiReasoningModel } from './reasoning-model.js';
 
 function buildMessagePayload(message: ChatCompletionRequest['messages'][number]) {
   if (!message.images || message.images.length === 0) {
@@ -51,7 +51,7 @@ function buildServerExtensions(request: ChatCompletionRequest) {
   return request.serverExtensions;
 }
 
-export function buildOpenAiCompatibleChatCompletionsHeaders(apiKey: string | null) {
+export function buildOpenAiHeaders(apiKey: string | null) {
   return {
     ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
     Accept: 'application/json',
@@ -59,7 +59,7 @@ export function buildOpenAiCompatibleChatCompletionsHeaders(apiKey: string | nul
   };
 }
 
-export function buildOpenAiCompatibleChatCompletionsBody(request: ChatCompletionRequest) {
+export function buildOpenAiBody(request: ChatCompletionRequest) {
   return {
     ...buildServerExtensions(request),
     model: request.endpoint.model,

@@ -1,4 +1,4 @@
-import type { AnthropicImageSource } from './anthropic-messages-request-wire.js';
+import type { AnthropicImageSource } from './request-wire.js';
 
 export function parseAnthropicImageSource(dataUrl: string): AnthropicImageSource | null {
   const match = /^data:(?<mediaType>[^;,]+);base64,(?<data>.+)$/su.exec(dataUrl);

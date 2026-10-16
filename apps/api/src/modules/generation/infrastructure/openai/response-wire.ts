@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const OpenAiCompatibleStreamChunkSchema = z.object({
+export const OpenAiStreamChunkSchema = z.object({
   choices: z
     .array(
       z.object({
@@ -16,11 +16,11 @@ export const OpenAiCompatibleStreamChunkSchema = z.object({
     .min(1),
 });
 
-export const OpenAiCompatibleStreamErrorSchema = z.object({
+export const OpenAiStreamErrorSchema = z.object({
   error: z.union([z.string(), z.object({ message: z.string().optional() })]),
 });
 
-export const OpenAiCompatibleChatCompletionResponseSchema = z.object({
+export const OpenAiChatCompletionReplySchema = z.object({
   choices: z
     .array(
       z.object({
@@ -34,4 +34,4 @@ export const OpenAiCompatibleChatCompletionResponseSchema = z.object({
     .min(1),
 });
 
-export type OpenAiCompatibleChatCompletionResponse = z.infer<typeof OpenAiCompatibleChatCompletionResponseSchema>;
+export type OpenAiChatCompletionReply = z.infer<typeof OpenAiChatCompletionReplySchema>;

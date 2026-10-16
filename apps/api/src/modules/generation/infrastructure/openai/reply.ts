@@ -1,14 +1,14 @@
 import { splitReply } from '@immersion/domain/generation';
 
-import type { ChatCompletionResponse } from '../application/chat-completion-client.js';
-import { ProviderGenerationError } from '../application/generation-errors.js';
+import type { ChatCompletionResponse } from '../../application/chat-completion-client.js';
+import { ProviderGenerationError } from '../../application/generation-errors.js';
+import type { ProviderStreamSink } from '../provider-reply-reader.js';
 import {
-  type OpenAiCompatibleChatCompletionResponse,
-  OpenAiCompatibleChatCompletionResponseSchema,
-  OpenAiCompatibleStreamChunkSchema,
-  OpenAiCompatibleStreamErrorSchema,
-} from './openai-compatible-chat-completions-response-wire.js';
-import type { ProviderStreamSink } from './provider-reply-reader.js';
+  type OpenAiChatCompletionReply,
+  OpenAiChatCompletionReplySchema,
+  OpenAiStreamChunkSchema,
+  OpenAiStreamErrorSchema,
+} from './response-wire.js';
 
 export function readOpenAiStreamData(data: string, sink: ProviderStreamSink) {
   if (data === '[DONE]') {
@@ -16,7 +16,7 @@ export function readOpenAiStreamData(data: string, sink: ProviderStreamSink) {
   }
 
   const chunk: unknown = JSON.parse(data);
-  const streamError = OpenAiCompatibleStreamErrorSchema.safeParse(chunk);
+  const streamError = OpenAiStreamErrorSchema.safeParse(chunk);
 
   if (streamError.success) {
     const { error } = streamError.data;
@@ -26,7 +26,7 @@ export function readOpenAiStreamData(data: string, sink: ProviderStreamSink) {
     );
   }
 
-  const parsed = OpenAiCompatibleStreamChunkSchema.safeParse(chunk);
+  const parsed = OpenAiStreamChunkSchema.safeParse(chunk);
 
   if (!parsed.success) {
     return;
@@ -48,10 +48,10 @@ export function readOpenAiStreamData(data: string, sink: ProviderStreamSink) {
 
 export async function readOpenAiJsonReply(response: Response): Promise<ChatCompletionResponse> {
   const responseText = await response.text();
-  let payload: OpenAiCompatibleChatCompletionResponse;
+  let payload: OpenAiChatCompletionReply;
 
   try {
-    payload = OpenAiCompatibleChatCompletionResponseSchema.parse(JSON.parse(responseText));
+    payload = OpenAiChatCompletionReplySchema.parse(JSON.parse(responseText));
   } catch (error) {
     throw new ProviderGenerationError(
       error instanceof Error

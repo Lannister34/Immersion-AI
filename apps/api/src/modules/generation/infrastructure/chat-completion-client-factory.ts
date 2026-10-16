@@ -3,15 +3,15 @@ import type {
   ChatCompletionRequest,
   ChatCompletionResponse,
 } from '../application/chat-completion-client.js';
-import { AnthropicMessagesClient } from './anthropic-messages-client.js';
-import { OpenAiCompatibleChatCompletionsClient } from './openai-compatible-chat-completions-client.js';
+import { AnthropicClient } from './anthropic/client.js';
+import { OpenAiClient } from './openai/client.js';
 
 class RoutingChatCompletionsClient implements ChatCompletionClient {
-  private readonly anthropic = new AnthropicMessagesClient();
-  private readonly openAiCompatible = new OpenAiCompatibleChatCompletionsClient();
+  private readonly anthropic = new AnthropicClient();
+  private readonly openAi = new OpenAiClient();
 
   async completeChat(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
-    const client = request.endpoint.apiKind === 'anthropic' ? this.anthropic : this.openAiCompatible;
+    const client = request.endpoint.apiKind === 'anthropic' ? this.anthropic : this.openAi;
 
     return client.completeChat(request);
   }
