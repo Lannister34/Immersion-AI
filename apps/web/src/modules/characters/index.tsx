@@ -1,3 +1,4 @@
+import type { CharacterSummaryDto } from '@immersion/contracts/characters';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { type ChangeEvent, type DragEvent, type ReactNode, useMemo, useRef, useState } from 'react';
@@ -9,8 +10,7 @@ import { readFileAsBase64 } from '../../shared/lib/read-file-as-base64';
 import { GridIcon, ListIcon, PlusIcon, SearchIcon, SortIcon, UploadIcon } from '../../shared/ui/icons';
 import { importCharacterCard } from './api/import-character-card';
 import { CharacterCard } from './components/character-card';
-import { CharactersGridSkeleton } from './components/characters-grid-skeleton';
-import { CharactersListTable } from './components/characters-list-table';
+import { CharacterListRow } from './components/character-list-row';
 import { characterListQueryKey, characterListQueryOptions } from './queries/character-list-query';
 
 export { CharacterEditorScreen } from './editor';
@@ -25,6 +25,44 @@ const VIEW_MODE_STORAGE_KEY = 'immersion.characters.view-mode';
 
 function readStoredViewMode(): CharactersViewMode {
   return window.localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'list' ? 'list' : 'grid';
+}
+
+const CHARACTER_SKELETON_CARD_COUNT = 5;
+
+function CharactersGridSkeleton() {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
+      {Array.from({ length: CHARACTER_SKELETON_CARD_COUNT }, (_, index) => (
+        <div className="card" key={index} style={{ aspectRatio: '3 / 4', padding: 0, background: 'var(--surface)' }} />
+      ))}
+    </div>
+  );
+}
+
+interface CharactersListTableProps {
+  characters: CharacterSummaryDto[];
+}
+
+function CharactersListTable({ characters }: CharactersListTableProps) {
+  return (
+    <section className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <table className="tbl">
+        <thead>
+          <tr>
+            <th>Персонаж</th>
+            <th>Чаты</th>
+            <th>Изменён</th>
+            <th style={{ width: 200 }} />
+          </tr>
+        </thead>
+        <tbody>
+          {characters.map((character) => (
+            <CharacterListRow character={character} key={character.id} />
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
 }
 
 export function CharactersScreen() {

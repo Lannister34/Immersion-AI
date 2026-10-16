@@ -9,6 +9,64 @@ import { createChat } from '../../chats/api/create-chat';
 import { chatListQueryKey } from '../../chats/queries/chat-list-query';
 import { useDeleteScenario } from '../mutations/use-delete-scenario';
 
+interface ScenarioRowActionsProps {
+  confirmDelete: boolean;
+  isDeleting: boolean;
+  isStartingChat: boolean;
+  onAskDelete: () => void;
+  onCancelDelete: () => void;
+  onConfirmDelete: () => void;
+  onStartChat: () => void;
+}
+
+function ScenarioRowActions({
+  confirmDelete,
+  isDeleting,
+  isStartingChat,
+  onAskDelete,
+  onCancelDelete,
+  onConfirmDelete,
+  onStartChat,
+}: ScenarioRowActionsProps) {
+  return confirmDelete ? (
+    <>
+      <button
+        className="btn btn--xs btn--danger"
+        disabled={isDeleting}
+        onClick={onConfirmDelete}
+        title="Удалить сценарий"
+        type="button"
+      >
+        {isDeleting ? '…' : 'Удалить'}
+      </button>
+      <button
+        className="btn btn--icon btn--xs"
+        disabled={isDeleting}
+        onClick={onCancelDelete}
+        title="Не удалять"
+        type="button"
+      >
+        <XIcon size={11} />
+      </button>
+    </>
+  ) : (
+    <>
+      <button className="btn btn--icon btn--xs" onClick={onAskDelete} title="Удалить сценарий" type="button">
+        <TrashIcon size={11} />
+      </button>
+      <button
+        className="btn btn--xs btn--primary"
+        disabled={isStartingChat}
+        onClick={onStartChat}
+        title="Начать новый чат по сценарию"
+        type="button"
+      >
+        {isStartingChat ? '…' : 'Начать чат'}
+      </button>
+    </>
+  );
+}
+
 interface ScenarioRowProps {
   scenario: ScenarioSummaryDto;
 }
@@ -99,48 +157,15 @@ export function ScenarioRow({ scenario }: ScenarioRowProps) {
           {formatRelative(scenario.updatedAt)}
         </span>
         <div className="row gap-4" style={{ position: 'relative', zIndex: 2 }}>
-          {confirmDelete ? (
-            <>
-              <button
-                className="btn btn--xs btn--danger"
-                disabled={deleteMutation.isPending}
-                onClick={handleConfirmDelete}
-                title="Удалить сценарий"
-                type="button"
-              >
-                {deleteMutation.isPending ? '…' : 'Удалить'}
-              </button>
-              <button
-                className="btn btn--icon btn--xs"
-                disabled={deleteMutation.isPending}
-                onClick={handleCancelDelete}
-                title="Не удалять"
-                type="button"
-              >
-                <XIcon size={11} />
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                className="btn btn--icon btn--xs"
-                onClick={handleAskDelete}
-                title="Удалить сценарий"
-                type="button"
-              >
-                <TrashIcon size={11} />
-              </button>
-              <button
-                className="btn btn--xs btn--primary"
-                disabled={startChatMutation.isPending}
-                onClick={handleStartChat}
-                title="Начать новый чат по сценарию"
-                type="button"
-              >
-                {startChatMutation.isPending ? '…' : 'Начать чат'}
-              </button>
-            </>
-          )}
+          <ScenarioRowActions
+            confirmDelete={confirmDelete}
+            isDeleting={deleteMutation.isPending}
+            isStartingChat={startChatMutation.isPending}
+            onAskDelete={handleAskDelete}
+            onCancelDelete={handleCancelDelete}
+            onConfirmDelete={handleConfirmDelete}
+            onStartChat={handleStartChat}
+          />
         </div>
       </div>
     </div>
