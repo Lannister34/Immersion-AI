@@ -141,7 +141,9 @@ const routeTree = rootRoute.addChildren([
   settingsRoute,
 ]);
 
-export function createAppRouter(queryClient: QueryClient) {
+export type AppRouter = ReturnType<typeof createRouter<typeof routeTree>>;
+
+export function createAppRouter(queryClient: QueryClient): AppRouter {
   return createRouter({
     routeTree,
     context: {
@@ -150,8 +152,6 @@ export function createAppRouter(queryClient: QueryClient) {
     defaultPreload: 'intent',
   });
 }
-
-export type AppRouter = ReturnType<typeof createAppRouter>;
 
 declare module '@tanstack/react-router' {
   interface Register {

@@ -7,7 +7,7 @@ import { TrashIcon, XIcon } from '../../../shared/ui/icons';
 import { useDeleteChat } from '../mutations/use-delete-chat';
 import { stripMessageMarkup } from '../view-models/strip-message-markup';
 
-export interface ChatListRowProps {
+interface ChatListRowProps {
   chat: ChatSummaryDto;
 }
 

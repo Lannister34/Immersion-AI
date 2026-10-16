@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { pluralRu } from '../../../shared/lib/plural';
 import { Avatar } from '../../../shared/ui/avatar';
 import { BookIcon, TheaterIcon, UserIcon } from '../../../shared/ui/icons';
 import { characterDetailQueryOptions } from '../../characters/queries/character-detail-query';
 import { lorebookListQueryOptions } from '../../lorebooks/queries/lorebook-list-query';
-import { BindingRow } from './binding-row';
 
 export interface ChatBindingsProps {
   characterAvatarUrl: string | null;
@@ -16,6 +16,26 @@ export interface ChatBindingsProps {
 
 function firstLine(text: string): string {
   return text.trim().split('\n')[0]?.trim() ?? '';
+}
+
+interface BindingRowProps {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}
+
+function BindingRow({ icon, label, value }: BindingRowProps) {
+  return (
+    <div className="rp-binding">
+      {icon}
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 'var(--fz-sm)' }}>{label}</span>
+        <span className="truncate" style={{ color: 'var(--muted-dim)', display: 'block', fontSize: 'var(--fz-xs)' }}>
+          {value}
+        </span>
+      </span>
+    </div>
+  );
 }
 
 // TODO: let the user change the chat's character, scenario and lorebook bindings

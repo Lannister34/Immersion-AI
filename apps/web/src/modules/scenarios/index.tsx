@@ -8,7 +8,6 @@ import { pluralRu } from '../../shared/lib/plural';
 import { PlusIcon, SearchIcon, UploadIcon } from '../../shared/ui/icons';
 import { createScenario } from './api/save-scenario';
 import { ScenarioRow } from './components/scenario-row';
-import { ScenariosListSkeleton } from './components/scenarios-list-skeleton';
 import { scenarioListQueryKey, scenarioListQueryOptions } from './queries/scenario-list-query';
 
 export { ScenarioEditorScreen } from './editor';
@@ -30,6 +29,18 @@ function parseScenarioImportFile(raw: string): SaveScenarioCommand {
     name: typeof record.name === 'string' ? record.name : '',
     tags: Array.isArray(record.tags) ? record.tags.filter((tag): tag is string => typeof tag === 'string') : [],
   });
+}
+
+const SCENARIO_SKELETON_CARD_COUNT = 3;
+
+function ScenariosListSkeleton() {
+  return (
+    <div style={{ display: 'grid', gap: 10 }}>
+      {Array.from({ length: SCENARIO_SKELETON_CARD_COUNT }, (_, index) => (
+        <div className="card" key={index} style={{ height: 110, background: 'var(--surface)' }} />
+      ))}
+    </div>
+  );
 }
 
 export function ScenariosScreen() {

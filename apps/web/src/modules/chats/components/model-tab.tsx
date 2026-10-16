@@ -1,5 +1,6 @@
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
 
+import { UndoIcon } from '../../../shared/ui/icons';
 import {
   type AutoSavedGenerationSettings,
   INHERIT_PRESET_VALUE,
@@ -15,9 +16,26 @@ import {
 import { MarkDot } from './mark-dot';
 import { SaveAsPresetForm } from './save-as-preset-form';
 import { SaveErrorLine } from './save-error-line';
-import { UndoButton } from './undo-button';
 
-export interface ModelTabProps {
+interface UndoButtonProps {
+  inheritedText: string;
+  onClick: () => void;
+}
+
+function UndoButton({ inheritedText, onClick }: UndoButtonProps) {
+  return (
+    <button
+      className="rp-param__undo"
+      onClick={onClick}
+      title={inheritedText.length > 0 ? `Вернуть ${inheritedText} из набора` : 'Вернуть значение из набора'}
+      type="button"
+    >
+      <UndoIcon size={13} />
+    </button>
+  );
+}
+
+interface ModelTabProps {
   effectiveSampling: InheritedSampling | undefined;
   form: AutoSavedGenerationSettings;
   modelBindingPresetId: string | null;

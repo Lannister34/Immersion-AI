@@ -5,6 +5,26 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createAppRouter } from '.';
 
+interface ChatListScreenProps {
+  characterFilter: string | null;
+}
+
+interface ChatSessionScreenProps {
+  chatId: string;
+}
+
+interface CharacterEditorScreenProps {
+  characterId: string | null;
+}
+
+interface ScenarioEditorScreenProps {
+  scenarioId: string | null;
+}
+
+interface LorebookEditorScreenProps {
+  lorebookId: string | null;
+}
+
 vi.mock('../layout/root-layout', async () => {
   const { Outlet } = await import('@tanstack/react-router');
   return { RootLayout: () => <Outlet /> };
@@ -13,31 +33,25 @@ vi.mock('../layout/root-layout', async () => {
 vi.mock('../../modules/chat-shell', () => ({ HomeScreen: () => <p>home</p> }));
 
 vi.mock('../../modules/chats', () => ({
-  ChatListScreen: ({ characterFilter }: { characterFilter: string | null }) => (
-    <p>{`chat list:${String(characterFilter)}`}</p>
-  ),
-  ChatSessionScreen: ({ chatId }: { chatId: string }) => <p>{`chat session:${chatId}`}</p>,
+  ChatListScreen: ({ characterFilter }: ChatListScreenProps) => <p>{`chat list:${String(characterFilter)}`}</p>,
+  ChatSessionScreen: ({ chatId }: ChatSessionScreenProps) => <p>{`chat session:${chatId}`}</p>,
 }));
 
 vi.mock('../../modules/characters', () => ({
   CharactersScreen: () => <p>characters</p>,
-  CharacterEditorScreen: ({ characterId }: { characterId: string | null }) => (
+  CharacterEditorScreen: ({ characterId }: CharacterEditorScreenProps) => (
     <p>{`character editor:${String(characterId)}`}</p>
   ),
 }));
 
 vi.mock('../../modules/scenarios', () => ({
   ScenariosScreen: () => <p>scenarios</p>,
-  ScenarioEditorScreen: ({ scenarioId }: { scenarioId: string | null }) => (
-    <p>{`scenario editor:${String(scenarioId)}`}</p>
-  ),
+  ScenarioEditorScreen: ({ scenarioId }: ScenarioEditorScreenProps) => <p>{`scenario editor:${String(scenarioId)}`}</p>,
 }));
 
 vi.mock('../../modules/lorebooks', () => ({
   LorebooksScreen: () => <p>lorebooks</p>,
-  LorebookEditorScreen: ({ lorebookId }: { lorebookId: string | null }) => (
-    <p>{`lorebook editor:${String(lorebookId)}`}</p>
-  ),
+  LorebookEditorScreen: ({ lorebookId }: LorebookEditorScreenProps) => <p>{`lorebook editor:${String(lorebookId)}`}</p>,
 }));
 
 vi.mock('../../modules/server-control', () => ({ ServerControlScreen: () => <p>server</p> }));

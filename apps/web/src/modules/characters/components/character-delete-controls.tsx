@@ -1,8 +1,8 @@
 import { TrashIcon, XIcon } from '../../../shared/ui/icons';
-import type { useCharacterActions } from '../mutations/use-character-actions';
+import type { CharacterActions } from '../mutations/use-character-actions';
 
 interface CharacterDeleteControlsProps {
-  actions: ReturnType<typeof useCharacterActions>;
+  actions: CharacterActions;
   darkOverlay?: boolean;
 }
 
