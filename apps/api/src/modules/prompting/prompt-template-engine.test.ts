@@ -44,6 +44,7 @@ describe('prompt template engine', () => {
     expect(result.diagnostics).toEqual({
       cyclicVariables: [],
       invalidVariableTemplates: [],
+      truncatedExpansions: [],
       unknownConditions: [],
       unresolvedVariables: [],
     });
@@ -83,6 +84,7 @@ describe('prompt template engine', () => {
     expect(result.diagnostics).toEqual({
       cyclicVariables: [],
       invalidVariableTemplates: [],
+      truncatedExpansions: [],
       unknownConditions: [],
       unresolvedVariables: [],
     });

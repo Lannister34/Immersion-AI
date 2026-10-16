@@ -28,12 +28,20 @@ export function isPromptVariableKey(value: string): value is PromptVariableKey {
   return promptVariableKeySet.has(value);
 }
 
+export function isPromptVariableAlias(value: string): value is PromptVariableAlias {
+  return Object.hasOwn(promptVariableAliases, value);
+}
+
 export function resolvePromptVariableKey(value: string): PromptVariableKey | null {
   if (isPromptVariableKey(value)) {
     return value;
   }
 
-  return promptVariableAliases[value as PromptVariableAlias] ?? null;
+  if (isPromptVariableAlias(value)) {
+    return promptVariableAliases[value];
+  }
+
+  return null;
 }
 
 export function readPromptVariable(values: PromptVariableValues, key: PromptVariableKey): string {

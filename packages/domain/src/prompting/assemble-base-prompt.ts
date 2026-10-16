@@ -1,8 +1,9 @@
 import type { PromptInputSnapshot } from './prompt-input-snapshot.js';
 import { type PromptTemplateSourceSelection, resolvePromptTemplateSource } from './prompt-source.js';
-import { normalizePromptWhitespace, type PromptTemplateDiagnostics, renderPromptTemplate } from './prompt-template.js';
+import { normalizePromptWhitespace } from './prompt-template.js';
 import type { PromptVariableValues } from './prompt-variable-registry.js';
 import { buildPromptVariableValues } from './prompt-variable-values.js';
+import { type PromptTemplateDiagnostics, renderPromptTemplate } from './render-prompt-template.js';
 
 export interface BasePromptAssemblyResult {
   diagnostics: PromptTemplateDiagnostics;
@@ -14,17 +15,20 @@ export interface BasePromptAssemblyResult {
 function freezeDiagnostics(diagnostics: PromptTemplateDiagnostics): PromptTemplateDiagnostics {
   const cyclicVariables = [...diagnostics.cyclicVariables];
   const invalidVariableTemplates = [...diagnostics.invalidVariableTemplates];
+  const truncatedExpansions = [...diagnostics.truncatedExpansions];
   const unknownConditions = [...diagnostics.unknownConditions];
   const unresolvedVariables = [...diagnostics.unresolvedVariables];
 
   Object.freeze(cyclicVariables);
   Object.freeze(invalidVariableTemplates);
+  Object.freeze(truncatedExpansions);
   Object.freeze(unknownConditions);
   Object.freeze(unresolvedVariables);
 
   return Object.freeze({
     cyclicVariables,
     invalidVariableTemplates,
+    truncatedExpansions,
     unknownConditions,
     unresolvedVariables,
   });
