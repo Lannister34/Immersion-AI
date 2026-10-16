@@ -1,7 +1,5 @@
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
-import zlib from 'node:zlib';
 
 import {
   CreateChatResponseSchema,
@@ -9,83 +7,34 @@ import {
   UploadChatAttachmentResponseSchema,
 } from '@immersion/contracts/chats';
 import { IMAGE_UPLOAD_MAX_BYTES, IMAGE_UPLOAD_MAX_MEGABYTES } from '@immersion/contracts/common';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
-import { buildApiApp } from './app.js';
-import { stubGlobalFetch } from './test-support/global-fetch-stub.js';
+import { buildPng } from './test-support/png-image.js';
+import type { TestApi } from './test-support/test-api.js';
+import { useTestApi } from './test-support/use-test-api.js';
 
 const PROVIDER_URL = 'http://127.0.0.1:6006';
 
-const externalProviderSettings = {
-  activeProvider: 'custom',
-  backendMode: 'external',
-  providerConfigs: { custom: { model: 'vision-model', url: PROVIDER_URL } },
-};
-
-function buildPngChunk(type: string, data: Buffer): Buffer {
-  const length = Buffer.alloc(4);
-  length.writeUInt32BE(data.length, 0);
-  const typeAndData = Buffer.concat([Buffer.from(type, 'ascii'), data]);
-  const table: number[] = [];
-  for (let n = 0; n < 256; n += 1) {
-    let c = n;
-    for (let k = 0; k < 8; k += 1) {
-      c = c & 1 ? 0xed_b8_83_20 ^ (c >>> 1) : c >>> 1;
-    }
-    table[n] = c >>> 0;
-  }
-  let crc = 0xff_ff_ff_ff;
-  for (const byte of typeAndData) {
-    crc = (table[(crc ^ byte) & 0xff]! ^ (crc >>> 8)) >>> 0;
-  }
-  const crcBuffer = Buffer.alloc(4);
-  crcBuffer.writeUInt32BE((crc ^ 0xff_ff_ff_ff) >>> 0, 0);
-  return Buffer.concat([length, typeAndData, crcBuffer]);
-}
-
-function buildPng(): Buffer {
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(1, 0);
-  ihdr.writeUInt32BE(1, 4);
-  ihdr.writeUInt8(8, 8);
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    buildPngChunk('IHDR', ihdr),
-    buildPngChunk('IDAT', zlib.deflateSync(Buffer.from([0x00, 0x00]))),
-    buildPngChunk('IEND', Buffer.alloc(0)),
-  ]);
-}
+const ChatCompletionRequestBodySchema = z.looseObject({ messages: z.array(z.unknown()) });
 
 describe('chat attachments', () => {
-  let previousDataRoot: string | undefined;
-  let temporaryDataRoot: string;
+  const api = useTestApi();
 
   beforeEach(async () => {
-    previousDataRoot = process.env.IMMERSION_DATA_ROOT;
-    temporaryDataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'immersion-api-attachments-'));
-    await fs.writeFile(
-      path.join(temporaryDataRoot, 'user-settings.json'),
-      JSON.stringify(externalProviderSettings),
-      'utf8',
-    );
-    process.env.IMMERSION_DATA_ROOT = temporaryDataRoot;
+    await api().settings.write({
+      activeProvider: 'custom',
+      backendMode: 'external',
+      providerConfigs: { custom: { model: 'vision-model', url: PROVIDER_URL } },
+    });
   });
 
-  afterEach(async () => {
-    if (previousDataRoot) {
-      process.env.IMMERSION_DATA_ROOT = previousDataRoot;
-    } else {
-      delete process.env.IMMERSION_DATA_ROOT;
-    }
-    await fs.rm(temporaryDataRoot, { recursive: true, force: true });
-  });
-
-  async function createChat(app: ReturnType<typeof buildApiApp>) {
+  async function createChat(app: TestApi['app']) {
     const response = await app.inject({ method: 'POST', url: '/api/chats', payload: { title: 'Картинки' } });
     return CreateChatResponseSchema.parse(response.json()).chat;
   }
 
-  async function uploadPng(app: ReturnType<typeof buildApiApp>, chatId: string) {
+  async function uploadPng(app: TestApi['app'], chatId: string) {
     const response = await app.inject({
       method: 'POST',
       url: `/api/chats/${chatId}/attachments`,
@@ -98,27 +47,23 @@ describe('chat attachments', () => {
   }
 
   it('stores an uploaded image next to the chat and serves it back', async () => {
-    const app = buildApiApp();
+    const { app, dataRoot } = api();
     const chat = await createChat(app);
     const attachment = await uploadPng(app, chat.id);
 
     expect(attachment.mimeType).toBe('image/png');
     expect(attachment.url).toBe(`/api/chats/${chat.id}/attachments/${attachment.id}`);
 
-    const stored = await fs.readFile(
-      path.join(temporaryDataRoot, 'chats', '_no_character_', `${chat.id}.files`, attachment.id),
-    );
+    const stored = await fs.readFile(path.join(dataRoot, 'chats', '_no_character_', `${chat.id}.files`, attachment.id));
     expect(stored.equals(buildPng())).toBe(true);
 
     const download = await app.inject({ method: 'GET', url: attachment.url });
     expect(download.statusCode).toBe(200);
     expect(download.headers['content-type']).toBe('image/png');
-
-    await app.close();
   });
 
   it('rejects an image one byte over the image upload limit with its size message', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const chat = await createChat(app);
 
     const response = await app.inject({
@@ -132,12 +77,10 @@ describe('chat attachments', () => {
       code: 'invalid_chat_attachment',
       message: `Изображение больше ${IMAGE_UPLOAD_MAX_MEGABYTES} МБ.`,
     });
-
-    await app.close();
   });
 
   it('rejects a file whose bytes are not the declared image format', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const chat = await createChat(app);
 
     const response = await app.inject({
@@ -148,12 +91,10 @@ describe('chat attachments', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({ code: 'invalid_chat_attachment' });
-
-    await app.close();
   });
 
   it('returns 404 for an attachment of another chat', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const chat = await createChat(app);
     const otherChat = await createChat(app);
     const attachment = await uploadPng(app, chat.id);
@@ -164,8 +105,6 @@ describe('chat attachments', () => {
     });
 
     expect(response.statusCode).toBe(404);
-
-    await app.close();
   });
 
   it.each([
@@ -181,11 +120,10 @@ describe('chat attachments', () => {
     providerStatus,
     replyStatus,
   }) => {
-    const http = stubGlobalFetch();
+    const { app, http } = api();
     http.on('POST', `${PROVIDER_URL}/v1/chat/completions`, () =>
       Response.json(providerBody, { status: providerStatus }),
     );
-    const app = buildApiApp();
     const chat = await createChat(app);
     const attachment = await uploadPng(app, chat.id);
 
@@ -197,7 +135,7 @@ describe('chat attachments', () => {
 
     expect(generation.statusCode).toBe(replyStatus);
     expect(http.requests.map((request) => request.url)).toEqual([`${PROVIDER_URL}/v1/chat/completions`]);
-    expect(JSON.parse(http.requests[0]?.bodyText ?? '')).toMatchObject({
+    expect(http.requests[0]?.json(ChatCompletionRequestBodySchema)).toMatchObject({
       messages: expect.arrayContaining([
         {
           content: [
@@ -214,12 +152,10 @@ describe('chat attachments', () => {
     const userMessage = session.messages.find((message) => message.role === 'user');
 
     expect(userMessage?.attachments).toEqual([{ id: attachment.id, mimeType: 'image/png', url: attachment.url }]);
-
-    await app.close();
   });
 
   it('refuses to send an attachment that does not belong to the chat', async () => {
-    const app = buildApiApp();
+    const { app } = api();
     const chat = await createChat(app);
 
     const response = await app.inject({
@@ -230,22 +166,18 @@ describe('chat attachments', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ code: 'chat_attachment_not_found' });
-
-    await app.close();
   });
 
   it('removes stored attachments together with the chat', async () => {
-    const app = buildApiApp();
+    const { app, dataRoot } = api();
     const chat = await createChat(app);
     await uploadPng(app, chat.id);
 
-    const attachmentsDir = path.join(temporaryDataRoot, 'chats', '_no_character_', `${chat.id}.files`);
+    const attachmentsDir = path.join(dataRoot, 'chats', '_no_character_', `${chat.id}.files`);
     await expect(fs.access(attachmentsDir)).resolves.toBeUndefined();
 
     const deleted = await app.inject({ method: 'DELETE', url: `/api/chats/${chat.id}` });
     expect(deleted.statusCode).toBe(204);
     await expect(fs.access(attachmentsDir)).rejects.toThrow();
-
-    await app.close();
   });
 });
