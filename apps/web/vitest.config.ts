@@ -6,9 +6,29 @@ export default mergeConfig(
   viteConfig,
   defineConfig({
     test: {
-      environment: 'node',
       env: { TZ: 'Europe/Berlin' },
-      include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'dev-server/**/*.test.ts', 'tests/**/*.test.ts'],
+      restoreMocks: true,
+      unstubEnvs: true,
+      unstubGlobals: true,
+      projects: [
+        {
+          extends: true,
+          test: {
+            name: 'unit',
+            environment: 'node',
+            include: ['src/**/*.test.ts', 'dev-server/**/*.test.ts', 'tests/**/*.test.ts'],
+          },
+        },
+        {
+          extends: true,
+          test: {
+            name: 'dom',
+            environment: 'jsdom',
+            include: ['src/**/*.test.tsx'],
+            setupFiles: ['src/test-support/dom-setup.ts'],
+          },
+        },
+      ],
     },
   }),
 );
