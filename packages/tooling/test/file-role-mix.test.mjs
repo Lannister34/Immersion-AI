@@ -538,6 +538,62 @@ describe('role mixes the strict reading allows', () => {
     );
   });
 
+  it('allows one exported component with the private sub-components and render helpers only it renders', () => {
+    assert.equal(
+      mixOf('chat-list-screen.tsx', [
+        'function ChatListSkeleton() { return <div />; }',
+        'export function ChatListScreen() { return <ChatListSkeleton />; }',
+      ]),
+      null,
+    );
+    assert.equal(
+      mixOf('topbar.tsx', [
+        'export interface TopbarProps { crumbs: string[] }',
+        'interface Crumb { label: string }',
+        'function renderCrumb(crumb: Crumb) { return <span>{crumb.label}</span>; }',
+        'const Separator = memo(() => <i />);',
+        'export function Topbar({ crumbs }: TopbarProps) {',
+        '  return <nav>{crumbs.map((label) => renderCrumb({ label }))}<Separator /></nav>;',
+        '}',
+      ]),
+      null,
+    );
+  });
+
+  it('allows private components beside a default-exported component, a named export list or exported constants and errors', () => {
+    assert.equal(
+      mixOf('settings-page.tsx', [
+        'function Section() { return <section />; }',
+        'export default () => <main><Section /></main>;',
+      ]),
+      null,
+    );
+    assert.equal(
+      mixOf('settings-page.tsx', [
+        'function Section() { return <section />; }',
+        'function SettingsPage() { return <main><Section /></main>; }',
+        'export { SettingsPage };',
+      ]),
+      null,
+    );
+    assert.equal(
+      mixOf('settings-page.tsx', [
+        'export const SETTINGS_TABS = ["a", "b"];',
+        'export class SettingsLoadError extends Error {}',
+        'function Tab() { return <li />; }',
+        'export function SettingsPage() { return <ul><Tab /></ul>; }',
+      ]),
+      null,
+    );
+  });
+
+  it('leaves a private component that the exported one does not render to the unused-code lint, not to the role count', () => {
+    assert.equal(
+      mixOf('orphan.tsx', ['function Orphan() { return <div />; }', 'export function Screen() { return <main />; }']),
+      null,
+    );
+  });
+
   it('allows a schema-derived constant beside the one role that uses it', () => {
     assert.equal(
       mixOf('provider-defaults.ts', [
@@ -789,31 +845,94 @@ describe('role mixes the strict reading forbids', () => {
     );
   });
 
-  it('flags a screen that declares a second component, even a small private one', () => {
-    assert.equal(
-      mixOf('chat-list-screen.tsx', [
-        'function ChatListSkeleton() { return <div />; }',
-        'export function ChatListScreen() { return <ChatListSkeleton />; }',
-      ]),
-      'component:2',
-    );
-  });
-
-  it('flags a lowercase render helper that returns JSX as a second component', () => {
-    assert.equal(
-      mixOf('topbar.tsx', [
-        'function renderCrumb(label: string) { return <span>{label}</span>; }',
-        'export function Topbar() { return <nav>{renderCrumb("a")}</nav>; }',
-      ]),
-      'component:2',
-    );
-  });
-
-  it('flags memo-wrapped and default-exported components alike', () => {
+  it('flags two exported components, memo-wrapped and default-exported alike, and counts a private one beside them', () => {
     assert.equal(
       mixOf('cards.tsx', [
         'export const Card = memo(() => <div />);',
         'export default function CardList() { return <Card />; }',
+      ]),
+      'component:2',
+    );
+    assert.equal(
+      mixOf('cards.tsx', [
+        'function CardBadge() { return <b />; }',
+        'export const Card = memo(() => <div><CardBadge /></div>);',
+        'export default function CardList() { return <Card />; }',
+      ]),
+      'component:3',
+    );
+  });
+
+  it('flags a private hook, class or schema beside the one exported component, and leaves its private components out of the count', () => {
+    assert.equal(
+      mixOf('characters-screen.tsx', [
+        'function useCharacterActions() { return {}; }',
+        'function CharacterRow() { return <li />; }',
+        'export function CharactersScreen() { useCharacterActions(); return <ul><CharacterRow /></ul>; }',
+      ]),
+      'component:1 hook:1',
+    );
+    assert.equal(
+      mixOf('characters-screen.tsx', [
+        'class CharacterCache {}',
+        'function CharacterRow() { return <li />; }',
+        'export function CharactersScreen() { return <ul><CharacterRow /></ul>; }',
+      ]),
+      'class:1 component:1',
+    );
+    assert.equal(
+      mixOf('character-form.tsx', [
+        "import { z } from 'zod';",
+        'const FormSchema = z.object({ name: z.string() });',
+        'function NameField() { return <input />; }',
+        'export function CharacterForm() { FormSchema.parse({}); return <form><NameField /></form>; }',
+      ]),
+      'component:1 schema:1',
+    );
+  });
+
+  it('counts private components when the exported role is not a component', () => {
+    assert.equal(
+      mixOf('message-markup.tsx', [
+        'function Highlight() { return <mark />; }',
+        'export function renderMarkup(text: string) { return text.length > 0 ? Highlight() : null; }',
+      ]),
+      'component:1 function:1',
+    );
+    assert.equal(
+      mixOf('use-confirm-dialog.tsx', [
+        'function ConfirmDialog() { return <dialog />; }',
+        'export function useConfirmDialog() { return ConfirmDialog; }',
+      ]),
+      'component:1 hook:1',
+    );
+    assert.equal(
+      mixOf('use-confirm-dialog.tsx', [
+        'function ConfirmDialog() { return <dialog />; }',
+        'function renderTitle() { return <h2 />; }',
+        'export function useConfirmDialog() { return [ConfirmDialog, renderTitle]; }',
+      ]),
+      'component:2 hook:1',
+    );
+  });
+
+  it('counts private components beside an exported component and an exported type no exported value uses', () => {
+    assert.equal(
+      mixOf('chat-header.tsx', [
+        'export type ChatHeaderMode = "short" | "long";',
+        'function Title() { return <h1 />; }',
+        'export function ChatHeader() { return <header><Title /></header>; }',
+      ]),
+      'component:2 type:1',
+    );
+  });
+
+  it('flags a file that exports no component but declares two private ones', () => {
+    assert.equal(
+      mixOf('main.tsx', [
+        'function Providers() { return <div />; }',
+        'function App() { return <Providers />; }',
+        "createRoot(document.getElementById('root')!).render(<App />);",
       ]),
       'component:2',
     );
@@ -925,6 +1044,17 @@ describe('known false positives, each resolved by an owner exception until the g
         'export function findChat(id: string) { throw new ChatNotFound(id); }',
       ]),
       'class:1 function:1',
+    );
+  });
+
+  it('reads memo over a private component as an alias, not as the exported component, so a second private one mixes', () => {
+    assert.equal(
+      mixOf('card.tsx', [
+        'function CardBadge() { return <b />; }',
+        'function Card() { return <div><CardBadge /></div>; }',
+        'export default memo(Card);',
+      ]),
+      'component:2',
     );
   });
 

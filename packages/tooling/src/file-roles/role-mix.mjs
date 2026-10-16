@@ -1,6 +1,7 @@
 import { ROLE_KINDS_WHEN_EXPORTED, ROLE_KINDS_WHEN_PRIVATE, TYPE_KIND } from './role-kinds.mjs';
 
-const SINGLE_THING_KINDS = new Set(['class', 'component']);
+const COMPONENT_KIND = 'component';
+const SINGLE_THING_KINDS = new Set(['class', COMPONENT_KIND]);
 
 function connectedNames(declarations, starts) {
   const neighbours = new Map(declarations.map(({ name }) => [name, new Set()]));
@@ -32,13 +33,23 @@ function detachedTypes(declarations) {
   );
 }
 
+function exportsOneComponent(roles) {
+  const exported = roles.filter(({ exported }) => exported);
+  return exported.length === 1 && exported[0].kind === COMPONENT_KIND;
+}
+
+function withoutPrivateComponents(roles) {
+  return roles.filter(({ exported, kind }) => exported || kind !== COMPONENT_KIND);
+}
+
 export function roleMix(declarations) {
   const detached = detachedTypes(declarations);
-  const members = declarations.filter(
+  const roles = declarations.filter(
     (declaration) =>
       detached.has(declaration) ||
       (declaration.exported ? ROLE_KINDS_WHEN_EXPORTED : ROLE_KINDS_WHEN_PRIVATE).has(declaration.kind),
   );
+  const members = exportsOneComponent(roles) ? withoutPrivateComponents(roles) : roles;
   const signature = {};
   for (const { kind } of members) signature[kind] = (signature[kind] ?? 0) + 1;
   const kinds = Object.keys(signature);
