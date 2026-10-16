@@ -1,3 +1,10 @@
+import { calendarDaysBetween } from './calendar-days-between';
+
+const MS_PER_MINUTE = 60_000;
+
+const timeFormat = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
+const shortDateFormat = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: 'short' });
+
 export function formatRelative(iso: string | null, now: Date = new Date()): string {
   if (!iso) {
     return '—';
@@ -6,16 +13,12 @@ export function formatRelative(iso: string | null, now: Date = new Date()): stri
   if (Number.isNaN(date.getTime())) {
     return iso;
   }
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.round(diffMs / 60_000);
+  const diffMin = Math.floor((now.getTime() - date.getTime()) / MS_PER_MINUTE);
   if (diffMin < 1) return 'только что';
   if (diffMin < 60) return `${diffMin} мин`;
-  const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24 && now.getDate() === date.getDate()) {
-    return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  }
-  if (diffHr < 48) return 'вчера';
-  const diffDays = Math.round(diffHr / 24);
+  const diffDays = calendarDaysBetween(date, now);
+  if (diffDays === 0) return timeFormat.format(date);
+  if (diffDays === 1) return 'вчера';
   if (diffDays < 7) return `${diffDays} д`;
-  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
+  return shortDateFormat.format(date);
 }
