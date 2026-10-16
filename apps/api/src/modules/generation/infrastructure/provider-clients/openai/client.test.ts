@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ChatCompletionRequest } from '../../application/chat-completion-client.js';
-import { ProviderGenerationError } from '../../application/generation-errors.js';
+import type { ChatCompletionRequest } from '../../../application/chat-completion-client.js';
+import { ProviderGenerationError } from '../../../application/generation-errors.js';
 import { OpenAiClient } from './client.js';
 
 const BASE_REQUEST: Omit<ChatCompletionRequest, 'onDelta'> = {

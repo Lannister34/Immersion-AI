@@ -11,7 +11,7 @@ import { updateChatTitle } from '../../chats/application/update-chat-title.js';
 import { resolveChatGenerationSettings } from '../../prompting/application/resolve-chat-generation-settings.js';
 import { resolveGenerationProviderEndpoint } from '../../providers/application/generation-provider.js';
 import { getSettingsOverview } from '../../settings/application/get-settings-overview.js';
-import { createChatCompletionClient } from '../infrastructure/chat-completion-client-factory.js';
+import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import { ChatTranscriptEmptyError, ProviderGenerationError } from './generation-errors.js';
 

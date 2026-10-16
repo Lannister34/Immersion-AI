@@ -13,8 +13,8 @@ import { loadChatPromptContext } from '../../prompting/application/load-chat-pro
 import { resolveChatReplyGenerationPlan } from '../../prompting/application/resolve-chat-reply-generation-plan.js';
 import { resolveGenerationProviderEndpoint } from '../../providers/application/generation-provider.js';
 import { getSettingsOverview } from '../../settings/application/get-settings-overview.js';
-import { createChatCompletionClient } from '../infrastructure/chat-completion-client-factory.js';
-import { getProviderTokenCounter } from '../infrastructure/provider-token-counter.js';
+import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
+import { getProviderTokenCounter } from '../infrastructure/provider-clients/shared-token-counter.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import { ChatNotEmptyError } from './generation-errors.js';
 

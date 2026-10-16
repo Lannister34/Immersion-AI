@@ -13,7 +13,7 @@ import { resolveChatReplyGenerationPlan } from '../../prompting/application/reso
 import { getProviderSettings } from '../../providers/application/get-provider-settings.js';
 import { DEFAULT_OPENAI_COMPATIBLE_MODEL } from '../../providers/domain/provider-settings.js';
 import { getRuntimeOverview } from '../../runtime/application/get-runtime-overview.js';
-import { getProviderTokenCounter } from '../infrastructure/provider-token-counter.js';
+import { getProviderTokenCounter } from '../infrastructure/provider-clients/shared-token-counter.js';
 import { getGenerationReadiness } from './get-generation-readiness.js';
 
 function withMessageOverrides(

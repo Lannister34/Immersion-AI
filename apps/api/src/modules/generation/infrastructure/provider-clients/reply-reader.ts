@@ -1,8 +1,8 @@
 import { createReplySplitter, type ReplyChannel, type ReplyChunk } from '@immersion/domain/generation';
 
-import type { ChatCompletionRequest, ChatCompletionResponse } from '../application/chat-completion-client.js';
-import { ProviderGenerationError } from '../application/generation-errors.js';
-import { isAbortError } from './provider-http.js';
+import type { ChatCompletionRequest, ChatCompletionResponse } from '../../application/chat-completion-client.js';
+import { ProviderGenerationError } from '../../application/generation-errors.js';
+import { isAbortError } from './http.js';
 
 export interface ProviderStreamSink {
   reasoning(text: string): void;

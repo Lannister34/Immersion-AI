@@ -1,12 +1,12 @@
-import { resolveChatCompletionsUrl } from '../../../providers/application/generation-provider.js';
+import { resolveChatCompletionsUrl } from '../../../../providers/application/generation-provider.js';
 import type {
   ChatCompletionClient,
   ChatCompletionRequest,
   ChatCompletionResponse,
-} from '../../application/chat-completion-client.js';
-import { ProviderGenerationError } from '../../application/generation-errors.js';
-import { buildRequestSignal, isAbortError, readProviderErrorText } from '../provider-http.js';
-import { readProviderReply } from '../provider-reply-reader.js';
+} from '../../../application/chat-completion-client.js';
+import { ProviderGenerationError } from '../../../application/generation-errors.js';
+import { buildRequestSignal, isAbortError, readProviderErrorText } from '../http.js';
+import { readProviderReply } from '../reply-reader.js';
 import { readOpenAiJsonReply, readOpenAiStreamData } from './reply.js';
 import { buildOpenAiBody, buildOpenAiHeaders } from './request.js';
 

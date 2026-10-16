@@ -1,4 +1,4 @@
-import type { ChatCompletionRequest } from '../../application/chat-completion-client.js';
+import type { ChatCompletionRequest } from '../../../application/chat-completion-client.js';
 import { isOpenAiReasoningModel } from './reasoning-model.js';
 
 function buildMessagePayload(message: ChatCompletionRequest['messages'][number]) {

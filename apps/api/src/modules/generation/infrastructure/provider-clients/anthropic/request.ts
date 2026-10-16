@@ -1,5 +1,5 @@
-import { buildAnthropicAuthHeaders } from '../../../providers/index.js';
-import type { ChatCompletionRequest } from '../../application/chat-completion-client.js';
+import { buildAnthropicAuthHeaders } from '../../../../providers/index.js';
+import type { ChatCompletionRequest } from '../../../application/chat-completion-client.js';
 import { parseAnthropicImageSource } from './parse-image-source.js';
 import type { AnthropicImageSource, AnthropicMessage, AnthropicPayload } from './request-wire.js';
 

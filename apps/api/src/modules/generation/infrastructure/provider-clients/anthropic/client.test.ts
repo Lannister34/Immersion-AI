@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ChatCompletionRequest } from '../../application/chat-completion-client.js';
+import type { ChatCompletionRequest } from '../../../application/chat-completion-client.js';
 import { AnthropicClient } from './client.js';
 import { buildAnthropicPayload } from './request.js';
 

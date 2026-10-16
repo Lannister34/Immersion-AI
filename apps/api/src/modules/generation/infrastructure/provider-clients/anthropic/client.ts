@@ -1,12 +1,12 @@
-import { resolveAnthropicMessagesUrl } from '../../../providers/index.js';
+import { resolveAnthropicMessagesUrl } from '../../../../providers/index.js';
 import type {
   ChatCompletionClient,
   ChatCompletionRequest,
   ChatCompletionResponse,
-} from '../../application/chat-completion-client.js';
-import { ProviderGenerationError } from '../../application/generation-errors.js';
-import { buildRequestSignal, isAbortError, readProviderErrorText } from '../provider-http.js';
-import { readProviderReply } from '../provider-reply-reader.js';
+} from '../../../application/chat-completion-client.js';
+import { ProviderGenerationError } from '../../../application/generation-errors.js';
+import { buildRequestSignal, isAbortError, readProviderErrorText } from '../http.js';
+import { readProviderReply } from '../reply-reader.js';
 import { readAnthropicJsonReply, readAnthropicStreamData } from './reply.js';
 import { buildAnthropicBody, buildAnthropicHeaders } from './request.js';
 

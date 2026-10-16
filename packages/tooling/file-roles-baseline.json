@@ -1,7 +1,5 @@
 {
   "apps/api/src/modules/chats/infrastructure/file-chat-repository.ts": "class:1 function:4",
-  "apps/api/src/modules/generation/infrastructure/chat-completion-client-factory.ts": "class:1 function:1",
-  "apps/api/src/modules/generation/infrastructure/provider-token-counter.ts": "class:1 function:1",
   "apps/api/src/modules/providers/infrastructure/provider-vision-probe.ts": "class:1 function:2",
   "apps/api/src/modules/runtime/infrastructure/llm-process-manager.ts": "class:1 function:4",
   "apps/web/src/app/layout/sidebar.tsx": "component:2",
