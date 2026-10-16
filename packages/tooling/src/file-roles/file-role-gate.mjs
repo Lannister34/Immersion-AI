@@ -1,5 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { listTrackedFiles } from '../git/tracked-files.mjs';
+import { TrackedFilesError } from '../git/tracked-files-error.mjs';
 import { classifyDeclarations } from './declaration-kinds.mjs';
 import { parseRoleBaseline, serializeRoleBaseline } from './role-baseline-format.mjs';
 import { compareWithBaseline, lowerBaseline } from './role-baseline-ratchet.mjs';
@@ -7,7 +9,6 @@ import { RoleGateError } from './role-gate-error.mjs';
 import { describeOver, describeRule, describeStale } from './role-gate-report.mjs';
 import { isRoleGatedFile } from './role-gated-file.mjs';
 import { roleMix } from './role-mix.mjs';
-import { listTrackedFiles } from './tracked-files.mjs';
 
 const ABSENT_FILE_CODES = new Set(['ENOENT', 'ENOTDIR']);
 
@@ -72,9 +73,18 @@ function updateBaseline(baselinePath, label, found) {
   }
 }
 
+function listGateCandidates(root) {
+  try {
+    return listTrackedFiles(root);
+  } catch (error) {
+    if (!(error instanceof TrackedFilesError)) throw error;
+    throw new RoleGateError(`the file-role gate reads the tracked files of ${root}, and git failed: ${error.detail}`);
+  }
+}
+
 function scanRoleMixes(root) {
   const mixes = new Map();
-  for (const file of listTrackedFiles(root).filter(isRoleGatedFile)) {
+  for (const file of listGateCandidates(root).filter(isRoleGatedFile)) {
     const text = readIfPresent(path.join(root, file), file);
     if (text !== null) mixes.set(file, roleMix(classifyDeclarations(file, text)));
   }

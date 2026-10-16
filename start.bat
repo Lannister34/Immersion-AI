@@ -1,5 +1,12 @@
 @echo off
+setlocal
 chcp 65001 >nul
+pushd "%~dp0"
+if %errorlevel% neq 0 (
+    echo  [ERROR] Cannot open the folder that holds start.bat
+    pause
+    exit /b 1
+)
 title Immersion AI
 
 echo.
@@ -16,15 +23,17 @@ if %errorlevel% neq 0 (
     echo  [ERROR] Node.js not found. Install it from https://nodejs.org/
     echo.
     pause
-    exit /b 1
+    set "launch_status=1"
+    goto leave_folder
 )
 
 echo  [1/2] Installing dependencies...
-call corepack pnpm install
+call corepack pnpm install --frozen-lockfile
 if %errorlevel% neq 0 (
     echo  [ERROR] Install failed
     pause
-    exit /b 1
+    set "launch_status=1"
+    goto leave_folder
 )
 
 if not exist "bin\llama-server.exe" (
@@ -41,6 +50,9 @@ echo.
 start "" cmd /c "timeout /t 3 /nobreak >nul && start http://localhost:4788"
 
 echo  [2/2] Starting API and web...
-call npx --yes concurrently --kill-others --names api,web ^
-    "corepack pnpm --filter @immersion/api dev" ^
-    "corepack pnpm --filter @immersion/web dev"
+call corepack pnpm --parallel --filter @immersion/api --filter @immersion/web run dev
+set "launch_status=%errorlevel%"
+
+:leave_folder
+popd
+exit /b %launch_status%

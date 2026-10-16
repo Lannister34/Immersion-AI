@@ -20,7 +20,7 @@ import { RoleGateError } from '../src/file-roles/role-gate-error.mjs';
 import { isolatedGitEnvironment, mustGitIn } from './isolated-git.mjs';
 
 const CLI = fileURLToPath(new URL('../src/file-roles/check-file-roles.mjs', import.meta.url));
-const GATE_SOURCES = fileURLToPath(new URL('../src/file-roles', import.meta.url));
+const TOOLING_SOURCES = fileURLToPath(new URL('../src', import.meta.url));
 const TOOLING_MODULES = fileURLToPath(new URL('../node_modules', import.meta.url));
 const BASELINE = 'packages/tooling/file-roles-baseline.json';
 const UPDATE = 'node check-file-roles.mjs --update-baseline';
@@ -59,12 +59,12 @@ function createRepository() {
     runFileRoleGate({ root: work, baselinePath: path.join(work, BASELINE), update, updateCommand: UPDATE });
   const baseline = () => readFileSync(path.join(work, BASELINE), 'utf8');
   const installCli = () => {
-    const sources = path.join(work, 'packages/tooling/src/file-roles');
+    const sources = path.join(work, 'packages/tooling/src');
     const modules = path.join(work, 'packages/tooling/node_modules');
-    cpSync(GATE_SOURCES, sources, { recursive: true });
+    cpSync(TOOLING_SOURCES, sources, { recursive: true });
     symlinkSync(TOOLING_MODULES, modules, 'junction');
     temporaryLinks.push(modules);
-    const cli = path.join(sources, 'check-file-roles.mjs');
+    const cli = path.join(sources, 'file-roles/check-file-roles.mjs');
     return (...args) => spawnSync(process.execPath, [cli, ...args], { cwd: root, encoding: 'utf8', env });
   };
 
