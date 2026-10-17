@@ -12,6 +12,7 @@ import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { formatRelative } from '../../shared/lib/format-relative';
 import { readFileAsBase64 } from '../../shared/lib/read-file-as-base64';
+import { ErrorBanner } from '../../shared/ui/error-banner';
 import { Field } from '../../shared/ui/field';
 import { ChatIcon, CopyIcon, SparkleIcon, TrashIcon } from '../../shared/ui/icons';
 import { TemplateTextarea } from '../../shared/ui/template-textarea';
@@ -593,16 +594,8 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     value={form.systemPrompt}
                   />
                 </Field>
-                {errorMessage ? (
-                  <div className="card" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', padding: 12 }}>
-                    {errorMessage}
-                  </div>
-                ) : null}
-                {deleteError ? (
-                  <div className="card" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', padding: 12 }}>
-                    {deleteError}
-                  </div>
-                ) : null}
+                {errorMessage ? <ErrorBanner>{errorMessage}</ErrorBanner> : null}
+                {deleteError ? <ErrorBanner>{deleteError}</ErrorBanner> : null}
               </form>
               <aside className="col gap-12">
                 <div className="card" style={{ padding: 12 }}>
