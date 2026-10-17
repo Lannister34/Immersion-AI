@@ -1,117 +1,27 @@
 import { type ChatSamplingOverridesDto, ChatSamplingOverridesDtoSchema } from '@immersion/contracts/chats';
 import type { ChatReplyPromptPreviewResponse } from '@immersion/contracts/generation';
 
+import { numberLimitsOf } from '../../../shared/lib/schema-limits';
+import { CONTEXT_TRIM_FIELD, SAMPLER_PARAMETER_FIELDS, type SamplerParameterField } from '../../settings';
+
 export type InheritedSampling = ChatReplyPromptPreviewResponse['effectiveSettings']['sampling'];
 
 export type SamplingOverrideKey = keyof ChatSamplingOverridesDto;
-export type NumericSamplingKey = Exclude<SamplingOverrideKey, 'contextTrimStrategy'>;
 
 export type SamplingOverridesDraft = Record<SamplingOverrideKey, string>;
 
 export type SamplingOverrideErrors = Partial<Record<SamplingOverrideKey, string>>;
 
-export interface NumericSamplingField {
-  hint: string;
+export interface NumericSamplingField extends SamplerParameterField {
+  contractMinimum: number | null;
   integer: boolean;
-  key: NumericSamplingKey;
-  label: string;
-  max: number;
-  min: number | null;
-  step: number;
 }
 
-export const NUMERIC_SAMPLING_FIELDS: NumericSamplingField[] = [
-  {
-    hint: 'Насколько модель уходит от самого вероятного продолжения',
-    integer: false,
-    key: 'temperature',
-    label: 'Temperature',
-    max: 2,
-    min: 0,
-    step: 0.05,
-  },
-  {
-    hint: 'Берёт только самые вероятные слова — до этой суммы вероятностей',
-    integer: false,
-    key: 'topP',
-    label: 'Top P',
-    max: 1,
-    min: 0,
-    step: 0.01,
-  },
-  {
-    hint: 'Не больше такого числа слов-кандидатов на каждом шаге',
-    integer: true,
-    key: 'topK',
-    label: 'Top K',
-    max: 200,
-    min: 0,
-    step: 1,
-  },
-  {
-    hint: 'Отбрасывает слова слабее этой доли от самого вероятного',
-    integer: false,
-    key: 'minP',
-    label: 'Min P',
-    max: 1,
-    min: 0,
-    step: 0.01,
-  },
-  {
-    hint: 'Насколько сильно наказывать за повтор уже сказанного',
-    integer: false,
-    key: 'repeatPenalty',
-    label: 'Repeat Penalty',
-    max: 2,
-    min: 0,
-    step: 0.01,
-  },
-  {
-    hint: 'Сколько последних токенов проверять на повторы',
-    integer: true,
-    key: 'repeatPenaltyRange',
-    label: 'Repeat Range',
-    max: 8192,
-    min: 0,
-    step: 32,
-  },
-  {
-    hint: 'Наказывать за возврат к уже упомянутым темам',
-    integer: false,
-    key: 'presencePenalty',
-    label: 'Presence Penalty',
-    max: 2,
-    min: null,
-    step: 0.05,
-  },
-  {
-    hint: 'Предел длины одного ответа, в токенах',
-    integer: true,
-    key: 'maxTokens',
-    label: 'Max Length',
-    max: 4096,
-    min: 1,
-    step: 16,
-  },
-  {
-    hint: 'Сколько токенов истории уходит в модель',
-    integer: true,
-    key: 'maxContextLength',
-    label: 'Context',
-    max: 32_768,
-    min: 1,
-    step: 512,
-  },
-];
+export const NUMERIC_SAMPLING_FIELDS: readonly NumericSamplingField[] = SAMPLER_PARAMETER_FIELDS.map((field) => {
+  const limits = numberLimitsOf(ChatSamplingOverridesDtoSchema.shape[field.key]);
 
-export const CONTEXT_TRIM_FIELD = {
-  hint: 'Что выбросить, когда история не влезает в окно',
-  label: 'Обрезка контекста',
-  options: [
-    { label: 'обрезать середину', value: 'trim_middle' },
-    { label: 'обрезать начало', value: 'trim_start' },
-  ],
-} as const;
+  return { ...field, contractMinimum: limits.minimum, integer: limits.integer };
+});
 
 export function describeContextTrimStrategy(value: string): string {
   return CONTEXT_TRIM_FIELD.options.find((option) => option.value === value)?.label ?? value;
@@ -122,25 +32,38 @@ export const SAMPLING_OVERRIDE_KEYS: SamplingOverrideKey[] = [
   ...NUMERIC_SAMPLING_FIELDS.map((field) => field.key),
 ];
 
+function toFieldText(value: number | null | undefined): string {
+  return value === null || value === undefined ? '' : String(value);
+}
+
 export function toSamplingDraft(overrides: ChatSamplingOverridesDto): SamplingOverridesDraft {
-  const draft = { contextTrimStrategy: overrides.contextTrimStrategy ?? '' } as SamplingOverridesDraft;
-
-  for (const field of NUMERIC_SAMPLING_FIELDS) {
-    const value = overrides[field.key];
-    draft[field.key] = value === null ? '' : String(value);
-  }
-
-  return draft;
+  return {
+    contextTrimStrategy: overrides.contextTrimStrategy ?? '',
+    maxContextLength: toFieldText(overrides.maxContextLength),
+    maxTokens: toFieldText(overrides.maxTokens),
+    minP: toFieldText(overrides.minP),
+    presencePenalty: toFieldText(overrides.presencePenalty),
+    repeatPenalty: toFieldText(overrides.repeatPenalty),
+    repeatPenaltyRange: toFieldText(overrides.repeatPenaltyRange),
+    temperature: toFieldText(overrides.temperature),
+    topK: toFieldText(overrides.topK),
+    topP: toFieldText(overrides.topP),
+  };
 }
 
 export function createEmptySamplingDraft(): SamplingOverridesDraft {
-  const draft = { contextTrimStrategy: '' } as SamplingOverridesDraft;
-
-  for (const field of NUMERIC_SAMPLING_FIELDS) {
-    draft[field.key] = '';
-  }
-
-  return draft;
+  return {
+    contextTrimStrategy: '',
+    maxContextLength: '',
+    maxTokens: '',
+    minP: '',
+    presencePenalty: '',
+    repeatPenalty: '',
+    repeatPenaltyRange: '',
+    temperature: '',
+    topK: '',
+    topP: '',
+  };
 }
 
 export function samplingDraftsEqual(left: SamplingOverridesDraft, right: SamplingOverridesDraft): boolean {
@@ -165,8 +88,9 @@ export function stepSamplingValue(
   const current = Number.isFinite(parsed) && currentText.trim().length > 0 ? parsed : (inherited ?? 0);
   const raw = current + direction * field.step;
   const rounded = Number(raw.toFixed(decimalsOf(field.step)));
-  const lowerBound = field.min === null ? Number.NEGATIVE_INFINITY : Math.min(field.min, current);
-  const next = direction > 0 ? Math.min(rounded, Math.max(field.max, current)) : Math.max(rounded, lowerBound);
+  const lowerBound =
+    field.contractMinimum === null ? Number.NEGATIVE_INFINITY : Math.min(field.contractMinimum, current);
+  const next = direction > 0 ? Math.min(rounded, Math.max(field.stepCeiling, current)) : Math.max(rounded, lowerBound);
 
   return String(next);
 }
@@ -179,10 +103,6 @@ export interface SamplingFieldViewModel {
   value: string;
 }
 
-function formatInherited(value: number | undefined): string {
-  return value === undefined ? '' : String(value);
-}
-
 export function toSamplingFieldViewModels(
   draft: SamplingOverridesDraft,
   errors: SamplingOverrideErrors,
@@ -191,7 +111,7 @@ export function toSamplingFieldViewModels(
   return NUMERIC_SAMPLING_FIELDS.map((field) => {
     const raw = draft[field.key];
     const isOverridden = raw.trim().length > 0;
-    const inheritedText = formatInherited(inherited?.[field.key]);
+    const inheritedText = toFieldText(inherited?.[field.key]);
 
     return {
       error: errors[field.key],
@@ -209,7 +129,7 @@ export interface SamplingDraftParseResult {
 }
 
 function describeRangeError(min: number): string {
-  return min > 0 ? `Минимум ${min}` : 'Не может быть отрицательным';
+  return min === 0 ? 'Не может быть отрицательным' : `Минимум ${min}`;
 }
 
 export function parseSamplingDraft(draft: SamplingOverridesDraft): SamplingDraftParseResult {
@@ -238,8 +158,8 @@ export function parseSamplingDraft(draft: SamplingOverridesDraft): SamplingDraft
       continue;
     }
 
-    if (field.min !== null && value < field.min) {
-      errors[field.key] = describeRangeError(field.min);
+    if (field.contractMinimum !== null && value < field.contractMinimum) {
+      errors[field.key] = describeRangeError(field.contractMinimum);
       continue;
     }
 
@@ -253,10 +173,10 @@ export function parseSamplingDraft(draft: SamplingOverridesDraft): SamplingDraft
   const parsed = ChatSamplingOverridesDtoSchema.safeParse(candidate);
 
   if (!parsed.success) {
-    const failedKey = parsed.error.issues[0]?.path[0];
+    const failedKey = ChatSamplingOverridesDtoSchema.keyof().safeParse(parsed.error.issues[0]?.path[0]);
 
     return {
-      errors: typeof failedKey === 'string' ? { [failedKey as SamplingOverrideKey]: 'Недопустимое значение' } : {},
+      errors: failedKey.success ? { [failedKey.data]: 'Недопустимое значение' } : {},
       overrides: null,
     };
   }
