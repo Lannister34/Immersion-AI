@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const REPOSITORY = fileURLToPath(new URL('../../../', import.meta.url));
 const FILE_ROLE_GATE = 'packages/tooling/src/file-roles/check-file-roles.mjs';
 const LAUNCHER_GATE = 'packages/tooling/src/launchers/check-launchers.mjs';
+const SIGNATURE_GATE = 'packages/tooling/src/signatures/check-signatures.mjs';
 
 function lintSteps() {
   const manifest = JSON.parse(readFileSync(path.join(REPOSITORY, 'package.json'), 'utf8'));
@@ -14,13 +15,15 @@ function lintSteps() {
 }
 
 describe('lint script', () => {
-  it('runs the comment gate, the file-role gate and the launcher gate as steps whose failure fails lint', () => {
+  it('runs the comment gate, the file-role gate, the launcher gate and the signature gate as steps whose failure fails lint', () => {
     const steps = lintSteps();
 
     assert.ok(steps.includes('devkit-comments'), `lint steps: ${steps.join(' | ')}`);
     assert.ok(steps.includes(`node ${FILE_ROLE_GATE}`), `lint steps: ${steps.join(' | ')}`);
     assert.ok(steps.includes(`node ${LAUNCHER_GATE}`), `lint steps: ${steps.join(' | ')}`);
+    assert.ok(steps.includes(`node ${SIGNATURE_GATE}`), `lint steps: ${steps.join(' | ')}`);
     assert.ok(existsSync(path.join(REPOSITORY, FILE_ROLE_GATE)));
     assert.ok(existsSync(path.join(REPOSITORY, LAUNCHER_GATE)));
+    assert.ok(existsSync(path.join(REPOSITORY, SIGNATURE_GATE)));
   });
 });

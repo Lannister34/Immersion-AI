@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseUpdateBaselineArguments } from '../baseline/update-baseline-arguments.mjs';
 import { runFileRoleGate } from './file-role-gate.mjs';
-import { parseRoleGateArguments } from './role-gate-arguments.mjs';
 import { RoleGateError } from './role-gate-error.mjs';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -9,7 +9,7 @@ const baselinePath = fileURLToPath(new URL('../../file-roles-baseline.json', imp
 const script = path.relative(root, fileURLToPath(import.meta.url)).replaceAll(path.sep, '/');
 
 try {
-  const { update } = parseRoleGateArguments(process.argv.slice(2));
+  const { update } = parseUpdateBaselineArguments(process.argv.slice(2), RoleGateError);
   const { exitCode, lines } = runFileRoleGate({
     root,
     baselinePath,

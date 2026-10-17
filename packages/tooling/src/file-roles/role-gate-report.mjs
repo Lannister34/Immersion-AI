@@ -1,23 +1,23 @@
-import { formatSignature } from './role-baseline-format.mjs';
+import { formatCounts } from '../baseline/count-baseline-format.mjs';
 
-export function describeOver({ file, signature, allowed, members }, baselineLabel) {
-  const limit = allowed === null ? 'none' : formatSignature(allowed);
+export function describeOver({ file, counts, allowed, members }, baselineLabel) {
+  const limit = allowed === null ? 'none' : formatCounts(allowed);
   return [
-    `${file}: role mix ${formatSignature(signature)} where ${baselineLabel} allows ${limit}`,
+    `${file}: role mix ${formatCounts(counts)} where ${baselineLabel} allows ${limit}`,
     ...members.map(
       ({ line, exported, kind, name }) => `  ${file}:${line}  ${exported ? 'exported ' : ''}${kind} ${name}`,
     ),
   ];
 }
 
-function currentState(signature, scanned) {
-  if (signature !== null) return `role mix ${formatSignature(signature)}`;
+function currentState(counts, scanned) {
+  if (counts !== null) return `role mix ${formatCounts(counts)}`;
   return scanned ? 'one role' : 'no gated file';
 }
 
-export function describeStale({ file, signature, allowed, scanned }, baselineLabel, updateCommand) {
-  const now = currentState(signature, scanned);
-  return [`${file}: ${now} where ${baselineLabel} still allows ${formatSignature(allowed)}; run ${updateCommand}`];
+export function describeStale({ file, counts, allowed, scanned }, baselineLabel, updateCommand) {
+  const now = currentState(counts, scanned);
+  return [`${file}: ${now} where ${baselineLabel} still allows ${formatCounts(allowed)}; run ${updateCommand}`];
 }
 
 export function describeRule(baselineLabel) {

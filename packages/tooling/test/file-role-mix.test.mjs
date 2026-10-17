@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { formatCounts } from '../src/baseline/count-baseline-format.mjs';
 import { classifyDeclarations } from '../src/file-roles/declaration-kinds.mjs';
-import { formatSignature } from '../src/file-roles/role-baseline-format.mjs';
 import { roleMix } from '../src/file-roles/role-mix.mjs';
 
 function mixOf(fileName, lines) {
   const mix = roleMix(classifyDeclarations(fileName, lines.join('\n')));
-  return mix === null ? null : formatSignature(mix.signature);
+  return mix === null ? null : formatCounts(mix.signature);
 }
 
 function kindsOf(fileName, lines) {
@@ -294,6 +294,31 @@ describe('declaration kinds', () => {
         'class AppBoundary',
         'class Handler',
         'exported function helper',
+      ],
+    );
+  });
+
+  it('takes a type-only export for an export of the type alone, never of a value of the same name', () => {
+    assert.deepEqual(
+      kindsOf('surface.ts', [
+        'const parse = () => 1;',
+        'type parse = number;',
+        'function format() { return ""; }',
+        'interface Options {}',
+        'type Result = string;',
+        'const both = () => 1;',
+        'type both = number;',
+        'export type { parse, Options };',
+        'export { type format, type Result, both };',
+      ]),
+      [
+        'function parse',
+        'exported type parse',
+        'function format',
+        'exported type Options',
+        'exported type Result',
+        'exported function both',
+        'exported type both',
       ],
     );
   });
@@ -1018,7 +1043,7 @@ describe('role mixes the strict reading forbids', () => {
       ),
     );
 
-    assert.equal(formatSignature(mix.signature), 'class:1 function:2');
+    assert.equal(formatCounts(mix.signature), 'class:1 function:2');
     assert.deepEqual(
       mix.members.map(({ line, name }) => `${line}:${name}`),
       ['2:readAttachment', '3:deleteAttachments', '4:FileChatRepository'],
