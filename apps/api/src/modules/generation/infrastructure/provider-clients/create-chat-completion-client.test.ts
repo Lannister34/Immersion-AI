@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
+import { stubGlobalFetch } from '../../../../test-support/global-fetch-stub.js';
+import { anthropicMessage, openAiChatCompletion } from '../../../../test-support/provider-responses.js';
 import type { ChatCompletionRequest } from '../../application/chat-completion-client.js';
 import { createChatCompletionClient } from './create-chat-completion-client.js';
 
@@ -22,17 +24,9 @@ function requestFor(endpoint: ChatCompletionRequest['endpoint']): ChatCompletion
 
 describe('createChatCompletionClient', () => {
   it('picks the dialect per request, so one client follows a provider switch between generations', async () => {
-    const urls: string[] = [];
-
-    globalThis.fetch = vi.fn<typeof fetch>(async (input) => {
-      const url = String(input);
-      const body = url.endsWith('/messages')
-        ? { content: [{ text: 'Claude.', type: 'text' }] }
-        : { choices: [{ message: { content: 'Local.' } }] };
-      urls.push(url);
-
-      return new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' }, status: 200 });
-    });
+    const http = stubGlobalFetch();
+    http.on('POST', 'https://api.anthropic.com/v1/messages', () => anthropicMessage('Claude.'));
+    http.on('POST', 'http://127.0.0.1:5001/v1/chat/completions', () => openAiChatCompletion('Local.'));
     const client = createChatCompletionClient();
 
     const anthropicReply = await client.completeChat(
@@ -52,7 +46,10 @@ describe('createChatCompletionClient', () => {
       }),
     );
 
-    expect(urls).toEqual(['https://api.anthropic.com/v1/messages', 'http://127.0.0.1:5001/v1/chat/completions']);
+    expect(http.requestLines()).toEqual([
+      'POST https://api.anthropic.com/v1/messages',
+      'POST http://127.0.0.1:5001/v1/chat/completions',
+    ]);
     expect([anthropicReply.content, localReply.content]).toEqual(['Claude.', 'Local.']);
   });
 });
