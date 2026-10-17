@@ -2358,8 +2358,14 @@ describe('generation routes', () => {
     await app.close();
   });
 
-  it('binds builtin runtime sampler presets by the canonical scanned model name in a single completion request', async () => {
-    const nestedModelPath = path.join(temporaryDataRoot, 'models', 'nested', 'secondary.gguf');
+  it.each([
+    ['by the path the scan lists', (dataRoot: string) => path.join(dataRoot, 'models', 'nested', 'secondary.gguf')],
+    [
+      'by a path with forward slashes and ".."',
+      (dataRoot: string) => `${dataRoot.split(path.sep).join('/')}/models/other/../nested/secondary.gguf`,
+    ],
+  ])('binds builtin runtime sampler presets by the canonical scanned model name in a single completion request, for a model started %s', async (_spelling, toStartPath) => {
+    const nestedModelPath = toStartPath(temporaryDataRoot);
     await writeProviderSettings({
       backendMode: 'builtin',
       modelPresetMap: {

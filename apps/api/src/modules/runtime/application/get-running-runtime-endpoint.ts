@@ -1,5 +1,3 @@
-import path from 'node:path';
-
 import { getLlmProcessManager } from '../infrastructure/llm-process-manager.js';
 import { getRuntimeOverview } from './get-runtime-overview.js';
 
@@ -14,11 +12,10 @@ async function resolveCanonicalModelName(modelPath: string | null, fallbackModel
     return fallbackModel;
   }
 
-  const normalizedModelPath = path.normalize(modelPath);
   const overview = await getRuntimeOverview();
-  const runtimeModel = overview.models.find((model) => path.normalize(model.path) === normalizedModelPath);
+  const activeModel = overview.models.find((model) => model.isActive);
 
-  return runtimeModel?.name ?? fallbackModel;
+  return activeModel?.name ?? fallbackModel;
 }
 
 export async function getRunningRuntimeEndpoint(): Promise<RunningRuntimeEndpoint | null> {
