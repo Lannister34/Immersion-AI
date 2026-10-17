@@ -1,5 +1,9 @@
 import ts from 'typescript';
-import { TYPE_KIND } from './role-kinds.mjs';
+import { calleeName } from '../ast/callee-name.mjs';
+import { hasModifier } from '../ast/has-modifier.mjs';
+import { unwrapExpression } from '../ast/unwrap-expression.mjs';
+import { readComponentWrapper } from './component-wrapper.mjs';
+import { COMPONENT_KIND, TYPE_KIND } from './role-kinds.mjs';
 
 const ZOD_MODULE = /^zod(?:\/|$)/;
 const HOOK_NAME = /^use[A-Z0-9]/;
@@ -8,7 +12,7 @@ const SCHEMA_NAME = /Schema$/;
 const IMPORTED_SCHEMA_NAME = /^[A-Z]\w*Schema$/;
 const ERROR_NAME = /Error$/;
 const JSX_FILE = /\.[jt]sx$/;
-const COMPONENT_WRAPPERS = new Set(['memo', 'forwardRef']);
+export const DEFAULT_EXPORT_NAME = 'default';
 const LOGICAL_OPERATORS = new Set([
   ts.SyntaxKind.AmpersandAmpersandToken,
   ts.SyntaxKind.BarBarToken,
@@ -75,26 +79,6 @@ function scriptKindOf(fileName) {
   return /\.[cm]?js$/.test(fileName) ? ts.ScriptKind.JS : ts.ScriptKind.TS;
 }
 
-function unwrap(expression) {
-  let current = expression;
-  while (
-    ts.isParenthesizedExpression(current) ||
-    ts.isAsExpression(current) ||
-    ts.isSatisfiesExpression(current) ||
-    ts.isNonNullExpression(current) ||
-    ts.isTypeAssertionExpression(current)
-  ) {
-    current = current.expression;
-  }
-  return current;
-}
-
-function calleeName(callee) {
-  if (ts.isIdentifier(callee)) return callee.text;
-  if (ts.isPropertyAccessExpression(callee)) return callee.name.text;
-  return null;
-}
-
 function isValueCall(call, callee) {
   const name = calleeName(callee);
   return VALUE_METHODS.has(name) || (call.arguments.length === 0 && VALUE_METHODS_WITHOUT_ARGUMENTS.has(name));
@@ -110,16 +94,16 @@ function isDataRead(access) {
 }
 
 function chainRoot(expression) {
-  let current = unwrap(expression);
+  let current = unwrapExpression(expression).value;
   let producesValue = false;
   for (;;) {
     if (ts.isCallExpression(current)) {
-      const callee = unwrap(current.expression);
+      const callee = unwrapExpression(current.expression).value;
       producesValue ||= isValueCall(current, callee);
-      current = ts.isPropertyAccessExpression(callee) ? unwrap(callee.expression) : callee;
+      current = ts.isPropertyAccessExpression(callee) ? unwrapExpression(callee.expression).value : callee;
     } else if (ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current)) {
       producesValue ||= isDataRead(current);
-      current = unwrap(current.expression);
+      current = unwrapExpression(current.expression).value;
     } else {
       return { root: ts.isIdentifier(current) ? current.text : null, producesValue };
     }
@@ -127,7 +111,7 @@ function chainRoot(expression) {
 }
 
 function isSchemaExpression(expression, schemaRoots) {
-  const value = unwrap(expression);
+  const value = unwrapExpression(expression).value;
   if (ts.isConditionalExpression(value)) {
     return isSchemaExpression(value.whenTrue, schemaRoots) || isSchemaExpression(value.whenFalse, schemaRoots);
   }
@@ -141,10 +125,6 @@ function isSchemaExpression(expression, schemaRoots) {
 function containsJsx(node) {
   if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node)) return true;
   return ts.forEachChild(node, containsJsx) ?? false;
-}
-
-function hasModifier(node, kind) {
-  return ts.getModifiers?.(node)?.some((modifier) => modifier.kind === kind) ?? false;
 }
 
 function importedValueBindings(source) {
@@ -178,31 +158,24 @@ function boundNames(name) {
 
 function classKind(node) {
   const base = node.heritageClauses?.find((clause) => clause.token === ts.SyntaxKind.ExtendsKeyword)?.types[0];
-  const baseName = base ? calleeName(unwrap(base.expression)) : null;
+  const baseName = base ? calleeName(unwrapExpression(base.expression).value) : null;
   return baseName !== null && ERROR_NAME.test(baseName) ? 'error' : 'class';
 }
 
 function functionKind(name, node, jsx) {
   if (HOOK_NAME.test(name)) return 'hook';
-  if (jsx && (COMPONENT_NAME.test(name) || containsJsx(node))) return 'component';
+  if (jsx && (COMPONENT_NAME.test(name) || containsJsx(node))) return COMPONENT_KIND;
   return 'function';
-}
-
-function componentWrapperKind(expression) {
-  const wrapped = expression.arguments[0] ? unwrap(expression.arguments[0]) : null;
-  const declaresBody = wrapped !== null && (ts.isArrowFunction(wrapped) || ts.isFunctionExpression(wrapped));
-  return declaresBody ? 'component' : 'constant';
 }
 
 function variableKind(name, initializer, context) {
   if (HOOK_NAME.test(name)) return 'hook';
   if (!initializer) return 'constant';
-  const value = unwrap(initializer);
+  const value = unwrapExpression(initializer).value;
   if (ts.isArrowFunction(value) || ts.isFunctionExpression(value)) return functionKind(name, value, context.jsx);
   if (ts.isClassExpression(value)) return classKind(value);
-  if (context.jsx && ts.isCallExpression(value) && COMPONENT_WRAPPERS.has(calleeName(unwrap(value.expression)))) {
-    return componentWrapperKind(value);
-  }
+  const wrapper = context.jsx && ts.isCallExpression(value) ? readComponentWrapper(value) : null;
+  if (wrapper !== null) return wrapper.body === null ? 'constant' : COMPONENT_KIND;
   if (SCHEMA_NAME.test(name) || isSchemaExpression(value, context.schemaRoots)) return 'schema';
   return 'constant';
 }
@@ -242,7 +215,7 @@ function collectSchemaRoots(statements, imported) {
 }
 
 function declaredName(statement) {
-  return statement.name?.text ?? 'default';
+  return statement.name?.text ?? DEFAULT_EXPORT_NAME;
 }
 
 function overloadSignatures(statements) {
@@ -292,11 +265,11 @@ function declarationsOf(statement, context) {
       })),
     );
   }
-  if (ts.isExportAssignment(statement) && !ts.isIdentifier(unwrap(statement.expression))) {
+  if (ts.isExportAssignment(statement) && !ts.isIdentifier(unwrapExpression(statement.expression).value)) {
     return [
       {
-        name: 'default',
-        kind: variableKind('default', statement.expression, context),
+        name: DEFAULT_EXPORT_NAME,
+        kind: variableKind(DEFAULT_EXPORT_NAME, statement.expression, context),
         exported: true,
         nodes: [statement],
       },
@@ -306,18 +279,22 @@ function declarationsOf(statement, context) {
 }
 
 function locallyExportedNames(statements) {
-  const names = new Set();
+  const values = new Set();
+  const types = new Set();
   for (const statement of statements) {
     if (ts.isExportDeclaration(statement) && !statement.moduleSpecifier && statement.exportClause) {
       if (ts.isNamedExports(statement.exportClause)) {
-        for (const element of statement.exportClause.elements) names.add((element.propertyName ?? element.name).text);
+        for (const element of statement.exportClause.elements) {
+          const names = statement.isTypeOnly || element.isTypeOnly ? types : values;
+          names.add((element.propertyName ?? element.name).text);
+        }
       }
     } else if (ts.isExportAssignment(statement)) {
-      const expression = unwrap(statement.expression);
-      if (ts.isIdentifier(expression)) names.add(expression.text);
+      const expression = unwrapExpression(statement.expression).value;
+      if (ts.isIdentifier(expression)) values.add(expression.text);
     }
   }
-  return names;
+  return { values, types };
 }
 
 export function classifyDeclarations(fileName, text) {
@@ -334,7 +311,7 @@ export function classifyDeclarations(fileName, text) {
   return declarations.map(({ name, kind, exported, nodes }) => ({
     name,
     kind,
-    exported: exported || exportedNames.has(name),
+    exported: exported || exportedNames.values.has(name) || (kind === TYPE_KIND && exportedNames.types.has(name)),
     line: source.getLineAndCharacterOfPosition(nodes[0].getStart(source)).line + 1,
     references: [...referencedNames(nodes, topLevelNames)].filter((reference) => reference !== name).sort(),
   }));

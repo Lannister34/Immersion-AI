@@ -1,6 +1,5 @@
-import { ROLE_KINDS_WHEN_EXPORTED, ROLE_KINDS_WHEN_PRIVATE, TYPE_KIND } from './role-kinds.mjs';
+import { COMPONENT_KIND, ROLE_KINDS_WHEN_EXPORTED, ROLE_KINDS_WHEN_PRIVATE, TYPE_KIND } from './role-kinds.mjs';
 
-const COMPONENT_KIND = 'component';
 const SINGLE_THING_KINDS = new Set(['class', COMPONENT_KIND]);
 
 function connectedNames(declarations, starts) {
