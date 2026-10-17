@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { isErrnoCode } from '../platform/errno-code.js';
 import {
+  type StoredSamplerPresetFixture,
   type StoredUserSettingsFixture,
   StoredUserSettingsFixtureSchema,
 } from './stored-user-settings-fixture-schema.js';
@@ -19,6 +20,7 @@ export interface UserSettingsFixtureFile {
   write(settings: StoredUserSettingsFixture): Promise<void>;
   patch(changes: StoredUserSettingsFixture): Promise<StoredUserSettingsFixture>;
   useExternalProvider(provider: ExternalProviderFixture): Promise<StoredUserSettingsFixture>;
+  samplerPreset(id: string): Promise<StoredSamplerPresetFixture>;
 }
 
 export function createUserSettingsFixtureFile(dataRoot: string): UserSettingsFixtureFile {
@@ -69,6 +71,16 @@ export function createUserSettingsFixtureFile(dataRoot: string): UserSettingsFix
         activeProvider: 'custom',
         providerConfigs: { custom: { url, model, apiKey } },
       });
+    },
+    async samplerPreset(id) {
+      const { samplerPresets = [] } = await read();
+      const preset = samplerPresets.find((candidate) => candidate.id === id);
+
+      if (preset === undefined) {
+        throw new Error(`The stored settings have no sampler preset "${id}".`);
+      }
+
+      return preset;
     },
   };
 }
