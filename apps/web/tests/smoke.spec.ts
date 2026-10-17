@@ -105,29 +105,29 @@ test('shows a route-level not-found screen for unknown paths', async ({ page }) 
   await expect(page.getByText('Проверьте адрес или вернитесь в доступные разделы приложения.')).toBeVisible();
 });
 
-test('imports a chat from a JSONL export file and opens the new session', async ({ page }) => {
+const importedChatTranscript = [
+  JSON.stringify({
+    chat_metadata: {
+      createdAt: '2026-01-01T00:00:00.000Z',
+      title: 'Импортированный смоук-чат',
+      updatedAt: '2026-01-01T00:00:02.000Z',
+    },
+    user_name: 'Тестер',
+    character_name: '',
+  }),
+  JSON.stringify({ is_user: true, mes: 'Привет из файла', send_date: '2026-01-01T00:00:01.000Z' }),
+  JSON.stringify({ is_user: false, mes: 'Ответ из файла', send_date: '2026-01-01T00:00:02.000Z' }),
+].join('\n');
+
+async function importChatFromList(page: Page) {
   await page.goto('/chat');
   await expect(page.getByRole('heading', { name: 'Чаты' })).toBeVisible();
-
-  const transcript = [
-    JSON.stringify({
-      chat_metadata: {
-        createdAt: '2026-01-01T00:00:00.000Z',
-        title: 'Импортированный смоук-чат',
-        updatedAt: '2026-01-01T00:00:02.000Z',
-      },
-      user_name: 'Тестер',
-      character_name: '',
-    }),
-    JSON.stringify({ is_user: true, mes: 'Привет из файла', send_date: '2026-01-01T00:00:01.000Z' }),
-    JSON.stringify({ is_user: false, mes: 'Ответ из файла', send_date: '2026-01-01T00:00:02.000Z' }),
-  ].join('\n');
 
   const importResponse = page.waitForResponse(
     (response) => response.url().includes('/api/chats/import') && response.request().method() === 'POST',
   );
   await page.locator('input[type="file"]').setInputFiles({
-    buffer: Buffer.from(transcript, 'utf8'),
+    buffer: Buffer.from(importedChatTranscript, 'utf8'),
     mimeType: 'application/x-ndjson',
     name: 'export.jsonl',
   });
@@ -135,8 +135,32 @@ test('imports a chat from a JSONL export file and opens the new session', async 
 
   await expect(page).toHaveURL(/\/chat\/[A-Za-z0-9_-]+$/);
   await expect(chatTitle(page)).toHaveText('Импортированный смоук-чат');
+}
+
+test('imports a chat from a JSONL export file and opens the new session', async ({ page }) => {
+  await importChatFromList(page);
+
   await expect(page.getByText('Привет из файла')).toBeVisible();
   await expect(page.getByText('Ответ из файла')).toBeVisible();
+});
+
+test('starts a branch with an empty composer and no pending delete', async ({ page }) => {
+  await importChatFromList(page);
+  const sourceChatUrl = page.url();
+
+  const composer = page.getByRole('main').locator('textarea');
+  await composer.fill('черновик');
+  await page.getByTitle('Удалить чат').click();
+  await expect(page.getByText('удалить весь чат?', { exact: true })).toBeVisible();
+
+  await page.getByTitle('Разветвить с этой реплики').first().click();
+  await page.getByPlaceholder('Название ветки').press('Enter');
+
+  await expect(page).not.toHaveURL(sourceChatUrl);
+  await expect(page).toHaveURL(/\/chat\/[A-Za-z0-9_-]+$/);
+  await expect(chatTitle(page)).toHaveText('Импортированный смоук-чат (ветка)');
+  await expect(composer).toHaveValue('');
+  await expect(page.getByText('удалить весь чат?', { exact: true })).toBeHidden();
 });
 
 test('opens a freshly created chat from the list, renames it inline, and surfaces the new title on reload', async ({

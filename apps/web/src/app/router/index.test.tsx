@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, RouterProvider } from '@tanstack/react-router';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createAppRouter } from '.';
+import { type AppRouter, createAppRouter } from '.';
 
 interface ChatListScreenProps {
   characterFilter: string | null;
@@ -32,10 +34,29 @@ vi.mock('../layout/root-layout', async () => {
 
 vi.mock('../../modules/chat-shell', () => ({ HomeScreen: () => <p>home</p> }));
 
-vi.mock('../../modules/chats', () => ({
-  ChatListScreen: ({ characterFilter }: ChatListScreenProps) => <p>{`chat list:${String(characterFilter)}`}</p>,
-  ChatSessionScreen: ({ chatId }: ChatSessionScreenProps) => <p>{`chat session:${chatId}`}</p>,
-}));
+vi.mock('../../modules/chats', async () => {
+  const { useState } = await import('react');
+
+  function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
+    const [draft, setDraft] = useState('');
+
+    return (
+      <>
+        <p>{`chat session:${chatId}`}</p>
+        <input
+          aria-label={`draft of ${chatId}`}
+          onChange={(event) => setDraft(event.currentTarget.value)}
+          value={draft}
+        />
+      </>
+    );
+  }
+
+  return {
+    ChatListScreen: ({ characterFilter }: ChatListScreenProps) => <p>{`chat list:${String(characterFilter)}`}</p>,
+    ChatSessionScreen,
+  };
+});
 
 vi.mock('../../modules/characters', () => ({
   CharactersScreen: () => <p>characters</p>,
@@ -58,17 +79,31 @@ vi.mock('../../modules/server-control', () => ({ ServerControlScreen: () => <p>s
 
 vi.mock('../../modules/settings', () => ({ SettingsScreen: () => <p>settings</p> }));
 
-async function renderAt(url: string): Promise<string> {
+interface LoadedApp {
+  app: ReactElement;
+  router: AppRouter;
+}
+
+async function loadAppAt(url: string): Promise<LoadedApp> {
   const queryClient = new QueryClient();
   const router = createAppRouter(queryClient);
   router.update({ ...router.options, history: createMemoryHistory({ initialEntries: [url] }) });
   await router.load();
 
-  return renderToString(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
+  return {
+    app: (
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    ),
+    router,
+  };
+}
+
+async function renderAt(url: string): Promise<string> {
+  const { app } = await loadAppAt(url);
+
+  return renderToString(app);
 }
 
 describe('app router', () => {
@@ -91,5 +126,20 @@ describe('app router', () => {
 
   it('renders the not-found screen for an unknown path', async () => {
     expect(await renderAt('/missing-route')).toContain('Страница не найдена');
+  });
+
+  it('mounts a new chat screen for each chat id, so a draft typed in one chat is gone in the next', async () => {
+    const firstChatId = '7f9c1d2e-0000-4000-8000-000000000001';
+    const branchChatId = '7f9c1d2e-0000-4000-8000-000000000002';
+    const { app, router } = await loadAppAt(`/chat/${firstChatId}`);
+    render(app);
+    const firstDraft = await screen.findByRole('textbox', { name: `draft of ${firstChatId}` });
+    fireEvent.change(firstDraft, { target: { value: 'черновик' } });
+    expect(firstDraft).toHaveProperty('value', 'черновик');
+
+    await act(() => router.navigate({ to: '/chat/$chatId', params: { chatId: branchChatId } }));
+
+    const branchDraft = await screen.findByRole('textbox', { name: `draft of ${branchChatId}` });
+    expect(branchDraft).toHaveProperty('value', '');
   });
 });
