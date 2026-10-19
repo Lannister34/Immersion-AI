@@ -8,14 +8,18 @@ export interface SocketResponse {
 export interface SocketRequestOptions {
   readonly method?: string;
   readonly json?: unknown;
+  readonly headers?: Readonly<Record<string, string>>;
 }
 
 export function requestOverSocket(
   url: string,
-  { method = 'GET', json }: SocketRequestOptions = {},
+  { method = 'GET', json, headers: givenHeaders = {} }: SocketRequestOptions = {},
 ): Promise<SocketResponse> {
   return new Promise<SocketResponse>((resolve, reject) => {
-    const headers: Record<string, string> = json === undefined ? {} : { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = {
+      ...(json === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...givenHeaders,
+    };
     const request = http.request(url, { agent: false, headers, method }, (response) => {
       let body = '';
       response.setEncoding('utf8');
