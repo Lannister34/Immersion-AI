@@ -62,6 +62,28 @@ describe('requestOverSocket', () => {
     expect(received).toEqual([{ body: '{"текст":"Привет."}', contentType: 'application/json', method: 'POST' }]);
   });
 
+  it('sends the given headers beside its own, a Host other than the address it connects to included', async () => {
+    const received: http.IncomingHttpHeaders[] = [];
+    const origin = await serve((request, response) => {
+      received.push(request.headers);
+      response.end();
+    });
+
+    await requestOverSocket(`${origin}/api/runtime/stop`, {
+      headers: { Host: '127.0.0.1:4787', 'User-Agent': 'Python-urllib/3.12' },
+      json: {},
+      method: 'POST',
+    });
+
+    expect(received).toEqual([
+      expect.objectContaining({
+        'content-type': 'application/json',
+        host: '127.0.0.1:4787',
+        'user-agent': 'Python-urllib/3.12',
+      }),
+    ]);
+  });
+
   it('rejects when the connection closes before a response arrives', async () => {
     const origin = await serve((request) => request.socket.destroy());
 
