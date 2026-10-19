@@ -417,6 +417,40 @@ describe('the signature rules', () => {
     assert.equal(violationsOf('screen.tsx', lines).length, 2);
   });
 
+  it('read an async or generator function as no component: an exported one needs a return type and no Props', () => {
+    assert.deepEqual(
+      violationsOf('providers.tsx', [
+        'export async function createTestProviders({ path }: { path: string }): Promise<Providers> {',
+        '  return { wrapper: () => <div>{path}</div> };',
+        '}',
+        'export async function LoadPage(props: { id: string }) { return <main>{props.id}</main>; }',
+        'export const renderAt = async (url: string): Promise<string> => renderToString(<App url={url} />);',
+        'export const loadView = async function (view: View) { return <section>{view.id}</section>; };',
+        'export function* Rows(props: { rows: string[] }): Generator<JSX.Element> { yield <li />; }',
+        'export async function* streamRows(rows: Row[]) { yield <li>{rows.length}</li>; }',
+        'export function renderRow(row: Row) { return <li>{row.id}</li>; }',
+      ]),
+      [
+        returnTypeViolation(4, 'exported function LoadPage'),
+        returnTypeViolation(6, 'exported function loadView'),
+        returnTypeViolation(8, 'exported function streamRows'),
+        '9 component-props-name: component renderRow takes its props as Row; declare them as RenderRowProps',
+      ],
+    );
+    assert.deepEqual(
+      violationsOf(
+        'router.test.tsx',
+        [
+          'async function renderAt(url: string): Promise<string> { return renderToString(<App url={url} />); }',
+          'function* rowsOf(rows: Row[]) { yield <li>{rows.length}</li>; }',
+          'function renderRow(row: Row) { return <li>{row.id}</li>; }',
+        ],
+        'test',
+      ),
+      ['3 component-props-name: component renderRow takes its props as Row; declare them as RenderRowProps'],
+    );
+  });
+
   it('report each violation at its line and column, in source order', () => {
     const violations = findSignatureViolations(
       'mixed.tsx',

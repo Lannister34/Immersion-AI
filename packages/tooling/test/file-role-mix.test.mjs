@@ -415,6 +415,53 @@ describe('declaration kinds', () => {
     );
   });
 
+  it('reads an async or generator function as a function whatever its name or JSX, and a sync JSX helper still as a component', () => {
+    assert.deepEqual(
+      kindsOf('router.test.tsx', [
+        'async function renderAt(url: string): Promise<string> { return renderToString(<App url={url} />); }',
+        'export async function createTestProviders() { await load(); return { wrapper: () => <div /> }; }',
+        'const renderLater = async (url: string) => renderToString(<App url={url} />);',
+        'const loadView = async function () { return <main />; };',
+        'export async function LoadPage() { return <main />; }',
+        'function* rows() { yield <li />; }',
+        'const items = function* () { yield <li />; };',
+        'async function* stream() { yield <li />; }',
+        'function* Steps() { yield 1; }',
+        'export default async function () { return <div />; }',
+        'export async function useLoadedView() { return <div />; }',
+        'function renderRow(row: string) { return <li>{row}</li>; }',
+        'export function Page() { return <main />; }',
+      ]),
+      [
+        'function renderAt',
+        'exported function createTestProviders',
+        'function renderLater',
+        'function loadView',
+        'exported function LoadPage',
+        'function rows',
+        'function items',
+        'function stream',
+        'function Steps',
+        'exported function default',
+        'exported hook useLoadedView',
+        'component renderRow',
+        'exported component Page',
+      ],
+    );
+  });
+
+  it('reads the async or generator marker of the function itself, not its name, parameters, text or inner functions', () => {
+    assert.deepEqual(
+      kindsOf('screen.tsx', [
+        'function async() { return <div />; }',
+        'const Toggle = (async: boolean) => <input disabled={async} />;',
+        'function renderAsyncRow() { return <li>async function* — загрузка</li>; }',
+        'export function Page() { const load = async () => <i />; function* ids() { yield <li />; } return <main>{load}{ids}</main>; }',
+      ]),
+      ['component async', 'component Toggle', 'component renderAsyncRow', 'exported component Page'],
+    );
+  });
+
   it('reads a function whose JSX is only a fragment as a component', () => {
     assert.deepEqual(kindsOf('labels.tsx', ['function renderLabel(text: string) { return <>{text}</>; }']), [
       'component renderLabel',

@@ -162,9 +162,13 @@ function classKind(node) {
   return baseName !== null && ERROR_NAME.test(baseName) ? 'error' : 'class';
 }
 
+function isAsyncOrGenerator(node) {
+  return node.asteriskToken !== undefined || hasModifier(node, ts.SyntaxKind.AsyncKeyword);
+}
+
 function functionKind(name, node, jsx) {
   if (HOOK_NAME.test(name)) return 'hook';
-  if (jsx && (COMPONENT_NAME.test(name) || containsJsx(node))) return COMPONENT_KIND;
+  if (jsx && !isAsyncOrGenerator(node) && (COMPONENT_NAME.test(name) || containsJsx(node))) return COMPONENT_KIND;
   return 'function';
 }
 

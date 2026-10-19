@@ -94,7 +94,6 @@
   "apps/web/src/modules/settings/queries/settings-overview-query.ts": "explicit-return-type:1",
   "apps/web/src/shared/api/client.ts": "explicit-return-type:6",
   "apps/web/src/shared/ui/icons.tsx": "component-props-name:47",
-  "apps/web/src/test-support/create-test-providers.tsx": "component-props-name:1",
   "apps/web/src/test-support/create-test-query-client.ts": "explicit-return-type:1",
   "apps/web/tests/restore-data-root.ts": "explicit-return-type:1",
   "apps/web/tests/smoke-data-root-name.ts": "explicit-return-type:2",
