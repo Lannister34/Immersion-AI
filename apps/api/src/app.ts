@@ -6,9 +6,8 @@ import Fastify, {
   type RawServerDefault,
 } from 'fastify';
 
-import { type ApiDependencies, createApiDependencies } from './composition/api-dependencies.js';
-import { type ApiModules, createApiModules } from './composition/create-api-modules.js';
-import { readApiConfig } from './config/read-api-config.js';
+import type { ApiDependencies } from './composition/api-dependencies.js';
+import type { ApiModules } from './composition/create-api-modules.js';
 import { charactersRoutes } from './modules/characters/index.js';
 import { chatsRoutes } from './modules/chats/index.js';
 import { generationRoutes } from './modules/generation/index.js';
@@ -29,11 +28,7 @@ export type ApiApp = FastifyInstance<
   ApiLogger
 >;
 
-// TODO: require the dependencies and the modules once every test builds apps through the harness (F-13)
-export function buildApiApp(
-  dependencies: ApiDependencies = createApiDependencies(readApiConfig()),
-  modules: ApiModules = createApiModules(dependencies),
-): ApiApp {
+export function buildApiApp(dependencies: ApiDependencies, modules: ApiModules): ApiApp {
   const app = Fastify({
     bodyLimit: API_BODY_LIMIT_BYTES,
     loggerInstance: dependencies.logger,

@@ -1,17 +1,11 @@
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import { fileURLToPath, URL } from 'node:url';
+import { describe, expect, it, vi } from 'vitest';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { useTemporaryDataRoot } from '../../../test-support/use-temporary-data-root.js';
 import { appendChatMessages, ChatTranscriptChangedError, createChat, getChatSession } from '../../chats/index.js';
 import { InMemoryGenerationJobRegistry } from '../infrastructure/in-memory-generation-job-registry.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import type { CreateChatReplyGenerationJobInput } from './generation-job-registry.js';
 import { regenerateChatReplyJob } from './regenerate-chat-reply-job.js';
-
-const SMOKE_DATA_ROOT = fileURLToPath(new URL('../../../../testdata/smoke-data', import.meta.url));
 
 class ClaimRacingGenerationJobRegistry extends InMemoryGenerationJobRegistry {
   writeOnClaimDone: Promise<unknown> = Promise.resolve();
@@ -30,25 +24,7 @@ class ClaimRacingGenerationJobRegistry extends InMemoryGenerationJobRegistry {
 }
 
 describe('regenerateChatReplyJob', () => {
-  let previousDataRoot: string | undefined;
-  let temporaryDataRoot: string;
-
-  beforeEach(async () => {
-    previousDataRoot = process.env.IMMERSION_DATA_ROOT;
-    temporaryDataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'immersion-api-regenerate-'));
-    await fs.cp(SMOKE_DATA_ROOT, temporaryDataRoot, { recursive: true });
-    process.env.IMMERSION_DATA_ROOT = temporaryDataRoot;
-  });
-
-  afterEach(async () => {
-    if (previousDataRoot) {
-      process.env.IMMERSION_DATA_ROOT = previousDataRoot;
-    } else {
-      delete process.env.IMMERSION_DATA_ROOT;
-    }
-
-    await fs.rm(temporaryDataRoot, { recursive: true, force: true });
-  });
+  useTemporaryDataRoot('smoke');
 
   it('refuses to delete the reply when the transcript changes after the job is claimed', async () => {
     const completeChat = vi.fn<ChatCompletionClient['completeChat']>();

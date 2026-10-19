@@ -1,10 +1,10 @@
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 
 import type { ChatSessionDto } from '@immersion/contracts/chats';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
+import { useTemporaryDataRoot } from '../../test-support/use-temporary-data-root.js';
 import { loadChatPromptContext } from './application/load-chat-prompt-context.js';
 
 function buildSession(characterId: string, scenarioId: string): ChatSessionDto {
@@ -52,27 +52,11 @@ function buildSession(characterId: string, scenarioId: string): ChatSessionDto {
 }
 
 describe('loadChatPromptContext', () => {
-  let previousDataRoot: string | undefined;
-  let temporaryDataRoot: string;
-
-  beforeEach(async () => {
-    previousDataRoot = process.env.IMMERSION_DATA_ROOT;
-    temporaryDataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'immersion-prompt-context-'));
-    process.env.IMMERSION_DATA_ROOT = temporaryDataRoot;
-  });
-
-  afterEach(async () => {
-    if (previousDataRoot) {
-      process.env.IMMERSION_DATA_ROOT = previousDataRoot;
-    } else {
-      delete process.env.IMMERSION_DATA_ROOT;
-    }
-    await fs.rm(temporaryDataRoot, { recursive: true, force: true });
-  });
+  const dataRoot = useTemporaryDataRoot();
 
   async function writeJson(directory: string, fileName: string, content: Record<string, unknown>) {
-    await fs.mkdir(path.join(temporaryDataRoot, directory), { recursive: true });
-    await fs.writeFile(path.join(temporaryDataRoot, directory, fileName), JSON.stringify(content), 'utf8');
+    await fs.mkdir(path.join(dataRoot(), directory), { recursive: true });
+    await fs.writeFile(path.join(dataRoot(), directory, fileName), JSON.stringify(content), 'utf8');
   }
 
   it('prefers the linked scenario over the scenario on the character card', async () => {

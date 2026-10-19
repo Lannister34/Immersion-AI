@@ -1,9 +1,10 @@
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { stubGlobalFetch } from '../../../test-support/global-fetch-stub.js';
+import { useTemporaryDataRoot } from '../../../test-support/use-temporary-data-root.js';
 import { LlmProcessManager } from './llm-process-manager.js';
 
 const execSyncMock = vi.hoisted(() => vi.fn<(command: string) => Buffer>());
@@ -19,16 +20,16 @@ const DETACHED_PID = 2_147_483_647;
 const DETACHED_PORT = 59_999;
 
 describe('LlmProcessManager', () => {
-  let dataRoot = '';
+  const dataRoot = useTemporaryDataRoot();
 
   async function recordDetachedRuntime() {
     await fs.writeFile(
-      path.join(dataRoot, '.llm-server.json'),
+      path.join(dataRoot(), '.llm-server.json'),
       JSON.stringify({
         pid: DETACHED_PID,
         port: DETACHED_PORT,
         model: 'model.gguf',
-        modelPath: path.join(dataRoot, 'model.gguf'),
+        modelPath: path.join(dataRoot(), 'model.gguf'),
       }),
       'utf8',
     );
@@ -61,34 +62,28 @@ describe('LlmProcessManager', () => {
     return detached;
   }
 
-  beforeEach(async () => {
-    dataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'immersion-llm-process-'));
-    process.env.IMMERSION_DATA_ROOT = dataRoot;
+  beforeEach(() => {
     execSyncMock.mockReset();
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     vi.useRealTimers();
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-    delete process.env.IMMERSION_DATA_ROOT;
-    await fs.rm(dataRoot, { force: true, recursive: true });
   });
 
   it('re-attaches to a llama-server left by a previous API process only when asked, never on import or construction', async () => {
     await recordDetachedRuntime();
-    const healthProbe = vi.fn(async () => new Response(JSON.stringify({ status: 'ok' })));
-    vi.stubGlobal('fetch', healthProbe);
+    const http = stubGlobalFetch();
+    http.on('GET', `http://127.0.0.1:${DETACHED_PORT}/health`, () => Response.json({ status: 'ok' }));
 
     vi.resetModules();
     const { getLlmProcessManager } = await import('./llm-process-manager.js');
     const manager = getLlmProcessManager();
 
-    expect(healthProbe).not.toHaveBeenCalled();
+    expect(http.requests).toEqual([]);
 
     await manager.reconnectToDetachedRuntime();
 
-    expect(healthProbe).toHaveBeenCalledWith(`http://127.0.0.1:${DETACHED_PORT}/health`, expect.anything());
+    expect(http.requestLines()).toEqual([`GET http://127.0.0.1:${DETACHED_PORT}/health`]);
   });
 
   it('stops a llama-server left by a previous API process before starting another, which would otherwise be orphaned', async () => {
@@ -101,7 +96,7 @@ describe('LlmProcessManager', () => {
         contextSize: 8192,
         flashAttention: false,
         gpuLayers: 0,
-        modelPath: path.join(dataRoot, 'model.gguf'),
+        modelPath: path.join(dataRoot(), 'model.gguf'),
         port: DETACHED_PORT,
         threads: 0,
       }),
