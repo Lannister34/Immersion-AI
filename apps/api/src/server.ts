@@ -1,7 +1,11 @@
 import { buildApiApp } from './app.js';
+import { createApiDependencies } from './composition/api-dependencies.js';
+import { createApiModules } from './composition/create-api-modules.js';
 import { type ApiConfig, ApiConfigError } from './config/api-config.js';
 import { readApiConfig } from './config/read-api-config.js';
-import { getLlmProcessManager, setupGracefulShutdown } from './modules/runtime/infrastructure/llm-process-manager.js';
+import { registerShutdownSignals } from './lifecycle/register-shutdown-signals.js';
+import { startApiServer } from './lifecycle/start-api-server.js';
+import { reconnectDetachedRuntime } from './modules/runtime/index.js';
 
 let config: ApiConfig;
 
@@ -16,24 +20,14 @@ try {
   process.exit(1);
 }
 
-const app = buildApiApp(config);
-setupGracefulShutdown();
-void getLlmProcessManager()
-  .reconnectToDetachedRuntime()
-  .catch((error: unknown) => {
-    app.log.error({ err: error }, 'llm-process: reconnect error');
-  });
+const dependencies = createApiDependencies(config);
+const app = buildApiApp(dependencies, createApiModules(dependencies));
 
-async function startServer() {
-  try {
-    await app.listen({
-      host: config.host,
-      port: config.port,
-    });
-  } catch (error) {
-    app.log.error(error);
+registerShutdownSignals(app, { signals: process, exit: process.exit, deadlineMs: 5_000 });
+
+startApiServer(app, config).then(
+  () => reconnectDetachedRuntime(app.log),
+  () => {
     process.exitCode = 1;
-  }
-}
-
-void startServer();
+  },
+);

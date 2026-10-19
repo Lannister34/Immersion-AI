@@ -1,35 +1,48 @@
 import cors from '@fastify/cors';
-import Fastify from 'fastify';
+import Fastify, {
+  type FastifyInstance,
+  type RawReplyDefaultExpression,
+  type RawRequestDefaultExpression,
+  type RawServerDefault,
+} from 'fastify';
 
-import type { ApiConfig } from './config/api-config.js';
+import { type ApiDependencies, createApiDependencies } from './composition/api-dependencies.js';
+import { type ApiModules, createApiModules } from './composition/create-api-modules.js';
 import { readApiConfig } from './config/read-api-config.js';
-import { charactersRoutes } from './modules/characters/interface/http/routes.js';
-import { chatsRoutes } from './modules/chats/interface/http/routes.js';
-import { generationRoutes } from './modules/generation/interface/http/routes.js';
-import { lorebooksRoutes } from './modules/lorebooks/interface/http/routes.js';
-import { openAiCompatRoutes } from './modules/openai-compat/interface/http/routes.js';
-import { providersRoutes } from './modules/providers/interface/http/routes.js';
-import { runtimeRoutes } from './modules/runtime/interface/http/routes.js';
-import { scenariosRoutes } from './modules/scenarios/interface/http/routes.js';
-import { settingsRoutes } from './modules/settings/interface/http/routes.js';
-import { createApiLogger } from './platform/logging/api-logger.js';
-import { healthRoute } from './routes/health.js';
-import { rootRoute } from './routes/root.js';
+import { charactersRoutes } from './modules/characters/index.js';
+import { chatsRoutes } from './modules/chats/index.js';
+import { generationRoutes } from './modules/generation/index.js';
+import { lorebooksRoutes } from './modules/lorebooks/index.js';
+import { openAiCompatRoutes } from './modules/openai-compat/index.js';
+import { providersRoutes } from './modules/providers/index.js';
+import { runtimeRoutes } from './modules/runtime/index.js';
+import { scenariosRoutes } from './modules/scenarios/index.js';
+import { settingsRoutes } from './modules/settings/index.js';
+import type { ApiLogger } from './platform/logging/api-logger.js';
 
 const API_BODY_LIMIT_BYTES = 16 * 1024 * 1024;
 
-// TODO: require the config once every test builds apps through the harness (F-13)
-export function buildApiApp(config: ApiConfig = readApiConfig()) {
+export type ApiApp = FastifyInstance<
+  RawServerDefault,
+  RawRequestDefaultExpression,
+  RawReplyDefaultExpression,
+  ApiLogger
+>;
+
+// TODO: require the dependencies and the modules once every test builds apps through the harness (F-13)
+export function buildApiApp(
+  dependencies: ApiDependencies = createApiDependencies(readApiConfig()),
+  modules: ApiModules = createApiModules(dependencies),
+): ApiApp {
   const app = Fastify({
     bodyLimit: API_BODY_LIMIT_BYTES,
-    loggerInstance: createApiLogger(config.logLevel),
+    loggerInstance: dependencies.logger,
   });
 
   app.register(cors, {
-    origin: [...config.webOrigins],
+    origin: [...dependencies.config.webOrigins],
   });
-  app.register(rootRoute, { webPort: config.webPort });
-  app.register(healthRoute, { prefix: '/health' });
+  app.register(modules.system.routes);
   app.register(charactersRoutes, { prefix: '/api/characters' });
   app.register(chatsRoutes, { prefix: '/api/chats' });
   app.register(generationRoutes, { prefix: '/api/generation' });
