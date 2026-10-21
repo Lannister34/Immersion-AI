@@ -1,14 +1,15 @@
 import { splitReply } from '@immersion/domain/generation';
 
-import type { ChatCompletionResponse } from '../../../application/chat-completion-client.js';
 import { ProviderGenerationError } from '../../../application/generation-errors.js';
-import type { ProviderStreamSink } from '../reply-reader.js';
+import type { ProviderReply, ProviderStreamSink } from '../reply-reader.js';
 import {
   type OpenAiChatCompletionReply,
   OpenAiChatCompletionReplySchema,
   OpenAiStreamChunkSchema,
   OpenAiStreamErrorSchema,
 } from './response-wire.js';
+
+const OPENAI_TOKEN_LIMIT_FINISH_REASON = 'length';
 
 export function readOpenAiStreamData(data: string, sink: ProviderStreamSink) {
   if (data === '[DONE]') {
@@ -32,7 +33,8 @@ export function readOpenAiStreamData(data: string, sink: ProviderStreamSink) {
     return;
   }
 
-  const delta = parsed.data.choices[0]?.delta;
+  const choice = parsed.data.choices[0];
+  const delta = choice?.delta;
   const reasoningDelta = delta?.reasoning_content ?? delta?.reasoning ?? '';
 
   if (reasoningDelta.length > 0) {
@@ -44,9 +46,13 @@ export function readOpenAiStreamData(data: string, sink: ProviderStreamSink) {
   if (contentDelta.length > 0) {
     sink.reply(contentDelta);
   }
+
+  if (choice?.finish_reason === OPENAI_TOKEN_LIMIT_FINISH_REASON) {
+    sink.stoppedAtTokenLimit();
+  }
 }
 
-export async function readOpenAiJsonReply(response: Response): Promise<ChatCompletionResponse> {
+export async function readOpenAiJsonReply(response: Response): Promise<ProviderReply> {
   const responseText = await response.text();
   let payload: OpenAiChatCompletionReply;
 
@@ -60,7 +66,8 @@ export async function readOpenAiJsonReply(response: Response): Promise<ChatCompl
     );
   }
 
-  const message = payload.choices[0]?.message;
+  const choice = payload.choices[0];
+  const message = choice?.message;
   const split = splitReply(message?.content ?? '');
   const reasoning = [message?.reasoning_content ?? message?.reasoning ?? '', split.reasoning]
     .filter((part) => part.trim().length > 0)
@@ -70,5 +77,6 @@ export async function readOpenAiJsonReply(response: Response): Promise<ChatCompl
   return {
     content: split.content,
     reasoning,
+    stoppedAtTokenLimit: choice?.finish_reason === OPENAI_TOKEN_LIMIT_FINISH_REASON,
   };
 }

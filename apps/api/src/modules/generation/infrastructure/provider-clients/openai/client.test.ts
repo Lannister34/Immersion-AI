@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ChatCompletionRequest } from '../../../application/chat-completion-client.js';
-import { ProviderGenerationError } from '../../../application/generation-errors.js';
+import { ProviderGenerationError, ProviderReplyTruncatedError } from '../../../application/generation-errors.js';
 import { OpenAiClient } from './client.js';
 
 const BASE_REQUEST: Omit<ChatCompletionRequest, 'onDelta'> = {
@@ -118,6 +118,45 @@ describe('OpenAiClient replies', () => {
     await expect(client.completeChat({ ...BASE_REQUEST, allowEmptyContent: true })).resolves.toEqual({
       content: '',
       reasoning: 'Весь лимит ушёл сюда',
+    });
+  });
+
+  it('reports a reply that spent the whole token limit on thinking as hitting the limit, not as empty', async () => {
+    mockFetch(
+      JSON.stringify({
+        choices: [{ finish_reason: 'length', message: { content: '', reasoning_content: 'Размышляю о глине' } }],
+      }),
+      'application/json',
+    );
+
+    const completion = new OpenAiClient().completeChat(BASE_REQUEST);
+
+    await expect(completion).rejects.toBeInstanceOf(ProviderReplyTruncatedError);
+    await expect(completion).rejects.toThrow('Ответ модели упёрся в лимит токенов');
+  });
+
+  it('fails a reply cut off at the token limit only when the caller needs it complete', async () => {
+    const cutOff = JSON.stringify({ choices: [{ finish_reason: 'length', message: { content: '{"name": "Ари' } }] });
+    const client = new OpenAiClient();
+
+    mockFetch(cutOff, 'application/json');
+    await expect(client.completeChat({ ...BASE_REQUEST, requireCompleteReply: true })).rejects.toBeInstanceOf(
+      ProviderReplyTruncatedError,
+    );
+
+    mockFetch(cutOff, 'application/json');
+    await expect(client.completeChat(BASE_REQUEST)).resolves.toEqual({ content: '{"name": "Ари', reasoning: '' });
+  });
+
+  it('accepts a complete reply when the caller needs it complete', async () => {
+    mockFetch(
+      JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: '{"name": "Ария"}' } }] }),
+      'application/json',
+    );
+
+    await expect(new OpenAiClient().completeChat({ ...BASE_REQUEST, requireCompleteReply: true })).resolves.toEqual({
+      content: '{"name": "Ария"}',
+      reasoning: '',
     });
   });
 
@@ -251,6 +290,21 @@ describe('OpenAiClient streaming', () => {
 
     await expect(new OpenAiClient().completeChat({ ...BASE_REQUEST, onDelta: () => undefined })).rejects.toThrow(
       /out of memory/u,
+    );
+  });
+
+  it('reads the token-limit finish reason from the final stream chunk', async () => {
+    mockFetch(
+      [
+        `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'Размышляю' }, finish_reason: null }] })}\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'length' }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ].join(''),
+      'text/event-stream',
+    );
+
+    await expect(new OpenAiClient().completeChat({ ...BASE_REQUEST, onDelta: () => undefined })).rejects.toBeInstanceOf(
+      ProviderReplyTruncatedError,
     );
   });
 

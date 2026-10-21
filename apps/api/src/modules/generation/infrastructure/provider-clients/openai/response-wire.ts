@@ -11,6 +11,7 @@ export const OpenAiStreamChunkSchema = z.object({
             reasoning_content: z.string().nullable().optional(),
           })
           .optional(),
+        finish_reason: z.string().nullable().optional(),
       }),
     )
     .min(1),
@@ -24,6 +25,7 @@ export const OpenAiChatCompletionReplySchema = z.object({
   choices: z
     .array(
       z.object({
+        finish_reason: z.string().nullable().optional(),
         message: z.object({
           content: z.string().nullable().optional(),
           reasoning: z.string().nullable().optional(),

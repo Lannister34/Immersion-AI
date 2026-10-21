@@ -16,6 +16,7 @@ import {
   resolveDraftGenerationContext,
 } from './draft-generation-support.js';
 import { ProviderGenerationError } from './generation-errors.js';
+import { SKIP_THINKING_SERVER_EXTENSIONS } from './skip-thinking-server-extensions.js';
 
 export interface GenerateScenarioFirstMessageDependencies {
   chatCompletionClient?: ChatCompletionClient;
@@ -89,6 +90,7 @@ export async function generateScenarioFirstMessage(
       },
     ],
     sampling: context.sampling,
+    serverExtensions: SKIP_THINKING_SERVER_EXTENSIONS,
     signal: dependencies.signal,
   });
   const value = replaceNamesWithPlaceholders(
