@@ -14,6 +14,7 @@ import {
 } from './draft-generation-support.js';
 import { ProviderGenerationError } from './generation-errors.js';
 import { asJsonRecord, extractJsonFromModelOutput } from './model-json-output.js';
+import { SKIP_THINKING_SERVER_EXTENSIONS } from './skip-thinking-server-extensions.js';
 
 export interface GenerateLorebookDraftDependencies {
   chatCompletionClient?: ChatCompletionClient;
@@ -137,7 +138,9 @@ export async function generateLorebookDraft(
         content: buildLorebookDraftPrompt(command.concept, command.entryCount, context),
       },
     ],
+    requireCompleteReply: true,
     sampling: context.sampling,
+    serverExtensions: SKIP_THINKING_SERVER_EXTENSIONS,
     signal: dependencies.signal,
   });
   const record = asJsonRecord(extractJsonFromModelOutput(completion.content), 'a lorebook draft');

@@ -26,6 +26,7 @@ export interface ChatCompletionRequest {
   maxTokens: number;
   messages: ChatReplyPromptMessage[];
   onDelta?: ((delta: string, channel: ReplyChannel) => void) | undefined;
+  requireCompleteReply?: boolean | undefined;
   sampling: ChatCompletionSamplingOptions;
   serverExtensions?: Record<string, unknown> | undefined;
   signal?: AbortSignal | undefined;

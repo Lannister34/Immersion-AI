@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { buildApiApp } from './app.js';
+import { stubProviderReply } from './test-support/recording-provider-stub.js';
 
 const fixtureDataRoot = fileURLToPath(new URL('../testdata/smoke-data', import.meta.url));
 
@@ -296,6 +297,27 @@ describe('generation draft routes', () => {
 
       expect(response.statusCode).toBe(502);
       expect(response.json()).toMatchObject({ code: 'provider_generation_failed' });
+
+      await app.close();
+    });
+
+    it('names the token limit, not malformed JSON, when the draft is cut off where a {{user}} brace ends the text', async () => {
+      stubProviderReply('{"name": "Ария", "scenario": "{{char}} встречает {{user}} у печи, и', 'length');
+      const app = buildApiApp();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/generation/character',
+        payload: {
+          concept: 'Гончар из приморского города',
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+      expect(response.json()).toMatchObject({
+        code: 'provider_generation_failed',
+        message: expect.stringContaining('Ответ модели упёрся в лимит токенов'),
+      });
 
       await app.close();
     });

@@ -10,6 +10,7 @@ import type { ChatCompletionClient } from './chat-completion-client.js';
 import { normalizeDraftText, resolveDraftGenerationContext } from './draft-generation-support.js';
 import { ProviderGenerationError } from './generation-errors.js';
 import { asJsonRecord, extractJsonFromModelOutput } from './model-json-output.js';
+import { SKIP_THINKING_SERVER_EXTENSIONS } from './skip-thinking-server-extensions.js';
 
 export interface GenerateCharacterAvatarPromptDependencies {
   chatCompletionClient?: ChatCompletionClient;
@@ -54,7 +55,9 @@ export async function generateCharacterAvatarPrompt(
         content: buildAvatarPromptUserMessage(command.card),
       },
     ],
+    requireCompleteReply: true,
     sampling: context.sampling,
+    serverExtensions: SKIP_THINKING_SERVER_EXTENSIONS,
     signal: dependencies.signal,
   });
   const record = asJsonRecord(extractJsonFromModelOutput(completion.content), 'an avatar prompt');

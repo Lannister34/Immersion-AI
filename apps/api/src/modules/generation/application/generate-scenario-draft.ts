@@ -17,6 +17,7 @@ import {
 } from './draft-generation-support.js';
 import { ProviderGenerationError } from './generation-errors.js';
 import { asJsonRecord, extractJsonFromModelOutput } from './model-json-output.js';
+import { SKIP_THINKING_SERVER_EXTENSIONS } from './skip-thinking-server-extensions.js';
 
 export interface GenerateScenarioDraftDependencies {
   chatCompletionClient?: ChatCompletionClient;
@@ -110,7 +111,9 @@ export async function generateScenarioDraft(
         content: buildScenarioDraftPrompt(command.concept, command.name, context),
       },
     ],
+    requireCompleteReply: true,
     sampling: context.sampling,
+    serverExtensions: SKIP_THINKING_SERVER_EXTENSIONS,
     signal: dependencies.signal,
   });
   const record = asJsonRecord(extractJsonFromModelOutput(completion.content), 'a scenario draft');

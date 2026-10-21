@@ -30,8 +30,10 @@ function recordProviderRequests(reply: () => Response): RecordedProviderRequest[
   return requests;
 }
 
-export function stubProviderReply(content: string): RecordedProviderRequest[] {
-  return recordProviderRequests(() => jsonResponse({ choices: [{ message: { content } }] }, 200));
+export function stubProviderReply(content: string, finishReason = 'stop'): RecordedProviderRequest[] {
+  return recordProviderRequests(() =>
+    jsonResponse({ choices: [{ finish_reason: finishReason, message: { content } }] }, 200),
+  );
 }
 
 export function stubProviderFailure(status: number): RecordedProviderRequest[] {

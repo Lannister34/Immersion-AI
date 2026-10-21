@@ -14,6 +14,7 @@ import {
   resolveDraftGenerationContext,
 } from './draft-generation-support.js';
 import { ProviderGenerationError } from './generation-errors.js';
+import { SKIP_THINKING_SERVER_EXTENSIONS } from './skip-thinking-server-extensions.js';
 
 export interface GenerateCharacterFieldDependencies {
   chatCompletionClient?: ChatCompletionClient;
@@ -150,6 +151,7 @@ export async function generateCharacterField(
         ? Math.max(context.sampling.temperature, REGENERATION_MIN_TEMPERATURE)
         : context.sampling.temperature,
     },
+    serverExtensions: SKIP_THINKING_SERVER_EXTENSIONS,
     signal: dependencies.signal,
   });
   const value = normalizeDraftText(completion.content, FIELD_MAX_LENGTHS[command.field]);

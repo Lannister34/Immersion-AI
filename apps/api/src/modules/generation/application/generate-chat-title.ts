@@ -14,6 +14,7 @@ import { getSettingsOverview } from '../../settings/application/get-settings-ove
 import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import { ChatTranscriptEmptyError, ProviderGenerationError } from './generation-errors.js';
+import { SKIP_THINKING_SERVER_EXTENSIONS } from './skip-thinking-server-extensions.js';
 
 export interface GenerateChatTitleDependencies {
   chatCompletionClient?: ChatCompletionClient;
@@ -105,6 +106,7 @@ export async function generateChatTitle(
       topK: effectiveSettings.sampling.topK,
       topP: effectiveSettings.sampling.topP,
     },
+    serverExtensions: SKIP_THINKING_SERVER_EXTENSIONS,
     signal: dependencies.signal,
   });
   const title = sanitizeGeneratedChatTitle(completion.content);

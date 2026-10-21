@@ -8,6 +8,13 @@ export class ProviderGenerationError extends Error {
   }
 }
 
+export class ProviderReplyTruncatedError extends ProviderGenerationError {
+  constructor() {
+    super('Ответ модели упёрся в лимит токенов и оборвался. Попробуйте ещё раз.');
+    this.name = 'ProviderReplyTruncatedError';
+  }
+}
+
 export class ChatTranscriptEmptyError extends Error {
   constructor(readonly chatId: string) {
     super('Chat has no messages to derive a title from.');

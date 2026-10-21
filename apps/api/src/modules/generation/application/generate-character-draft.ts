@@ -15,6 +15,7 @@ import {
 } from './draft-generation-support.js';
 import { ProviderGenerationError } from './generation-errors.js';
 import { asJsonRecord, extractJsonFromModelOutput } from './model-json-output.js';
+import { SKIP_THINKING_SERVER_EXTENSIONS } from './skip-thinking-server-extensions.js';
 
 export interface GenerateCharacterDraftDependencies {
   chatCompletionClient?: ChatCompletionClient;
@@ -145,7 +146,9 @@ export async function generateCharacterDraft(
         content: buildCharacterDraftPrompt(command.concept, command.fields, context.languageSentence, context.language),
       },
     ],
+    requireCompleteReply: true,
     sampling: context.sampling,
+    serverExtensions: SKIP_THINKING_SERVER_EXTENSIONS,
     signal: dependencies.signal,
   });
 

@@ -1,18 +1,23 @@
 import { createReplySplitter, type ReplyChannel, type ReplyChunk } from '@immersion/domain/generation';
 
 import type { ChatCompletionRequest, ChatCompletionResponse } from '../../application/chat-completion-client.js';
-import { ProviderGenerationError } from '../../application/generation-errors.js';
+import { ProviderGenerationError, ProviderReplyTruncatedError } from '../../application/generation-errors.js';
 import { isAbortError } from './http.js';
 
 export interface ProviderStreamSink {
   reasoning(text: string): void;
   reply(text: string): void;
+  stoppedAtTokenLimit(): void;
+}
+
+export interface ProviderReply extends ChatCompletionResponse {
+  stoppedAtTokenLimit?: boolean | undefined;
 }
 
 export type ProviderStreamDataHandler = (data: string, sink: ProviderStreamSink) => void;
 
 export interface ProviderReplyReaders {
-  readJson(response: Response): Promise<ChatCompletionResponse>;
+  readJson(response: Response): Promise<ProviderReply>;
   readStreamData: ProviderStreamDataHandler;
 }
 
@@ -20,7 +25,7 @@ async function readProviderStream(
   response: Response,
   onDelta: (delta: string, channel: ReplyChannel) => void,
   handleData: ProviderStreamDataHandler,
-): Promise<ChatCompletionResponse> {
+): Promise<ProviderReply> {
   const body = response.body;
 
   if (!body) {
@@ -32,6 +37,7 @@ async function readProviderStream(
   const splitter = createReplySplitter();
   const collected: Record<ReplyChannel, string> = { reasoning: '', reply: '' };
   let buffer = '';
+  let stoppedAtTokenLimit = false;
 
   const emit = (chunks: ReplyChunk[]) => {
     for (const chunk of chunks) {
@@ -43,6 +49,9 @@ async function readProviderStream(
   const sink: ProviderStreamSink = {
     reasoning: (text) => emit([{ channel: 'reasoning', text }]),
     reply: (text) => emit(splitter.push(text)),
+    stoppedAtTokenLimit: () => {
+      stoppedAtTokenLimit = true;
+    },
   };
 
   const handleLine = (line: string) => {
@@ -82,7 +91,7 @@ async function readProviderStream(
 
   emit(splitter.flush());
 
-  return { content: collected.reply.trim(), reasoning: collected.reasoning.trim() };
+  return { content: collected.reply.trim(), reasoning: collected.reasoning.trim(), stoppedAtTokenLimit };
 }
 
 async function readStreamedReply(
@@ -90,7 +99,7 @@ async function readStreamedReply(
   request: ChatCompletionRequest,
   onDelta: (delta: string, channel: ReplyChannel) => void,
   handleData: ProviderStreamDataHandler,
-): Promise<ChatCompletionResponse> {
+): Promise<ProviderReply> {
   try {
     return await readProviderStream(response, onDelta, handleData);
   } catch (error) {
@@ -110,12 +119,17 @@ export async function readProviderReply(
   readers: ProviderReplyReaders,
 ): Promise<ChatCompletionResponse> {
   const isEventStream = (response.headers.get('content-type') ?? '').includes('text/event-stream');
-  const completion =
+  const { stoppedAtTokenLimit, ...completion } =
     request.onDelta && isEventStream
       ? await readStreamedReply(response, request, request.onDelta, readers.readStreamData)
       : await readers.readJson(response);
+  const isDisallowedEmpty = !completion.content && !request.allowEmptyContent;
 
-  if (!completion.content && !request.allowEmptyContent) {
+  if (stoppedAtTokenLimit && (isDisallowedEmpty || request.requireCompleteReply)) {
+    throw new ProviderReplyTruncatedError();
+  }
+
+  if (isDisallowedEmpty) {
     throw new ProviderGenerationError('Provider returned an empty reply.');
   }
 
