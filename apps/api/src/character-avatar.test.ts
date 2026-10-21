@@ -158,6 +158,8 @@ describe('character avatar upload API', () => {
     const avatarResponse = await app.inject({ method: 'GET', url: avatarUrlOf(character.id) });
     expect(avatarResponse.statusCode).toBe(404);
     expect(avatarResponse.json()).toMatchObject({ code: 'avatar_not_found' });
+    expect(avatarResponse.headers['content-type']).toMatch(/^application\/json/);
+    expect(avatarResponse.headers['cache-control']).toBeUndefined();
 
     const repeatedDelete = await app.inject({ method: 'DELETE', url: avatarUrlOf(character.id) });
     expect(repeatedDelete.statusCode).toBe(404);

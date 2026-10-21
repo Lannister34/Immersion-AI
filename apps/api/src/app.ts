@@ -7,6 +7,7 @@ import Fastify, {
 } from 'fastify';
 
 import type { ApiDependencies } from './composition/api-dependencies.js';
+import { apiProblems } from './composition/api-problems.js';
 import type { ApiModules } from './composition/create-api-modules.js';
 import { charactersRoutes } from './modules/characters/index.js';
 import { chatsRoutes } from './modules/chats/index.js';
@@ -17,6 +18,7 @@ import { providersRoutes } from './modules/providers/index.js';
 import { runtimeRoutes } from './modules/runtime/index.js';
 import { scenariosRoutes } from './modules/scenarios/index.js';
 import { settingsRoutes } from './modules/settings/index.js';
+import { installNotFoundHandler, installProblemHandler } from './platform/http/problem-handler.js';
 import type { ApiLogger } from './platform/logging/api-logger.js';
 
 const API_BODY_LIMIT_BYTES = 16 * 1024 * 1024;
@@ -34,6 +36,8 @@ export function buildApiApp(dependencies: ApiDependencies, modules: ApiModules):
     loggerInstance: dependencies.logger,
   });
 
+  installProblemHandler(app, { table: apiProblems });
+  installNotFoundHandler(app);
   app.register(cors, {
     origin: [...dependencies.config.webOrigins],
   });

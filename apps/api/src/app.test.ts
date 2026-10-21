@@ -1,5 +1,6 @@
 import { HealthResponseSchema } from '@immersion/contracts';
 import { ImportChatCommandSchema } from '@immersion/contracts/chats';
+import { ApiProblemSchema } from '@immersion/contracts/common';
 import { ProvidersOverviewResponseSchema } from '@immersion/contracts/providers';
 import { RuntimeOverviewResponseSchema } from '@immersion/contracts/runtime';
 import { SettingsOverviewResponseSchema } from '@immersion/contracts/settings';
@@ -81,6 +82,15 @@ describe('buildApiApp', () => {
     const responses = await Promise.all(['/health', '/health/'].map((url) => app.inject({ method: 'GET', url })));
 
     expect(responses.map((response) => response.statusCode)).toEqual([200, 200]);
+  });
+
+  it('answers an unknown /api route with a 404 ApiProblem', async () => {
+    const { app } = await createTestApi();
+
+    const response = await app.inject({ method: 'GET', url: '/api/does-not-exist' });
+
+    expect(response.statusCode).toBe(404);
+    expect(ApiProblemSchema.parse(response.json())).toMatchObject({ code: 'route_not_found' });
   });
 
   it('logs requests through the injected logger, so one logger serves the whole app', async () => {
