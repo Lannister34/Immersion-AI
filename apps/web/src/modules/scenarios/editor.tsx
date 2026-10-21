@@ -6,6 +6,7 @@ import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } 
 import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { formatRelative } from '../../shared/lib/format-relative';
+import { ErrorBanner } from '../../shared/ui/error-banner';
 import { Field } from '../../shared/ui/field';
 import { ChatIcon, SparkleIcon, TrashIcon } from '../../shared/ui/icons';
 import { TemplateTextarea } from '../../shared/ui/template-textarea';
@@ -414,16 +415,8 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
                   value={form.tagsText}
                 />
               </Field>
-              {errorMessage ? (
-                <div className="card" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', padding: 12 }}>
-                  {errorMessage}
-                </div>
-              ) : null}
-              {deleteError ? (
-                <div className="card" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', padding: 12 }}>
-                  {deleteError}
-                </div>
-              ) : null}
+              {errorMessage ? <ErrorBanner>{errorMessage}</ErrorBanner> : null}
+              {deleteError ? <ErrorBanner>{deleteError}</ErrorBanner> : null}
             </form>
           )}
         </div>

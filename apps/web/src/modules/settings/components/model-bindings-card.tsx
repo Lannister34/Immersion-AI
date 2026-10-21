@@ -2,6 +2,7 @@ import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
 import { type FormEvent, useEffect, useState } from 'react';
 
 import { getApiErrorMessage } from '../../../shared/api/get-api-error-message';
+import { ErrorBanner } from '../../../shared/ui/error-banner';
 import { TrashIcon, XIcon } from '../../../shared/ui/icons';
 import { useDeleteModelBinding, useUpsertModelBinding } from '../mutations/use-model-binding-mutations';
 
@@ -158,11 +159,7 @@ export function ModelBindingsCard({ data }: ModelBindingsCardProps) {
           {upsertMutation.isPending ? '…' : 'Привязать'}
         </button>
       </form>
-      {mutationErrorMessage ? (
-        <div className="card" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', padding: 10 }}>
-          {mutationErrorMessage}
-        </div>
-      ) : null}
+      {mutationErrorMessage ? <ErrorBanner>{mutationErrorMessage}</ErrorBanner> : null}
       <div className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
         Связь модели с preset переопределяет активный preset, когда runtime сообщает имя загруженной модели.
       </div>

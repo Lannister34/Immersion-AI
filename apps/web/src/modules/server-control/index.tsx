@@ -10,6 +10,7 @@ import { type ReactNode, useState } from 'react';
 import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { pluralRu } from '../../shared/lib/plural';
+import { ErrorBanner } from '../../shared/ui/error-banner';
 import { CpuIcon, PlayIcon, PowerIcon, SearchIcon, SlidersIcon } from '../../shared/ui/icons';
 import { describeVisionSupport, generationReadinessQueryOptions } from '../generation';
 import { saveProviderSettings } from './api/save-provider-settings';
@@ -206,21 +207,10 @@ export function ServerControlScreen() {
               </button>
             </div>
           </div>
-          {modeChangeError ? (
-            <div
-              className="card"
-              style={{ borderColor: 'var(--danger)', color: 'var(--danger)', marginTop: 10, padding: 10 }}
-            >
-              {modeChangeError}
-            </div>
-          ) : null}
+          {modeChangeError ? <ErrorBanner>{modeChangeError}</ErrorBanner> : null}
         </div>
         <div className="page__body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {runtimeActionErrorMessage ? (
-            <div className="card" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', padding: 10 }}>
-              {runtimeActionErrorMessage}
-            </div>
-          ) : null}
+          {runtimeActionErrorMessage ? <ErrorBanner>{runtimeActionErrorMessage}</ErrorBanner> : null}
           {activeMode === 'builtin' && overview ? (
             <>
               <section

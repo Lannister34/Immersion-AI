@@ -7,6 +7,7 @@ import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
 import { formatRelative } from '../../shared/lib/format-relative';
 import { pluralRu } from '../../shared/lib/plural';
+import { ErrorBanner } from '../../shared/ui/error-banner';
 import { Field } from '../../shared/ui/field';
 import { PlusIcon, SparkleIcon, TrashIcon } from '../../shared/ui/icons';
 import { generateLorebookDraft, useGenerationAvailability } from '../generation';
@@ -411,16 +412,8 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
                 </div>
               )}
 
-              {errorMessage ? (
-                <div className="card" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', padding: 12 }}>
-                  {errorMessage}
-                </div>
-              ) : null}
-              {deleteError ? (
-                <div className="card" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', padding: 12 }}>
-                  {deleteError}
-                </div>
-              ) : null}
+              {errorMessage ? <ErrorBanner>{errorMessage}</ErrorBanner> : null}
+              {deleteError ? <ErrorBanner>{deleteError}</ErrorBanner> : null}
             </form>
           )}
         </div>

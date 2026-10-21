@@ -7,6 +7,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
 
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
+import { ErrorBanner } from '../../shared/ui/error-banner';
 import { FolderIcon, PlusIcon, SearchIcon, XIcon } from '../../shared/ui/icons';
 import { pickRuntimeDirectory } from './api/pick-runtime-directory';
 import { saveRuntimeConfig } from './api/save-runtime-config';
@@ -141,11 +142,7 @@ export function ModelDirsCard({ dirsStatus, serverConfig }: ModelDirsCardProps) 
             Окно выбора папки открыто поверх остальных окон — выберите каталог или закройте его.
           </span>
         ) : null}
-        {errorMessage ? (
-          <div className="card" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', padding: 10 }}>
-            {errorMessage}
-          </div>
-        ) : null}
+        {errorMessage ? <ErrorBanner>{errorMessage}</ErrorBanner> : null}
         <span className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
           {saveMutation.isPending
             ? 'Сохраняем…'
