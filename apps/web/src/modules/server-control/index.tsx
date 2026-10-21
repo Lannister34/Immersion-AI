@@ -20,6 +20,8 @@ import { ModelDirsCard } from './model-dirs-card';
 import { providerSettingsQueryKey, providerSettingsQueryOptions } from './queries/provider-settings-query';
 import { runtimeOverviewQueryKey, runtimeOverviewQueryOptions } from './queries/runtime-overview-query';
 import { ServerLogsCard } from './server-logs-card';
+import { toModelRowState } from './view-models/model-row-state';
+import { canStopRuntime } from './view-models/runtime-stop-availability';
 
 function toProviderCommand(snapshot: ProviderSettingsSnapshot, mode: ProviderMode): UpdateProviderSettingsCommand {
   return {
@@ -244,6 +246,11 @@ export function ServerControlScreen() {
                       </span>
                     ) : null}
                   </div>
+                  {status === 'error' && overview.serverStatus.error ? (
+                    <div className="row">
+                      <span className="pill pill--danger">{overview.serverStatus.error}</span>
+                    </div>
+                  ) : null}
                   <div className="row gap-16 muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
                     <span>port {overview.serverConfig.port}</span>
                     {overview.serverStatus.pid ? <span>pid {overview.serverStatus.pid}</span> : null}
@@ -260,7 +267,7 @@ export function ServerControlScreen() {
                   >
                     <SlidersIcon size={13} /> Параметры
                   </button>
-                  {status === 'running' ? (
+                  {canStopRuntime(status) ? (
                     <button
                       className="btn btn--danger"
                       disabled={stopRuntimeMutation.isPending}
@@ -325,7 +332,7 @@ export function ServerControlScreen() {
                       </tr>
                     ) : (
                       filteredModels.map((model) => {
-                        const isActive = model.name === activeModelName;
+                        const { canStart, isActive } = toModelRowState(model, overview.serverStatus);
                         return (
                           <tr key={model.path} style={isActive ? { background: 'var(--accent-soft)' } : undefined}>
                             <td>
@@ -366,7 +373,7 @@ export function ServerControlScreen() {
                               )}
                             </td>
                             <td style={{ textAlign: 'right' }}>
-                              {isActive ? null : (
+                              {canStart ? (
                                 <button
                                   className="btn btn--xs btn--ghost-bordered"
                                   disabled={startRuntimeMutation.isPending}
@@ -385,7 +392,7 @@ export function ServerControlScreen() {
                                 >
                                   <PlayIcon size={11} /> Запустить
                                 </button>
-                              )}
+                              ) : null}
                             </td>
                           </tr>
                         );

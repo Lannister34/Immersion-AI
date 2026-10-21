@@ -10,15 +10,18 @@ import {
 
 import { readDataRoot } from '../../../config/read-api-config.js';
 import { getLlmServerRuntimeConfig } from '../../settings/application/get-llm-server-runtime-config.js';
+import { isSameModelFile } from '../domain/same-model-file.js';
 import { pairVisionProjectors, type ScannedGgufFile } from '../domain/vision-projector-pairing.js';
 import { getLlmProcessManager } from '../infrastructure/llm-process-manager.js';
 import { normalizeRuntimeConfig } from './runtime-config.js';
 
 const MODEL_SCAN_TTL_MS = 3_000;
 
+type ScannedModelSummary = Omit<RuntimeModelSummary, 'isActive'>;
+
 interface RuntimeModelScanResult {
   directories: RuntimeModelsDirStatus[];
-  models: RuntimeModelSummary[];
+  models: ScannedModelSummary[];
 }
 
 interface ModelScanCacheEntry {
@@ -49,12 +52,19 @@ async function statFileSize(filePath: string) {
   }
 }
 
-interface ScannedModelFile extends Omit<RuntimeModelSummary, 'visionProjectorPath'>, ScannedGgufFile {}
+interface ScannedModelFile extends Omit<ScannedModelSummary, 'visionProjectorPath'>, ScannedGgufFile {}
 
-function toModelSummaries(files: ScannedModelFile[]): RuntimeModelSummary[] {
+function toModelSummaries(files: ScannedModelFile[]): ScannedModelSummary[] {
   return pairVisionProjectors(files)
-    .map(({ containingDirectory: _containingDirectory, ...model }): RuntimeModelSummary => model)
+    .map(({ containingDirectory: _containingDirectory, ...model }): ScannedModelSummary => model)
     .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function markActiveModel(models: ScannedModelSummary[], activeModelPath: string | null): RuntimeModelSummary[] {
+  return models.map((model) => ({
+    ...model,
+    isActive: activeModelPath !== null && isSameModelFile(model.path, activeModelPath, process.platform),
+  }));
 }
 
 async function scanModels(modelsDirs: string[]): Promise<RuntimeModelScanResult> {
@@ -164,7 +174,7 @@ export async function getRuntimeOverview(): Promise<RuntimeOverviewResponse> {
       ...runtimeConfig,
       modelsDirs,
     },
-    models: scan.models,
+    models: markActiveModel(scan.models, serverStatus.modelPath),
     modelsDirsStatus: scan.directories,
   });
 }

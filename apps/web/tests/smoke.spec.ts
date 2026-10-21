@@ -1,4 +1,5 @@
 import { type ChatGenerationSettingsDto, ChatGenerationSettingsDtoSchema } from '@immersion/contracts/chats';
+import type { RuntimeOverviewResponse, RuntimeStatusSnapshot } from '@immersion/contracts/runtime';
 import { expect, type Page, test } from '@playwright/test';
 
 import { resetSmokeData } from './smoke-data-root.js';
@@ -85,6 +86,60 @@ test('adds and removes a models directory on /server without a save step, keepin
   await page.reload();
   await page.getByRole('button', { name: 'Параметры' }).click();
   await expect(page.getByText('C:\\smoke-models-extra')).toBeHidden();
+});
+
+test('shows a failed model start with its error and logs and lets it be retried', async ({ page }) => {
+  const startFailure = 'Process exited with code 1';
+  const failedLoadLogLine = '[stderr] llama_model_load: не удалось выделить буфер CUDA';
+  const modelsDir = '/smoke-models';
+  const failedModel = {
+    name: 'nested/secondary.gguf',
+    path: `${modelsDir}/nested/secondary.gguf`,
+    size: 4_368_438_976,
+    sourceDirectory: modelsDir,
+    visionProjectorPath: null,
+    isActive: true,
+  };
+  let serverStatus: RuntimeStatusSnapshot = {
+    error: null,
+    model: 'secondary.gguf',
+    modelPath: failedModel.path,
+    pid: 4242,
+    port: 5001,
+    status: 'starting',
+  };
+  const overview = (): RuntimeOverviewResponse => ({
+    engine: { defaultModelsDir: modelsDir, executablePath: '/smoke-bin/llama-server', found: true },
+    models: [failedModel],
+    modelsDirsStatus: [{ exists: true, path: modelsDir }],
+    serverConfig: {
+      contextSize: 8192,
+      flashAttention: true,
+      gpuLayers: 99,
+      modelsDirs: [modelsDir],
+      port: 5001,
+      threads: 0,
+    },
+    serverStatus,
+  });
+  await page.route('**/api/runtime/overview', (route) => route.fulfill({ json: overview() }));
+  await page.route('**/api/runtime/logs', (route) =>
+    route.fulfill({ json: { lines: [failedLoadLogLine], status: serverStatus.status } }),
+  );
+
+  await page.goto('/server');
+  await page.getByRole('button', { name: 'Встроенный' }).click();
+  const failedModelRow = page.getByRole('row', { name: /^nested\/secondary\.gguf/ });
+  await expect(failedModelRow.getByText('запускается')).toBeVisible();
+  await expect(page.getByText(failedLoadLogLine)).toBeHidden();
+
+  serverStatus = { ...serverStatus, error: startFailure, pid: null, status: 'error' };
+
+  await expect(page.getByRole('link', { name: /Ошибка запуска/ })).toContainText(startFailure);
+  await expect(page.getByRole('main').getByText(startFailure)).toBeVisible();
+  await expect(page.getByText(failedLoadLogLine)).toBeVisible();
+  await expect(failedModelRow.getByRole('button', { name: 'Запустить' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Остановить' })).toBeVisible();
 });
 
 test('renders editable profile and sampler sections on /settings', async ({ page }) => {

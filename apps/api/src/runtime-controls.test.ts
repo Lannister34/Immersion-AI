@@ -12,8 +12,53 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApiApp } from './app.js';
 import { selectRuntimeInstallPlan } from './modules/runtime/application/install-runtime.js';
 
+const RUNTIME_CONFIG = { port: 5001, gpuLayers: 0, contextSize: 8192, flashAttention: false, threads: 0 };
+
+function spelledWithForwardSlashes(filePath: string): string {
+  return filePath.split(path.sep).join('/');
+}
+
 describe('runtime control routes', () => {
   let dataRoot = '';
+
+  async function leaveRuntimeRunningFromPreviousApiProcess(modelPath: string) {
+    await fs.writeFile(
+      path.join(dataRoot, '.llm-server.json'),
+      JSON.stringify({ model: path.basename(modelPath), modelPath, pid: process.pid, port: 5001 }),
+      'utf8',
+    );
+  }
+
+  async function scanModelsIn(app: ReturnType<typeof buildApiApp>, modelsDir: string) {
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/runtime/config',
+      payload: { ...RUNTIME_CONFIG, modelsDirs: [modelsDir] },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    return RuntimeOverviewResponseSchema.parse(response.json());
+  }
+
+  async function readActiveModels(app: ReturnType<typeof buildApiApp>) {
+    const response = await app.inject({ method: 'GET', url: '/api/runtime/overview' });
+    const overview = RuntimeOverviewResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(overview.serverStatus.status).toBe('running');
+
+    return Object.fromEntries(overview.models.map((model) => [model.name, model.isActive]));
+  }
+
+  async function writeTwoModelsSharingAFileName() {
+    const modelsDir = path.join(dataRoot, 'Модели');
+    await fs.mkdir(path.join(modelsDir, 'qwen'), { recursive: true });
+    await fs.writeFile(path.join(modelsDir, 'qwen', 'Квен-14B.Q4_K_M.gguf'), 'gguf');
+    await fs.writeFile(path.join(modelsDir, 'Квен-14B.Q4_K_M.gguf'), 'gguf');
+
+    return modelsDir;
+  }
 
   beforeEach(async () => {
     dataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'immersion-runtime-'));
@@ -186,6 +231,40 @@ describe('runtime control routes', () => {
       'text/Qwen-VL-Q2_K.gguf': null,
       'vl/Qwen-VL-Q4_K_M.gguf': projectorPath,
       'vl/Qwen-VL-Q8_0.gguf': projectorPath,
+    });
+
+    await app.close();
+  });
+
+  it('marks the listed model the runtime runs as active, though its start path used forward slashes and ".."', async () => {
+    const modelsDir = await writeTwoModelsSharingAFileName();
+    const app = buildApiApp();
+
+    const idle = await scanModelsIn(app, modelsDir);
+    expect(idle.models.map((model) => model.isActive)).toEqual([false, false]);
+
+    await leaveRuntimeRunningFromPreviousApiProcess(
+      `${spelledWithForwardSlashes(modelsDir)}/mistral/../qwen/Квен-14B.Q4_K_M.gguf`,
+    );
+
+    expect(await readActiveModels(app)).toEqual({
+      'qwen/Квен-14B.Q4_K_M.gguf': true,
+      'Квен-14B.Q4_K_M.gguf': false,
+    });
+
+    await app.close();
+  });
+
+  it('marks no listed model active while the runtime runs a file outside the scanned folders', async () => {
+    const modelsDir = await writeTwoModelsSharingAFileName();
+    const app = buildApiApp();
+    await scanModelsIn(app, modelsDir);
+
+    await leaveRuntimeRunningFromPreviousApiProcess(path.join(dataRoot, 'elsewhere', 'Квен-14B.Q4_K_M.gguf'));
+
+    expect(await readActiveModels(app)).toEqual({
+      'qwen/Квен-14B.Q4_K_M.gguf': false,
+      'Квен-14B.Q4_K_M.gguf': false,
     });
 
     await app.close();
