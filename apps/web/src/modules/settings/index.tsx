@@ -11,6 +11,8 @@ import { settingsOverviewQueryOptions } from './queries/settings-overview-query'
 export { getSettingsOverview } from './api/get-settings-overview';
 export { useCreateSamplerPreset } from './mutations/use-sampler-preset-mutations';
 export { settingsOverviewQueryKey, settingsOverviewQueryOptions } from './queries/settings-overview-query';
+export { CONTEXT_TRIM_FIELD } from './view-models/context-trim-field';
+export { SAMPLER_PARAMETER_FIELDS, type SamplerParameterField } from './view-models/sampler-parameter-fields';
 
 interface SettingsSection {
   id: string;
