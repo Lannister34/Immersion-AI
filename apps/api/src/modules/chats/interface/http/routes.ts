@@ -11,6 +11,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
 import { CharacterNotFoundError } from '../../../characters/index.js';
 import { ScenarioNotFoundError } from '../../../scenarios/index.js';
+import { ReplyLimitExceedsContextError } from '../../../settings/index.js';
 import { ChatMessageNotFoundError, ChatNotFoundError } from '../../application/append-chat-messages.js';
 import { branchChat } from '../../application/branch-chat.js';
 import {
@@ -62,6 +63,10 @@ const toProblem = createToProblem((error) => {
 
   if (error instanceof InvalidChatGenerationSettingsError) {
     return problem(400, 'invalid_chat_generation_settings', error.message);
+  }
+
+  if (error instanceof ReplyLimitExceedsContextError) {
+    return problem(400, 'reply_limit_exceeds_context', error.message);
   }
 
   if (error instanceof ChatAttachmentNotFoundError) {

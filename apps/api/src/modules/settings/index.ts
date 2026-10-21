@@ -2,3 +2,4 @@ export const settingsModuleId = 'settings' as const;
 
 export { resolveSamplerPresetForModel } from './application/active-sampler-preset.js';
 export { getSettingsOverview } from './application/get-settings-overview.js';
+export { ReplyLimitExceedsContextError } from './application/reply-limit-exceeds-context-error.js';

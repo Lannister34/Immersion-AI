@@ -7,8 +7,19 @@ export interface ContextMeterProps {
   stats: ContextStats;
 }
 
+const ONLY_LAST_MESSAGE_HINT =
+  'Лимит ответа не меньше окна контекста: история переписки не помещается в промпт. Уменьшите лимит ответа или увеличьте окно контекста.';
+
 function formatNumber(value: number): string {
   return value.toLocaleString('ru-RU');
+}
+
+function OnlyLastMessageBadge() {
+  return (
+    <span className="pill pill--warn mt-4" title={ONLY_LAST_MESSAGE_HINT}>
+      только последнее сообщение
+    </span>
+  );
 }
 
 export function ContextMeter({ stats }: ContextMeterProps) {
@@ -46,10 +57,12 @@ export function ContextMeter({ stats }: ContextMeterProps) {
   const rows: [string, string][] = [
     ['системный промпт', formatNumber(stats.systemTokens)],
     ['переписка', formatNumber(stats.transcriptTokens)],
-    ['сообщений', formatNumber(stats.messageCount)],
+    ['сообщений в промпте', formatNumber(stats.messageCount)],
+    ['обрезано сообщений', formatNumber(stats.trimmedMessageCount)],
   ];
   const tailRows: [string, string][] = [
     ['окно контекста', formatNumber(stats.contextWindow)],
+    ['лимит ответа', formatNumber(stats.replyLimit)],
     ['предустановка', stats.presetName ?? '—'],
     ['подсчёт', isApproximate ? 'приблизительный' : 'точный'],
   ];
@@ -73,10 +86,13 @@ export function ContextMeter({ stats }: ContextMeterProps) {
           </span>
           <span className="tokenbar__track" style={{ display: 'block', marginTop: 4 }}>
             <span
-              className={ratio >= 0.8 ? 'tokenbar__fill tokenbar__fill--warn' : 'tokenbar__fill'}
+              className={
+                ratio >= 0.8 || stats.onlyLastMessageFits ? 'tokenbar__fill tokenbar__fill--warn' : 'tokenbar__fill'
+              }
               style={{ display: 'block', width: `${percent}%` }}
             />
           </span>
+          {stats.onlyLastMessageFits ? <OnlyLastMessageBadge /> : null}
         </span>
         <ChevronDownIcon className="chevron" size={12} />
       </button>

@@ -36,6 +36,7 @@ import type {
   ForkGenericChatInput,
   ListGenericChatsOptions,
   TruncateGenericChatMessagesOptions,
+  UpdateGenericChatGenerationSettingsOptions,
 } from '../application/chat-repository.js';
 import { joinContinuationContent } from '../application/continuation-content.js';
 import { deriveLastMessagePreview } from '../application/last-message-preview.js';
@@ -872,13 +873,20 @@ export class FileChatRepository implements ChatRepository {
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }
 
-  async updateGenericChatGenerationSettings(chatId: string, settings: ChatGenerationSettingsRecord, updatedAt: string) {
+  async updateGenericChatGenerationSettings(
+    chatId: string,
+    settings: ChatGenerationSettingsRecord,
+    updatedAt: string,
+    options?: UpdateGenericChatGenerationSettingsOptions,
+  ): Promise<ChatSessionRecord | null> {
     return chatWriteQueue.run(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 
       if (!currentSession) {
         return null;
       }
+
+      options?.assertWritable?.(currentSession.generationSettings);
 
       const filePath = resolveChatFilePath(chatId);
       const rawContent = await fs.readFile(filePath, 'utf8');

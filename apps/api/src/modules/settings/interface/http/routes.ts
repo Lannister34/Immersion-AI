@@ -14,6 +14,7 @@ import {
   ModelBindingNotFoundError,
   upsertModelBinding,
 } from '../../application/model-binding-mutations.js';
+import { ReplyLimitExceedsContextError } from '../../application/reply-limit-exceeds-context-error.js';
 import {
   createSamplerPreset,
   deleteSamplerPreset,
@@ -32,6 +33,10 @@ const toProblem = createToProblem((error) => {
 
   if (error instanceof LastSamplerPresetError) {
     return problem(409, 'last_sampler_preset', error.message);
+  }
+
+  if (error instanceof ReplyLimitExceedsContextError) {
+    return problem(400, 'reply_limit_exceeds_context', error.message);
   }
 
   if (error instanceof ModelBindingNotFoundError) {

@@ -1,6 +1,7 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
+import type { ContextBudgetStatus } from '@immersion/contracts/generation';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
-import type { PromptCharacterSnapshot } from '@immersion/domain/prompting';
+import { type PromptCharacterSnapshot, replyLimitExceedsContext } from '@immersion/domain/prompting';
 
 import type { ActiveSamplerPreset } from '../../settings/application/active-sampler-preset.js';
 import { assembleBasePrompt, type BasePromptAssemblyResult } from './assemble-base-prompt.js';
@@ -25,6 +26,7 @@ export interface ChatReplyPromptTokenEstimate {
 }
 
 export interface ChatReplyPromptDiagnostics {
+  budgetStatus: ContextBudgetStatus;
   promptSource: BasePromptAssemblyResult['source'];
   renderer: BasePromptAssemblyResult['diagnostics'];
   tokenCountMethod: TokenCountMethod;
@@ -256,6 +258,14 @@ function trimTranscriptToContextBudget(
   };
 }
 
+function toContextBudgetStatus(samplerPreset: ActiveSamplerPreset, trimmedMessageCount: number): ContextBudgetStatus {
+  if (replyLimitExceedsContext(samplerPreset)) {
+    return 'reply-exceeds-context';
+  }
+
+  return trimmedMessageCount > 0 ? 'trimmed' : 'fits';
+}
+
 function resolveDefaultSystemPromptTemplate(
   shouldUseContextualPromptSettings: boolean,
   character: PromptCharacterSnapshot | null,
@@ -380,6 +390,7 @@ function toBudgetedBundle(
 
   return {
     diagnostics: {
+      budgetStatus: toContextBudgetStatus(input.samplerPreset, budgetedPrompt.trimmedMessageCount),
       promptSource: untrimmed.basePrompt.source,
       renderer: untrimmed.basePrompt.diagnostics,
       tokenCountMethod,

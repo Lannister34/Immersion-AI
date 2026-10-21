@@ -170,6 +170,9 @@ export type ChatReplyPromptPreviewRendererDiagnostics = z.infer<typeof ChatReply
 export const TokenCountMethodSchema = z.enum(['approximate', 'exact']);
 export type TokenCountMethod = z.infer<typeof TokenCountMethodSchema>;
 
+export const ContextBudgetStatusSchema = z.enum(['fits', 'trimmed', 'reply-exceeds-context']);
+export type ContextBudgetStatus = z.infer<typeof ContextBudgetStatusSchema>;
+
 export const ChatReplyPromptPreviewTokenEstimateSchema = z.object({
   finalTotal: z.number().int().nonnegative(),
   promptBudget: z.number().int().nonnegative(),
@@ -183,6 +186,7 @@ export type ChatReplyPromptPreviewTokenEstimate = z.infer<typeof ChatReplyPrompt
 export const ChatReplyPromptPreviewResponseSchema = z.object({
   chatId: ChatIdSchema,
   diagnostics: z.object({
+    budgetStatus: ContextBudgetStatusSchema,
     messageCount: z.number().int().nonnegative(),
     promptSource: ChatReplyPromptPreviewSourceSchema,
     renderer: ChatReplyPromptPreviewRendererDiagnosticsSchema,
