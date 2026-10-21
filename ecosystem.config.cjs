@@ -24,7 +24,6 @@ module.exports = {
       name: 'immersion-web',
       cwd: path.resolve(projectRoot, 'apps/web'),
       script: path.resolve(projectRoot, 'apps/web/node_modules/vite/bin/vite.js'),
-      args: '--host 0.0.0.0 --port 4788',
       interpreter: node,
       watch: false,
       autorestart: true,

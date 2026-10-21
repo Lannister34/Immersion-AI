@@ -124,6 +124,24 @@ describe('the launcher gate', () => {
     assert.match(lines.at(-1), /runs only what the lockfile installed/);
   });
 
+  it('explains each rule that a launcher breaks once, after every violation', () => {
+    const repository = createRepository();
+    repository.track('ecosystem.config.cjs', "module.exports = { args: '--host 0.0.0.0 --port 4788' };\n");
+    repository.track('start.bat', `${DOWNLOADING_RUN}call corepack pnpm exec vite --host\r\n`);
+
+    const { exitCode, lines } = runLauncherGate({ root: repository.work, cwd: repository.work, paths: null });
+
+    assert.equal(exitCode, 1);
+    assert.deepEqual(lines.slice(0, 3), [
+      "ecosystem.config.cjs:1:27: non-loopback-host-bind: module.exports = { args: '--host 0.0.0.0 --port 4788' };",
+      'start.bat:1:6: downloading-package-run: call npx --yes concurrently',
+      'start.bat:2:30: non-loopback-host-bind: call corepack pnpm exec vite --host',
+    ]);
+    assert.equal(lines.length, 5);
+    assert.match(lines[3], /binds a server to this computer only/);
+    assert.match(lines[4], /runs only what the lockfile installed/);
+  });
+
   it('checks only the launchers among the given paths, read from the working tree, and skips a deleted one', () => {
     const repository = createRepository();
     repository.track('start.bat', '@echo off\r\n');
