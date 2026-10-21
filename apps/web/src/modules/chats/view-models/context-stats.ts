@@ -3,7 +3,10 @@ import type { ChatReplyPromptPreviewResponse, TokenCountMethod } from '@immersio
 export interface ContextStats {
   totalTokens: number;
   contextWindow: number;
+  replyLimit: number;
   messageCount: number;
+  trimmedMessageCount: number;
+  onlyLastMessageFits: boolean;
   systemTokens: number;
   transcriptTokens: number;
   tokenCountMethod: TokenCountMethod;
@@ -13,11 +16,15 @@ export interface ContextStats {
 
 export function toContextStats(preview: ChatReplyPromptPreviewResponse | undefined): ContextStats | undefined {
   if (!preview) return undefined;
-  const { tokenCountMethod, tokenEstimate, transcriptMessageCount } = preview.diagnostics;
+  const { budgetStatus, tokenCountMethod, tokenEstimate, transcriptMessageCount, trimmedMessageCount } =
+    preview.diagnostics;
   return {
     totalTokens: tokenEstimate.finalTotal,
     contextWindow: preview.effectiveSettings.sampling.maxContextLength,
+    replyLimit: preview.effectiveSettings.sampling.maxTokens,
     messageCount: transcriptMessageCount,
+    trimmedMessageCount,
+    onlyLastMessageFits: budgetStatus === 'reply-exceeds-context',
     systemTokens: tokenEstimate.system,
     transcriptTokens: tokenEstimate.transcriptAfterTrim,
     tokenCountMethod,

@@ -122,6 +122,7 @@ export async function previewChatReplyPrompt(
   return ChatReplyPromptPreviewResponseSchema.parse({
     chatId: command.chatId,
     diagnostics: {
+      budgetStatus: generationPlan.prompt.diagnostics.budgetStatus,
       messageCount: generationPlan.providerRequest.messages.length,
       promptSource: {
         kind: generationPlan.prompt.diagnostics.promptSource.kind,

@@ -5,9 +5,11 @@ import type {
   SetActiveSamplerPresetResponse,
   UpdateSamplerPresetCommand,
 } from '@immersion/contracts/settings';
+import { replyLimitExceedsContext } from '@immersion/domain/prompting';
 
 import { updateLegacyUserSettingsSource } from '../../../shared/infrastructure/legacy-settings-source.js';
 import { getSettingsOverview } from './get-settings-overview.js';
+import { ReplyLimitExceedsContextError } from './reply-limit-exceeds-context-error.js';
 import { encodeSamplerPreset, type StoredSamplerPreset } from './sampler-preset-encoding.js';
 import { generateUniquePresetId } from './sampler-preset-id.js';
 
@@ -49,6 +51,13 @@ function readStoredModelPresetMap(source: Record<string, unknown>): Record<strin
   return map;
 }
 
+function assertReplyLimitBelowContext(input: CreateSamplerPresetCommand | UpdateSamplerPresetCommand): void {
+  const settings = { maxContextLength: input.maxContextLength, maxTokens: input.maxTokens };
+  if (replyLimitExceedsContext(settings)) {
+    throw new ReplyLimitExceedsContextError(settings);
+  }
+}
+
 function projectMutationResponse(presetId: string): SamplerPresetMutationResponse {
   const overview = getSettingsOverview();
   const preset = overview.sampler.presets.find((entry) => entry.id === presetId);
@@ -62,6 +71,7 @@ function projectMutationResponse(presetId: string): SamplerPresetMutationRespons
 }
 
 export async function createSamplerPreset(input: CreateSamplerPresetCommand): Promise<SamplerPresetMutationResponse> {
+  assertReplyLimitBelowContext(input);
   let id = '';
 
   await updateLegacyUserSettingsSource((source) => {
@@ -83,6 +93,7 @@ export async function updateSamplerPreset(
   presetId: string,
   input: UpdateSamplerPresetCommand,
 ): Promise<SamplerPresetMutationResponse> {
+  assertReplyLimitBelowContext(input);
   await updateLegacyUserSettingsSource((source) => {
     const existing = readStoredPresets(source);
     const index = existing.findIndex((preset) => preset.id === presetId);

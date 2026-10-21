@@ -243,6 +243,63 @@ describe('token-accurate context budgeting', () => {
 
     expect(bundle.messages.map((message) => message.content)).toEqual(['OLD', 'LATEST', 'CONTINUE the reply.']);
     expect(bundle.diagnostics.trimmedMessageCount).toBe(0);
+    expect(bundle.diagnostics.budgetStatus).toBe('fits');
     expect(tokenCounter.calls).toHaveLength(1);
+  });
+});
+
+describe('context budget status', () => {
+  const history = [
+    userMessage('m1', 'Привет, капитан.'),
+    userMessage('m2', 'Шторм усиливается.'),
+    userMessage('m3', 'Держим курс на маяк.'),
+  ];
+
+  it('reports reply-exceeds-context and keeps only the last message when the reply limit equals the context', async () => {
+    const bundle = await buildChatReplyPromptBundleWithTokenCounter(
+      {
+        samplerPreset: { ...defaultSamplerPreset, maxContextLength: 32_768, maxTokens: 32_768 },
+        session: buildSession(history, 'Системный промпт'),
+        settings,
+      },
+      buildFakeTokenCounter({}),
+    );
+
+    expect(bundle.diagnostics.budgetStatus).toBe('reply-exceeds-context');
+    expect(bundle.diagnostics.trimmedMessageCount).toBe(2);
+    expect(bundle.messages.map((message) => message.content)).toEqual(['Системный промпт', 'Держим курс на маяк.']);
+  });
+
+  it('reports trimmed when a valid budget drops older messages', async () => {
+    const bundle = await buildChatReplyPromptBundleWithTokenCounter(
+      {
+        samplerPreset: {
+          ...defaultSamplerPreset,
+          contextTrimStrategy: 'trim_start',
+          maxContextLength: 4,
+          maxTokens: 2,
+        },
+        session: buildSession(history),
+        settings,
+      },
+      buildFakeTokenCounter({}),
+    );
+
+    expect(bundle.diagnostics.budgetStatus).toBe('trimmed');
+    expect(bundle.diagnostics.trimmedMessageCount).toBe(1);
+  });
+
+  it('reports fits when the whole history fits the budget left after the reply limit', async () => {
+    const bundle = await buildChatReplyPromptBundleWithTokenCounter(
+      {
+        samplerPreset: { ...defaultSamplerPreset, maxContextLength: 32_768, maxTokens: 32_764 },
+        session: buildSession(history),
+        settings,
+      },
+      buildFakeTokenCounter({}),
+    );
+
+    expect(bundle.diagnostics.budgetStatus).toBe('fits');
+    expect(bundle.diagnostics.trimmedMessageCount).toBe(0);
   });
 });

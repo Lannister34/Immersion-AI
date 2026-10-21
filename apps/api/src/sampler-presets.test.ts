@@ -11,6 +11,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildApiApp } from './app.js';
+import { snapshotDataRoot } from './test-support/data-root-snapshot.js';
 
 const BASE_PRESET = {
   contextTrimStrategy: 'trim_middle' as const,
@@ -151,6 +152,74 @@ describe('sampler preset routes', () => {
     });
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ code: 'sampler_preset_not_found' });
+
+    await app.close();
+  });
+
+  it('POST /sampler/presets refuses a reply limit equal to the context size and writes nothing', async () => {
+    const before = await snapshotDataRoot(temporaryDataRoot);
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/settings/sampler/presets',
+      payload: { ...BASE_PRESET, maxContextLength: 32_768, maxTokens: 32_768, name: 'Ролевая длинная' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      code: 'reply_limit_exceeds_context',
+      message:
+        'Лимит ответа (32768) должен быть меньше размера контекста (32768): иначе в промпт попадает только последнее сообщение.',
+    });
+    expect(await snapshotDataRoot(temporaryDataRoot)).toEqual(before);
+
+    await app.close();
+  });
+
+  it('PUT /sampler/presets/:presetId refuses a reply limit above the context size and writes nothing', async () => {
+    const before = await snapshotDataRoot(temporaryDataRoot);
+    const app = buildApiApp();
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/sampler/presets/default',
+      payload: { ...BASE_PRESET, maxContextLength: 4096, maxTokens: 4097, name: 'Ночная смена' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: 'reply_limit_exceeds_context' });
+    expect(await snapshotDataRoot(temporaryDataRoot)).toEqual(before);
+
+    await app.close();
+  });
+
+  it('keeps a stored preset whose reply limit reaches the context readable, and lets it be repaired', async () => {
+    await fs.writeFile(
+      path.join(temporaryDataRoot, 'user-settings.json'),
+      JSON.stringify({
+        activePresetId: 'dolgiy',
+        samplerPresets: [
+          { ...encodeStored('dolgiy', 'Долгий разговор'), max_context_length: 32_768, max_length: 32_768 },
+        ],
+        userName: 'Тестер',
+      }),
+    );
+    const app = buildApiApp();
+    const overviewResponse = await app.inject({ method: 'GET', url: '/api/settings/overview' });
+    const overview = SettingsOverviewResponseSchema.parse(overviewResponse.json());
+
+    expect(overviewResponse.statusCode).toBe(200);
+    expect(overview.sampler.presets).toEqual([
+      expect.objectContaining({ id: 'dolgiy', maxContextLength: 32_768, maxTokens: 32_768, name: 'Долгий разговор' }),
+    ]);
+
+    const repairResponse = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/sampler/presets/dolgiy',
+      payload: { ...BASE_PRESET, maxContextLength: 32_768, maxTokens: 1024, name: 'Долгий разговор' },
+    });
+
+    expect(repairResponse.statusCode).toBe(200);
+    expect(SamplerPresetMutationResponseSchema.parse(repairResponse.json()).preset.maxTokens).toBe(1024);
 
     await app.close();
   });

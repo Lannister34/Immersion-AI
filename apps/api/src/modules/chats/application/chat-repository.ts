@@ -31,6 +31,10 @@ export interface TruncateGenericChatMessagesOptions {
   expectedRemovedMessages?: ReadonlyArray<Pick<ChatMessageRecord, 'content' | 'role'>>;
 }
 
+export interface UpdateGenericChatGenerationSettingsOptions {
+  assertWritable?: (current: ChatGenerationSettingsRecord) => void;
+}
+
 export interface ChatRepository {
   appendContinuationToLastAssistantMessage(
     chatId: string,
@@ -54,6 +58,7 @@ export interface ChatRepository {
     chatId: string,
     settings: ChatGenerationSettingsRecord,
     updatedAt: string,
+    options?: UpdateGenericChatGenerationSettingsOptions,
   ): Promise<ChatSessionRecord | null>;
   updateGenericChatLorebooks(
     chatId: string,

@@ -4,8 +4,9 @@ import {
   type UpdateChatGenerationSettingsResponse,
   UpdateChatGenerationSettingsResponseSchema,
 } from '@immersion/contracts/chats';
+import { type ReplyBudgetSettings, replyLimitExceedsContext } from '@immersion/domain/prompting';
 
-import { getSettingsOverview } from '../../settings/application/get-settings-overview.js';
+import { getSettingsOverview, ReplyLimitExceedsContextError } from '../../settings/index.js';
 import { FileChatRepository } from '../infrastructure/file-chat-repository.js';
 import { ChatNotFoundError } from './append-chat-messages.js';
 import type { ChatGenerationSettingsRecord } from './chat-records.js';
@@ -18,17 +19,47 @@ export class InvalidChatGenerationSettingsError extends Error {
   }
 }
 
-function assertSamplerPresetExists(presetId: string | null) {
+function findChatSamplerPreset(presetId: string | null): ReplyBudgetSettings | null {
   if (!presetId) {
-    return;
+    return null;
   }
 
   const settings = getSettingsOverview();
-  const exists = settings.sampler.presets.some((preset) => preset.id === presetId);
+  const preset = settings.sampler.presets.find((entry) => entry.id === presetId);
 
-  if (!exists) {
+  if (!preset) {
     throw new InvalidChatGenerationSettingsError(`Sampler preset not found: ${presetId}`);
   }
+
+  return preset;
+}
+
+function impossibleReplyBudget(
+  sampling: UpdateChatGenerationSettingsCommand['sampling'],
+  chatPreset: ReplyBudgetSettings | null,
+): ReplyBudgetSettings | null {
+  if (sampling.maxContextLength === null && sampling.maxTokens === null) {
+    return null;
+  }
+
+  const maxContextLength = sampling.maxContextLength ?? chatPreset?.maxContextLength ?? null;
+  const maxTokens = sampling.maxTokens ?? chatPreset?.maxTokens ?? null;
+
+  if (maxContextLength === null || maxTokens === null) {
+    return null;
+  }
+
+  const settings = { maxContextLength, maxTokens };
+
+  return replyLimitExceedsContext(settings) ? settings : null;
+}
+
+function keepsReplyBudgetFields(current: ChatGenerationSettingsRecord, next: ChatGenerationSettingsRecord): boolean {
+  return (
+    current.samplerPresetId === next.samplerPresetId &&
+    current.sampling.maxContextLength === next.sampling.maxContextLength &&
+    current.sampling.maxTokens === next.sampling.maxTokens
+  );
 }
 
 function toChatGenerationSettingsRecord(command: UpdateChatGenerationSettingsCommand): ChatGenerationSettingsRecord {
@@ -56,12 +87,20 @@ export async function updateChatGenerationSettings(
   input: unknown,
 ): Promise<UpdateChatGenerationSettingsResponse> {
   const command: UpdateChatGenerationSettingsCommand = UpdateChatGenerationSettingsCommandSchema.parse(input);
-  assertSamplerPresetExists(command.samplerPresetId);
+  const impossibleBudget = impossibleReplyBudget(command.sampling, findChatSamplerPreset(command.samplerPresetId));
+  const nextSettings = toChatGenerationSettingsRecord(command);
   const chatRepository = new FileChatRepository();
   const session = await chatRepository.updateGenericChatGenerationSettings(
     chatId,
-    toChatGenerationSettingsRecord(command),
+    nextSettings,
     new Date().toISOString(),
+    {
+      assertWritable: (current) => {
+        if (impossibleBudget && !keepsReplyBudgetFields(current, nextSettings)) {
+          throw new ReplyLimitExceedsContextError(impossibleBudget);
+        }
+      },
+    },
   );
 
   if (!session) {
