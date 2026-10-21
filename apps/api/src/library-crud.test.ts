@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { CharacterDetailResponseSchema, CharacterListResponseSchema } from '@immersion/contracts/characters';
+import { ApiProblemSchema } from '@immersion/contracts/common';
 import { LorebookDetailResponseSchema, LorebookListResponseSchema } from '@immersion/contracts/lorebooks';
 import { ScenarioDetailResponseSchema, ScenarioListResponseSchema } from '@immersion/contracts/scenarios';
 import { describe, expect, it } from 'vitest';
@@ -162,6 +163,22 @@ describe('library CRUD routes', () => {
         url: `/api/characters/${encodeURIComponent(createPayload.character.id)}`,
       });
       expect(missingResponse.statusCode).toBe(404);
+    });
+
+    it('a missing character is 404 and logged at info, not error', async () => {
+      const { app, logs } = api();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/characters/${encodeURIComponent('Нет такой героини.json')}`,
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({ code: 'character_not_found', message: 'Character not found.' });
+      expect(logs.lines).toContainEqual(
+        expect.objectContaining({ code: 'character_not_found', level: 'info', statusCode: 404 }),
+      );
+      expect(logs.lines.filter((line) => line.level === 'error')).toEqual([]);
     });
 
     it('reports chat usage stats from the chat index on the character list', async () => {
@@ -509,6 +526,37 @@ describe('library CRUD routes', () => {
         url: `/api/lorebooks/${encodeURIComponent(createPayload.lorebook.id)}`,
       });
       expect(missingResponse.statusCode).toBe(404);
+    });
+
+    it('reports a stored lorebook that breaks the response contract as a server error', async () => {
+      const worldsDir = path.join(api().dataRoot, 'worlds');
+      await fs.mkdir(worldsDir, { recursive: true });
+      await fs.writeFile(path.join(worldsDir, 'Mr..json'), JSON.stringify({ name: 'Mr.', entries: [] }), 'utf8');
+
+      const { app, logs } = api();
+      const response = await app.inject({ method: 'GET', url: '/api/lorebooks' });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({ code: 'internal_error', message: 'Unexpected error.' });
+      expect(logs.lines).toContainEqual(
+        expect.objectContaining({ err: expect.objectContaining({ type: 'ZodError' }), level: 'error' }),
+      );
+    });
+
+    it('rejects a lorebook body that is not JSON with 400 invalid_request and writes nothing', async () => {
+      const { app, dataRoot } = api();
+      const entriesBefore = await fs.readdir(dataRoot);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/lorebooks',
+        headers: { 'content-type': 'application/json' },
+        payload: '{',
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(ApiProblemSchema.parse(response.json())).toMatchObject({ code: 'invalid_request' });
+      expect(await fs.readdir(dataRoot)).toEqual(entriesBefore);
     });
   });
 });
