@@ -1,12 +1,66 @@
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+  useLocation,
+} from '@tanstack/react-router';
+import { act, render, screen } from '@testing-library/react';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { stubFetch } from './stub-fetch';
 import { UnarrangedFetchError } from './unarranged-fetch-guard';
 
+type JsdomErrorListener = (error: Error) => void;
+
+interface JsdomVirtualConsole {
+  on(event: 'jsdomError', listener: JsdomErrorListener): void;
+  off(event: 'jsdomError', listener: JsdomErrorListener): void;
+}
+
 async function loadDomFetchGuard() {
   const { domFetchGuard } = await import('./dom-fetch-guard');
 
   return domFetchGuard;
+}
+
+function isJsdomVirtualConsole(value: unknown): value is JsdomVirtualConsole {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'on' in value &&
+    typeof value.on === 'function' &&
+    'off' in value &&
+    typeof value.off === 'function'
+  );
+}
+
+function collectJsdomReports(): string[] {
+  const environment: unknown = Reflect.get(globalThis, 'jsdom');
+  const virtualConsole: unknown =
+    typeof environment === 'object' && environment !== null ? Reflect.get(environment, 'virtualConsole') : undefined;
+
+  if (!isJsdomVirtualConsole(virtualConsole)) {
+    throw new Error('The dom project runs without the jsdom virtual console.');
+  }
+
+  const reports: string[] = [];
+  const collect: JsdomErrorListener = (error) => {
+    reports.push(error.message);
+  };
+  virtualConsole.on('jsdomError', collect);
+  onTestFinished(() => {
+    virtualConsole.off('jsdomError', collect);
+  });
+
+  return reports;
+}
+
+function LocationName() {
+  const pathname = useLocation({ select: (location) => location.pathname });
+
+  return <p>{`at ${pathname}`}</p>;
 }
 
 describe('the dom setup', () => {
@@ -44,5 +98,33 @@ describe('the dom setup', () => {
 
     await expect(response.json()).resolves.toEqual({ ok: true });
     expect(stub).toHaveBeenCalledWith('/api/settings');
+  });
+
+  it('replaces the scrollTo that jsdom only reports as not implemented with one that does nothing', () => {
+    const reports = collectJsdomReports();
+
+    expect(window.scrollTo(0, 240)).toBeUndefined();
+    expect(window.scrollTo({ top: 240, left: 80 })).toBeUndefined();
+
+    expect([window.scrollX, window.scrollY]).toEqual([0, 0]);
+    expect(reports).toEqual([]);
+  });
+
+  it('lets a test navigate a router, which scrolls the window after each route it renders, without a stub', async () => {
+    const reports = collectJsdomReports();
+    const rootRoute = createRootRoute();
+    const pageRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$page', component: LocationName });
+    const router = createRouter({
+      history: createMemoryHistory({ initialEntries: ['/first'] }),
+      routeTree: rootRoute.addChildren([pageRoute]),
+    });
+    await router.load();
+    render(<RouterProvider router={router} />);
+    await screen.findByText('at /first');
+
+    act(() => router.history.push('/second'));
+
+    expect(await screen.findByText('at /second')).toBeDefined();
+    expect(reports).toEqual([]);
   });
 });
