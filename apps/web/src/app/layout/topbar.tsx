@@ -3,23 +3,27 @@ import type { ReactNode } from 'react';
 
 import { ChevronRightIcon } from '../../shared/ui/icons';
 
-export type CrumbPath = '/chat' | '/characters' | '/scenarios' | '/lorebooks' | '/settings' | '/server';
+type CrumbPath = '/chat' | '/characters' | '/scenarios' | '/lorebooks' | '/settings' | '/server';
 
-export interface Crumb {
+interface TopbarCrumb {
   label: string;
   strong?: boolean;
   to?: CrumbPath;
 }
 
-interface TopbarProps {
-  crumbs: Crumb[];
-  actions?: ReactNode;
+interface CrumbProps {
+  crumb: TopbarCrumb;
 }
 
-function renderCrumb(crumb: Crumb) {
+function Crumb({ crumb }: CrumbProps) {
   const label = crumb.strong ? <strong>{crumb.label}</strong> : <span>{crumb.label}</span>;
 
   return crumb.to ? <Link to={crumb.to}>{label}</Link> : label;
+}
+
+interface TopbarProps {
+  crumbs: TopbarCrumb[];
+  actions?: ReactNode;
 }
 
 export function Topbar({ crumbs, actions }: TopbarProps) {
@@ -33,7 +37,7 @@ export function Topbar({ crumbs, actions }: TopbarProps) {
                 <ChevronRightIcon size={12} />
               </span>
             ) : null}
-            {renderCrumb(c)}
+            <Crumb crumb={c} />
           </span>
         ))}
       </div>

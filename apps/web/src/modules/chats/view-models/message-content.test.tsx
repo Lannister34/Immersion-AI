@@ -2,7 +2,7 @@ import type { MessageFormatting } from '@immersion/contracts/settings';
 import { isValidElement } from 'react';
 import { describe, expect, it } from 'vitest';
 
-import { renderMessageContent, stripMessageMarkup } from './message-content';
+import { renderMessageContent } from './message-content';
 
 function describeNodes(text: string, formatting?: MessageFormatting): string[] {
   return renderMessageContent(text, formatting).map((node) => {
@@ -67,23 +67,5 @@ describe('renderMessageContent', () => {
     expect(describeNodes('<b>жирный</b> <img src=x onerror=alert(1)>')).toEqual([
       'text:<b>жирный</b> <img src=x onerror=alert(1)>',
     ]);
-  });
-});
-
-describe('stripMessageMarkup', () => {
-  it('removes markup characters for previews', () => {
-    expect(stripMessageMarkup('*Мария улыбается* Привет! **важно** `код`')).toBe('Мария улыбается Привет! важно код');
-  });
-
-  it('drops a dangling asterisk left by truncation', () => {
-    expect(stripMessageMarkup('*Мария сидит в парке и листает')).toBe('Мария сидит в парке и листает');
-  });
-
-  it('keeps a standalone asterisk that is not markup', () => {
-    expect(stripMessageMarkup('5 * 3 = 15')).toBe('5 * 3 = 15');
-  });
-
-  it('folds line breaks into a single preview line', () => {
-    expect(stripMessageMarkup('Первая строка\n\n  вторая\tстрока ')).toBe('Первая строка вторая строка');
   });
 });

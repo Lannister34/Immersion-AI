@@ -1,52 +1,30 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { createRootRouteWithContext, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import { createRootRouteWithContext, createRoute, createRouter } from '@tanstack/react-router';
 
-import { CharacterEditorScreen, CharactersScreen } from '../../modules/characters';
+import { CharactersScreen } from '../../modules/characters';
 import { HomeScreen } from '../../modules/chat-shell';
-import { ChatListScreen, ChatSessionScreen } from '../../modules/chats';
-import { LorebookEditorScreen, LorebooksScreen } from '../../modules/lorebooks';
-import { ScenarioEditorScreen, ScenariosScreen } from '../../modules/scenarios';
+import { LorebooksScreen } from '../../modules/lorebooks';
+import { ScenariosScreen } from '../../modules/scenarios';
 import { ServerControlScreen } from '../../modules/server-control';
 import { SettingsScreen } from '../../modules/settings';
-import { RouteStatusScreen } from '../../shared/ui/route-status-screen';
+import { CharacterEditorRouteComponent } from '../../routes/character-editor-route-component';
+import { CharacterNewRouteComponent } from '../../routes/character-new-route-component';
+import { ChatIndexRouteComponent } from '../../routes/chat-index-route-component';
+import { ChatSessionRouteComponent } from '../../routes/chat-session-route-component';
+import { LorebookEditorRouteComponent } from '../../routes/lorebook-editor-route-component';
+import { LorebookNewRouteComponent } from '../../routes/lorebook-new-route-component';
+import { NotFoundRouteComponent } from '../../routes/not-found-route-component';
+import { RouteErrorComponent } from '../../routes/route-error-component';
+import { ScenarioEditorRouteComponent } from '../../routes/scenario-editor-route-component';
+import { ScenarioNewRouteComponent } from '../../routes/scenario-new-route-component';
 import { RootLayout } from '../layout/root-layout';
 
 interface AppRouterContext {
   queryClient: QueryClient;
 }
 
-function RootRouteComponent() {
-  return <RootLayout />;
-}
-
-function NotFoundRouteComponent() {
-  return (
-    <RouteStatusScreen
-      description="Проверьте адрес или вернитесь в доступные разделы приложения."
-      eyebrow="маршрут"
-      title="Страница не найдена"
-    />
-  );
-}
-
-function RouteErrorComponent() {
-  return (
-    <RouteStatusScreen
-      description="Во время загрузки страницы произошла ошибка. Обновите экран и попробуйте снова."
-      eyebrow="ошибка"
-      title="Не удалось открыть раздел"
-    />
-  );
-}
-
-function ChatSessionRouteComponent() {
-  const { chatId } = chatSessionRoute.useParams();
-
-  return <ChatSessionScreen chatId={chatId} />;
-}
-
 const rootRoute = createRootRouteWithContext<AppRouterContext>()({
-  component: RootRouteComponent,
+  component: RootLayout,
   errorComponent: RouteErrorComponent,
   notFoundComponent: NotFoundRouteComponent,
 });
@@ -65,12 +43,6 @@ function validateChatListSearch(search: Record<string, unknown>): ChatListSearch
   const character = typeof search.character === 'string' ? search.character.trim() : '';
 
   return character.length > 0 ? { character } : {};
-}
-
-function ChatIndexRouteComponent() {
-  const { character } = chatIndexRoute.useSearch();
-
-  return <ChatListScreen characterFilter={character ?? null} />;
 }
 
 const chatIndexRoute = createRoute({
@@ -92,15 +64,6 @@ const charactersRoute = createRoute({
   component: CharactersScreen,
 });
 
-function CharacterNewRouteComponent() {
-  return <CharacterEditorScreen characterId={null} />;
-}
-
-function CharacterEditorRouteComponent() {
-  const { characterId } = characterEditorRoute.useParams();
-  return <CharacterEditorScreen characterId={characterId} />;
-}
-
 const characterNewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/characters/new',
@@ -119,15 +82,6 @@ const scenariosRoute = createRoute({
   component: ScenariosScreen,
 });
 
-function ScenarioNewRouteComponent() {
-  return <ScenarioEditorScreen scenarioId={null} />;
-}
-
-function ScenarioEditorRouteComponent() {
-  const { scenarioId } = scenarioEditorRoute.useParams();
-  return <ScenarioEditorScreen scenarioId={scenarioId} />;
-}
-
 const scenarioNewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/scenarios/new',
@@ -145,15 +99,6 @@ const lorebooksRoute = createRoute({
   path: '/lorebooks',
   component: LorebooksScreen,
 });
-
-function LorebookNewRouteComponent() {
-  return <LorebookEditorScreen lorebookId={null} />;
-}
-
-function LorebookEditorRouteComponent() {
-  const { lorebookId } = lorebookEditorRoute.useParams();
-  return <LorebookEditorScreen lorebookId={lorebookId} />;
-}
 
 const lorebookNewRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -196,7 +141,9 @@ const routeTree = rootRoute.addChildren([
   settingsRoute,
 ]);
 
-export function createAppRouter(queryClient: QueryClient) {
+export type AppRouter = ReturnType<typeof createRouter<typeof routeTree>>;
+
+export function createAppRouter(queryClient: QueryClient): AppRouter {
   return createRouter({
     routeTree,
     context: {
@@ -206,18 +153,8 @@ export function createAppRouter(queryClient: QueryClient) {
   });
 }
 
-export type AppRouter = ReturnType<typeof createAppRouter>;
-
 declare module '@tanstack/react-router' {
   interface Register {
     router: AppRouter;
   }
-}
-
-interface AppRouterProviderProps {
-  router: AppRouter;
-}
-
-export function AppRouterProvider({ router }: AppRouterProviderProps) {
-  return <RouterProvider router={router} />;
 }

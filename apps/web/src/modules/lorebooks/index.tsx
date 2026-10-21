@@ -1,18 +1,13 @@
-import {
-  type LorebookSummaryDto,
-  type SaveLorebookCommand,
-  SaveLorebookCommandSchema,
-} from '@immersion/contracts/lorebooks';
+import { type SaveLorebookCommand, SaveLorebookCommandSchema } from '@immersion/contracts/lorebooks';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { type ChangeEvent, type ReactNode, useMemo, useRef, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
-import { formatRelative } from '../../shared/lib/format-relative';
 import { pluralRu } from '../../shared/lib/plural';
-import { BookIcon, PlusIcon, SearchIcon, TrashIcon, UploadIcon, XIcon } from '../../shared/ui/icons';
+import { PlusIcon, SearchIcon, UploadIcon } from '../../shared/ui/icons';
 import { createLorebook } from './api/save-lorebook';
-import { useDeleteLorebook } from './mutations/use-delete-lorebook';
+import { LorebookRow } from './components/lorebook-row';
 import { lorebookListQueryKey, lorebookListQueryOptions } from './queries/lorebook-list-query';
 
 export { LorebookEditorScreen } from './editor';
@@ -312,99 +307,5 @@ export function LorebooksScreen() {
         <div className="page__body">{body}</div>
       </div>
     </main>
-  );
-}
-
-interface LorebookRowProps {
-  lorebook: LorebookSummaryDto;
-}
-
-function LorebookRow({ lorebook }: LorebookRowProps) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const deleteMutation = useDeleteLorebook(lorebook.id, {
-    onSuccess: () => {
-      setConfirmDelete(false);
-    },
-  });
-
-  const handleAskDelete = () => {
-    setConfirmDelete(true);
-  };
-
-  const handleConfirmDelete = () => {
-    deleteMutation.mutate();
-  };
-
-  const handleCancelDelete = () => {
-    setConfirmDelete(false);
-  };
-
-  return (
-    <div
-      style={{
-        position: 'relative',
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) 80px minmax(0, 1fr) 120px 100px',
-        gap: 14,
-        alignItems: 'center',
-        padding: '10px 14px',
-        borderBottom: '1px solid var(--hairline)',
-        background: 'var(--bg)',
-      }}
-    >
-      <Link
-        aria-label={`Открыть лорбук: ${lorebook.name}`}
-        params={{ lorebookId: lorebook.id }}
-        style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'pointer' }}
-        to="/lorebooks/$lorebookId"
-      />
-      <div className="row gap-8" style={{ minWidth: 0 }}>
-        <BookIcon size={13} stroke="var(--muted)" />
-        <strong className="truncate" style={{ fontSize: 'var(--fz-md)' }}>
-          {lorebook.name}
-        </strong>
-      </div>
-      <span className="mono tnum" style={{ fontSize: 'var(--fz-sm)', color: 'var(--text-1)' }}>
-        {lorebook.entryCount}
-      </span>
-      <div className="row gap-4" style={{ flexWrap: 'wrap', minWidth: 0 }}>
-        {lorebook.tags.slice(0, 4).map((tag) => (
-          <span className="tag" key={tag}>
-            {tag}
-          </span>
-        ))}
-      </div>
-      <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
-        {formatRelative(lorebook.updatedAt)}
-      </span>
-      <div className="row gap-4" style={{ justifyContent: 'flex-end', position: 'relative', zIndex: 2 }}>
-        {confirmDelete ? (
-          <>
-            <button
-              className="btn btn--xs btn--danger"
-              disabled={deleteMutation.isPending}
-              onClick={handleConfirmDelete}
-              title="Удалить лорбук"
-              type="button"
-            >
-              {deleteMutation.isPending ? '…' : 'Удалить'}
-            </button>
-            <button
-              className="btn btn--icon btn--xs"
-              disabled={deleteMutation.isPending}
-              onClick={handleCancelDelete}
-              title="Не удалять"
-              type="button"
-            >
-              <XIcon size={11} />
-            </button>
-          </>
-        ) : (
-          <button className="btn btn--icon btn--xs" onClick={handleAskDelete} title="Удалить лорбук" type="button">
-            <TrashIcon size={11} />
-          </button>
-        )}
-      </div>
-    </div>
   );
 }

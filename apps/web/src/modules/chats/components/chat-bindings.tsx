@@ -14,6 +14,10 @@ export interface ChatBindingsProps {
   scenarioName: string | null;
 }
 
+function firstLine(text: string): string {
+  return text.trim().split('\n')[0]?.trim() ?? '';
+}
+
 interface BindingRowProps {
   icon: ReactNode;
   label: string;
@@ -32,10 +36,6 @@ function BindingRow({ icon, label, value }: BindingRowProps) {
       </span>
     </div>
   );
-}
-
-function firstLine(text: string): string {
-  return text.trim().split('\n')[0]?.trim() ?? '';
 }
 
 // TODO: let the user change the chat's character, scenario and lorebook bindings
