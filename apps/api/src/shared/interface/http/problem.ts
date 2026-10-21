@@ -1,7 +1,9 @@
-import { ApiProblemSchema } from '@immersion/contracts/common';
 import { ZodError } from 'zod';
 
+import { problem } from '../../../platform/http/problem.js';
 import { UnsafeRepositoryFileIdError } from '../../../platform/storage/contained-path.js';
+
+export { problem };
 
 export interface ProblemReply {
   statusCode: number;
@@ -14,16 +16,7 @@ export interface CreateToProblemOptions {
   exposeInternalErrorMessage?: boolean;
 }
 
-export function problem(statusCode: number, code: string, message: string): ProblemReply {
-  return {
-    statusCode,
-    body: ApiProblemSchema.parse({
-      code,
-      message,
-    }),
-  };
-}
-
+// TODO: delete when the last route module relies on the problem handler (F-31)
 export function createToProblem(mapModuleError?: ModuleProblemMapper, options: CreateToProblemOptions = {}) {
   return function toProblem(error: unknown): ProblemReply {
     if (error instanceof ZodError) {
