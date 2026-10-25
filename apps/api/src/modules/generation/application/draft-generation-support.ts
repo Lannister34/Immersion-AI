@@ -2,19 +2,15 @@ import type { ChatGenerationSettingsDto } from '@immersion/contracts/chats';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
 
 import { resolveChatGenerationSettings } from '../../prompting/application/resolve-chat-generation-settings.js';
-import {
-  type GenerationProviderEndpoint,
-  resolveGenerationProviderEndpoint,
-} from '../../providers/application/generation-provider.js';
-import { getSettingsOverview } from '../../settings/application/get-settings-overview.js';
-import type { ChatCompletionSamplingOptions } from './chat-completion-client.js';
+import type { ChatCompletionEndpoint, ChatCompletionSamplingOptions } from './chat-completion-client.js';
+import type { DraftGenerationDependencies } from './generation-ports.js';
 
 export type DraftPromptLanguage = 'en' | 'ru';
 
 type ResponseLanguage = SettingsOverviewResponse['profile']['responseLanguage'];
 
 export interface DraftGenerationContext {
-  endpoint: GenerationProviderEndpoint;
+  endpoint: ChatCompletionEndpoint;
   language: DraftPromptLanguage;
   languageSentence: string;
   sampling: ChatCompletionSamplingOptions;
@@ -56,9 +52,11 @@ export function buildDraftLanguageSentence(responseLanguage: ResponseLanguage): 
   return 'Пиши на том же языке, что и исходная концепция.';
 }
 
-export async function resolveDraftGenerationContext(): Promise<DraftGenerationContext> {
-  const endpoint = await resolveGenerationProviderEndpoint();
-  const settings = getSettingsOverview();
+export async function resolveDraftGenerationContext(
+  dependencies: Pick<DraftGenerationDependencies, 'providers' | 'settings'>,
+): Promise<DraftGenerationContext> {
+  const endpoint = await dependencies.providers.resolveGenerationProviderEndpoint();
+  const settings = dependencies.settings.getSettingsOverview();
   const resolved = resolveChatGenerationSettings(settings, endpoint.model, NO_CHAT_GENERATION_SETTINGS);
 
   return {

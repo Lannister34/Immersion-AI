@@ -9,6 +9,8 @@ import { createHttpStub, type HttpStub } from '../../../test-support/http-stub.j
 import { openAiChatCompletion } from '../../../test-support/provider-responses.js';
 import { appendChatMessages } from '../../chats/application/append-chat-messages.js';
 import { createChat } from '../../chats/application/create-chat.js';
+import { resolveGenerationProviderEndpoint } from '../../providers/index.js';
+import { getSettingsOverview } from '../../settings/index.js';
 import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import { generateCharacterAvatarPrompt } from './generate-character-avatar-prompt.js';
@@ -18,6 +20,7 @@ import { generateChatTitle } from './generate-chat-title.js';
 import { generateLorebookDraft } from './generate-lorebook-draft.js';
 import { generateScenarioDraft } from './generate-scenario-draft.js';
 import { generateScenarioFirstMessage } from './generate-scenario-first-message.js';
+import type { DraftGenerationDependencies } from './generation-ports.js';
 
 const LOCAL_PROVIDER_SETTINGS = {
   activeProvider: 'custom',
@@ -42,27 +45,27 @@ const CONCEPT = 'Гончар из приморского города, кото
 
 type DraftUseCase = (chatCompletionClient: ChatCompletionClient) => Promise<unknown>;
 
+function onSettingsFile(chatCompletionClient: ChatCompletionClient): DraftGenerationDependencies {
+  return {
+    chatCompletionClient,
+    providers: { resolveGenerationProviderEndpoint: () => resolveGenerationProviderEndpoint() },
+    settings: { getSettingsOverview },
+  };
+}
+
 const DRAFT_USE_CASES: ReadonlyArray<readonly [string, DraftUseCase]> = [
-  ['character draft', (chatCompletionClient) => generateCharacterDraft({ concept: CONCEPT }, { chatCompletionClient })],
+  ['character draft', (client) => generateCharacterDraft({ concept: CONCEPT }, onSettingsFile(client))],
   [
     'character field',
-    (chatCompletionClient) =>
-      generateCharacterField({ concept: CONCEPT, current: {}, field: 'personality' }, { chatCompletionClient }),
+    (client) => generateCharacterField({ concept: CONCEPT, current: {}, field: 'personality' }, onSettingsFile(client)),
   ],
   [
     'character avatar prompt',
-    (chatCompletionClient) =>
-      generateCharacterAvatarPrompt({ card: { name: 'Ария Глинская' } }, { chatCompletionClient }),
+    (client) => generateCharacterAvatarPrompt({ card: { name: 'Ария Глинская' } }, onSettingsFile(client)),
   ],
-  ['scenario draft', (chatCompletionClient) => generateScenarioDraft({ concept: CONCEPT }, { chatCompletionClient })],
-  [
-    'scenario first message',
-    (chatCompletionClient) => generateScenarioFirstMessage({ concept: CONCEPT }, { chatCompletionClient }),
-  ],
-  [
-    'lorebook draft',
-    (chatCompletionClient) => generateLorebookDraft({ concept: CONCEPT, entryCount: 8 }, { chatCompletionClient }),
-  ],
+  ['scenario draft', (client) => generateScenarioDraft({ concept: CONCEPT }, onSettingsFile(client))],
+  ['scenario first message', (client) => generateScenarioFirstMessage({ concept: CONCEPT }, onSettingsFile(client))],
+  ['lorebook draft', (client) => generateLorebookDraft({ concept: CONCEPT, entryCount: 8 }, onSettingsFile(client))],
   ['chat title', generateTitleForSeededChat],
 ];
 

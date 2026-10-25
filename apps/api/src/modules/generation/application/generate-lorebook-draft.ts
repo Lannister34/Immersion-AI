@@ -5,22 +5,15 @@ import {
   GenerateLorebookDraftResponseSchema,
 } from '@immersion/contracts/generation';
 
-import { globalHttpFetch } from '../../../platform/outbound-http/global-http-fetch.js';
-import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
-import type { ChatCompletionClient } from './chat-completion-client.js';
 import {
   type DraftGenerationContext,
   normalizeDraftText,
   resolveDraftGenerationContext,
 } from './draft-generation-support.js';
 import { ProviderGenerationError } from './generation-errors.js';
+import type { DraftGenerationDependencies, DraftGenerationOptions } from './generation-ports.js';
 import { asJsonRecord, extractJsonFromModelOutput } from './model-json-output.js';
 import { SKIP_THINKING_SERVER_EXTENSIONS } from './skip-thinking-server-extensions.js';
-
-export interface GenerateLorebookDraftDependencies {
-  chatCompletionClient?: ChatCompletionClient;
-  signal?: AbortSignal;
-}
 
 const LOREBOOK_DRAFT_MAX_TOKENS = 3000;
 const LOREBOOK_ENTRY_MAX_COUNT = 20;
@@ -121,13 +114,11 @@ function normalizeLorebookEntries(parsed: Record<string, unknown>): GeneratedLor
 
 export async function generateLorebookDraft(
   command: GenerateLorebookDraftCommand,
-  dependencies: GenerateLorebookDraftDependencies = {},
+  dependencies: DraftGenerationDependencies,
+  options: DraftGenerationOptions = {},
 ): Promise<GenerateLorebookDraftResponse> {
-  // TODO: require the chat completion client from the composition root (F-34)
-  const chatCompletionClient =
-    dependencies.chatCompletionClient ?? createChatCompletionClient({ httpFetch: globalHttpFetch });
-  const context = await resolveDraftGenerationContext();
-  const completion = await chatCompletionClient.completeChat({
+  const context = await resolveDraftGenerationContext(dependencies);
+  const completion = await dependencies.chatCompletionClient.completeChat({
     endpoint: context.endpoint,
     maxTokens: LOREBOOK_DRAFT_MAX_TOKENS,
     messages: [
@@ -143,7 +134,7 @@ export async function generateLorebookDraft(
     requireCompleteReply: true,
     sampling: context.sampling,
     serverExtensions: SKIP_THINKING_SERVER_EXTENSIONS,
-    signal: dependencies.signal,
+    signal: options.signal,
   });
   const record = asJsonRecord(extractJsonFromModelOutput(completion.content), 'a lorebook draft');
   const entries = normalizeLorebookEntries(record);

@@ -5,18 +5,11 @@ import {
   GenerateCharacterAvatarPromptResponseSchema,
 } from '@immersion/contracts/generation';
 
-import { globalHttpFetch } from '../../../platform/outbound-http/global-http-fetch.js';
-import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
-import type { ChatCompletionClient } from './chat-completion-client.js';
 import { normalizeDraftText, resolveDraftGenerationContext } from './draft-generation-support.js';
 import { ProviderGenerationError } from './generation-errors.js';
+import type { DraftGenerationDependencies, DraftGenerationOptions } from './generation-ports.js';
 import { asJsonRecord, extractJsonFromModelOutput } from './model-json-output.js';
 import { SKIP_THINKING_SERVER_EXTENSIONS } from './skip-thinking-server-extensions.js';
-
-export interface GenerateCharacterAvatarPromptDependencies {
-  chatCompletionClient?: ChatCompletionClient;
-  signal?: AbortSignal;
-}
 
 const AVATAR_PROMPT_MAX_TOKENS = 512;
 const AVATAR_PROMPT_MAX_LENGTH = 2_000;
@@ -38,13 +31,11 @@ Return JSON:
 
 export async function generateCharacterAvatarPrompt(
   command: GenerateCharacterAvatarPromptCommand,
-  dependencies: GenerateCharacterAvatarPromptDependencies = {},
+  dependencies: DraftGenerationDependencies,
+  options: DraftGenerationOptions = {},
 ): Promise<GenerateCharacterAvatarPromptResponse> {
-  // TODO: require the chat completion client from the composition root (F-34)
-  const chatCompletionClient =
-    dependencies.chatCompletionClient ?? createChatCompletionClient({ httpFetch: globalHttpFetch });
-  const context = await resolveDraftGenerationContext();
-  const completion = await chatCompletionClient.completeChat({
+  const context = await resolveDraftGenerationContext(dependencies);
+  const completion = await dependencies.chatCompletionClient.completeChat({
     endpoint: context.endpoint,
     maxTokens: AVATAR_PROMPT_MAX_TOKENS,
     messages: [
@@ -60,7 +51,7 @@ export async function generateCharacterAvatarPrompt(
     requireCompleteReply: true,
     sampling: context.sampling,
     serverExtensions: SKIP_THINKING_SERVER_EXTENSIONS,
-    signal: dependencies.signal,
+    signal: options.signal,
   });
   const record = asJsonRecord(extractJsonFromModelOutput(completion.content), 'an avatar prompt');
   const prompt = normalizeDraftText(record.prompt ?? record.positive, AVATAR_PROMPT_MAX_LENGTH);

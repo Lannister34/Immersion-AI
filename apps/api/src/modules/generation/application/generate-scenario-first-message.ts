@@ -4,9 +4,6 @@ import {
   GenerateScenarioFirstMessageResponseSchema,
 } from '@immersion/contracts/generation';
 
-import { globalHttpFetch } from '../../../platform/outbound-http/global-http-fetch.js';
-import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
-import type { ChatCompletionClient } from './chat-completion-client.js';
 import {
   buildGenderHint,
   buildPlayerContextBlock,
@@ -16,12 +13,8 @@ import {
   resolveDraftGenerationContext,
 } from './draft-generation-support.js';
 import { ProviderGenerationError } from './generation-errors.js';
+import type { DraftGenerationDependencies, DraftGenerationOptions } from './generation-ports.js';
 import { SKIP_THINKING_SERVER_EXTENSIONS } from './skip-thinking-server-extensions.js';
-
-export interface GenerateScenarioFirstMessageDependencies {
-  chatCompletionClient?: ChatCompletionClient;
-  signal?: AbortSignal;
-}
 
 const SCENARIO_FIRST_MESSAGE_MAX_TOKENS = 512;
 const SCENARIO_FIRST_MESSAGE_MAX_LENGTH = 20_000;
@@ -71,13 +64,11 @@ Use {{user}} and {{char}} as literal placeholders — they will be substituted a
 
 export async function generateScenarioFirstMessage(
   command: GenerateScenarioFirstMessageCommand,
-  dependencies: GenerateScenarioFirstMessageDependencies = {},
+  dependencies: DraftGenerationDependencies,
+  options: DraftGenerationOptions = {},
 ): Promise<GenerateScenarioFirstMessageResponse> {
-  // TODO: require the chat completion client from the composition root (F-34)
-  const chatCompletionClient =
-    dependencies.chatCompletionClient ?? createChatCompletionClient({ httpFetch: globalHttpFetch });
-  const context = await resolveDraftGenerationContext();
-  const completion = await chatCompletionClient.completeChat({
+  const context = await resolveDraftGenerationContext(dependencies);
+  const completion = await dependencies.chatCompletionClient.completeChat({
     endpoint: context.endpoint,
     maxTokens: SCENARIO_FIRST_MESSAGE_MAX_TOKENS,
     messages: [
@@ -92,7 +83,7 @@ export async function generateScenarioFirstMessage(
     ],
     sampling: context.sampling,
     serverExtensions: SKIP_THINKING_SERVER_EXTENSIONS,
-    signal: dependencies.signal,
+    signal: options.signal,
   });
   const value = replaceNamesWithPlaceholders(
     normalizeDraftText(completion.content, SCENARIO_FIRST_MESSAGE_MAX_LENGTH),
