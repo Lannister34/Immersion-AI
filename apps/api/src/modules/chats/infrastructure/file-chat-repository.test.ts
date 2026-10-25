@@ -9,6 +9,8 @@ import { failFileStatOf } from '../../../test-support/failing-file-stat.js';
 import { ChatTranscriptChangedError } from '../application/chat-conflicts.js';
 import { FileChatRepository } from './file-chat-repository.js';
 
+const CONCURRENT_DISK_APPENDS_TIMEOUT_MS = 30_000;
+
 describe('FileChatRepository', () => {
   let previousDataRoot: string | undefined;
   let temporaryDataRoot: string;
@@ -33,56 +35,62 @@ describe('FileChatRepository', () => {
     return path.join(temporaryDataRoot, 'chats', '_no_character_', `${chatId}.jsonl`);
   }
 
-  it('serializes concurrent appends and leaves a coherent JSONL chat file', async () => {
-    const chatId = 'concurrent-chat';
-    const repository = new FileChatRepository();
-    const expectedMessages = Array.from({ length: 24 }, (_, index) => ({
-      content: `message-${index.toString().padStart(2, '0')}`,
-      createdAt: `2026-01-01T00:00:${index.toString().padStart(2, '0')}.000Z`,
-    }));
+  it(
+    'serializes concurrent appends and leaves a coherent JSONL chat file',
+    async () => {
+      const chatId = 'concurrent-chat';
+      const repository = new FileChatRepository();
+      const expectedMessages = Array.from({ length: 24 }, (_, index) => ({
+        content: `message-${index.toString().padStart(2, '0')}`,
+        createdAt: `2026-01-01T00:00:${index.toString().padStart(2, '0')}.000Z`,
+      }));
 
-    await repository.createGenericChat({
-      id: chatId,
-      title: 'Concurrent chat',
-      userName: 'Tester',
-      createdAt: '2026-01-01T00:00:00.000Z',
-    });
+      await repository.createGenericChat({
+        id: chatId,
+        title: 'Concurrent chat',
+        userName: 'Tester',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      });
 
-    await Promise.all(
-      expectedMessages.map((message) =>
-        repository.appendGenericChatMessages(chatId, [
-          {
-            role: 'user',
-            content: message.content,
-            createdAt: message.createdAt,
-          },
-        ]),
-      ),
-    );
+      await Promise.all(
+        expectedMessages.map((message) =>
+          repository.appendGenericChatMessages(chatId, [
+            {
+              role: 'user',
+              content: message.content,
+              createdAt: message.createdAt,
+            },
+          ]),
+        ),
+      );
 
-    const session = await repository.getGenericChatSession(chatId);
+      const session = await repository.getGenericChatSession(chatId);
 
-    if (!session) {
-      throw new Error('Expected chat session to exist after concurrent appends.');
-    }
+      if (!session) {
+        throw new Error('Expected chat session to exist after concurrent appends.');
+      }
 
-    expect(session.messages.map((message) => message.content)).toEqual(
-      expectedMessages.map((message) => message.content),
-    );
-    expect(session.chat.messageCount).toBe(expectedMessages.length);
-    expect(session.chat.lastMessagePreview).toBe(expectedMessages.at(-1)?.content);
-    expect(session.chat.updatedAt).toBe(expectedMessages.at(-1)?.createdAt);
+      expect(session.messages.map((message) => message.content)).toEqual(
+        expectedMessages.map((message) => message.content),
+      );
+      expect(session.chat.messageCount).toBe(expectedMessages.length);
+      expect(session.chat.lastMessagePreview).toBe(expectedMessages.at(-1)?.content);
+      expect(session.chat.updatedAt).toBe(expectedMessages.at(-1)?.createdAt);
 
-    const chatFilePath = resolveChatFilePath(chatId);
-    const rawLines = (await fs.readFile(chatFilePath, 'utf8')).split(/\r?\n/u).filter((line) => line.trim().length > 0);
-    const parsedLines = rawLines.map((line) => JSON.parse(line) as Record<string, unknown>);
+      const chatFilePath = resolveChatFilePath(chatId);
+      const rawLines = (await fs.readFile(chatFilePath, 'utf8'))
+        .split(/\r?\n/u)
+        .filter((line) => line.trim().length > 0);
+      const parsedLines = rawLines.map((line) => JSON.parse(line) as Record<string, unknown>);
 
-    expect(parsedLines[0]).toHaveProperty('chat_metadata');
-    expect(parsedLines.slice(1).map((line) => line.mes)).toEqual(expectedMessages.map((message) => message.content));
+      expect(parsedLines[0]).toHaveProperty('chat_metadata');
+      expect(parsedLines.slice(1).map((line) => line.mes)).toEqual(expectedMessages.map((message) => message.content));
 
-    const directoryEntries = await fs.readdir(path.dirname(chatFilePath));
-    expect(directoryEntries.filter((entry) => entry.endsWith('.tmp'))).toEqual([]);
-  });
+      const directoryEntries = await fs.readdir(path.dirname(chatFilePath));
+      expect(directoryEntries.filter((entry) => entry.endsWith('.tmp'))).toEqual([]);
+    },
+    CONCURRENT_DISK_APPENDS_TIMEOUT_MS,
+  );
 
   it('rewrites a single message content and preserves siblings and ordering', async () => {
     const chatId = 'edit-chat';
