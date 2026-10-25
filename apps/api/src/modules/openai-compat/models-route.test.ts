@@ -1,26 +1,14 @@
 import type { ProviderConnectionResponse } from '@immersion/contracts/providers';
 import Fastify from 'fastify';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
+import { FakeChatCompletionClient } from '../../test-support/fake-chat-completion-client.js';
+import { createManualClock } from '../../test-support/manual-clock.js';
 import { OpenAiErrorFixtureSchema } from '../../test-support/openai-response-fixture-schemas.js';
-
-import {
-  GenerationProviderUnavailableError,
-  type resolveGenerationProviderEndpoint,
-  type testProviderConnection,
-} from '../providers/index.js';
-import { openAiCompatRoutes } from './index.js';
-
-const providerDoubles = vi.hoisted(() => ({
-  resolveGenerationProviderEndpoint: vi.fn<typeof resolveGenerationProviderEndpoint>(),
-  testProviderConnection: vi.fn<typeof testProviderConnection>(),
-}));
-
-vi.mock('../providers/index.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../providers/index.js')>()),
-  resolveGenerationProviderEndpoint: providerDoubles.resolveGenerationProviderEndpoint,
-  testProviderConnection: providerDoubles.testProviderConnection,
-}));
+import { heuristicTokenCounter } from '../prompting/index.js';
+import { GenerationProviderUnavailableError } from '../providers/index.js';
+import type { OpenAiCompatProvidersPort } from './application/openai-compat-ports.js';
+import { createOpenAiCompatModule } from './index.js';
 
 const NO_MODEL_CATALOG: ProviderConnectionResponse = {
   activeProvider: 'custom',
@@ -31,37 +19,40 @@ const NO_MODEL_CATALOG: ProviderConnectionResponse = {
   status: 'error',
 };
 
-async function listModels() {
+async function listModels(endpointFailure: Error) {
+  const providers: OpenAiCompatProvidersPort = {
+    resolveGenerationProviderEndpoint: () => Promise.reject(endpointFailure),
+    testConnection: () => Promise.resolve(NO_MODEL_CATALOG),
+  };
+  const module = createOpenAiCompatModule({
+    chatCompletionClient: new FakeChatCompletionClient(),
+    clock: createManualClock(),
+    providers,
+    settings: {
+      resolveSamplerPresetForModel: () => {
+        throw new Error('GET /v1/models reads no sampler preset.');
+      },
+    },
+    tokenCounter: heuristicTokenCounter,
+  });
   const app = Fastify();
-  await app.register(openAiCompatRoutes, { prefix: '/v1' });
+  await app.register(module.routes, { prefix: '/v1' });
   const response = await app.inject({ method: 'GET', url: '/v1/models' });
   await app.close();
 
   return response;
 }
 
-afterEach(() => {
-  vi.resetAllMocks();
-});
-
 describe('GET /v1/models without a provider model catalog', () => {
   it('lists no models when no provider is configured', async () => {
-    providerDoubles.testProviderConnection.mockResolvedValue(NO_MODEL_CATALOG);
-    providerDoubles.resolveGenerationProviderEndpoint.mockRejectedValue(
-      new GenerationProviderUnavailableError('Встроенный сервер не запущен.'),
-    );
-
-    const response = await listModels();
+    const response = await listModels(new GenerationProviderUnavailableError('Встроенный сервер не запущен.'));
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ data: [], object: 'list' });
   });
 
   it('answers with an error instead of an empty list when the configured model cannot be read', async () => {
-    providerDoubles.testProviderConnection.mockResolvedValue(NO_MODEL_CATALOG);
-    providerDoubles.resolveGenerationProviderEndpoint.mockRejectedValue(new Error('EACCES: user-settings.json'));
-
-    const response = await listModels();
+    const response = await listModels(new Error('EACCES: user-settings.json'));
 
     expect(response.statusCode).toBe(500);
     expect(OpenAiErrorFixtureSchema.parse(response.json()).error).toEqual({

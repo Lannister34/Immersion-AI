@@ -1,7 +1,11 @@
 import { onTestFinished } from 'vitest';
 
 import { buildApiApp } from '../app.js';
-import { type ApiDependencies, createApiDependencies } from '../composition/api-dependencies.js';
+import {
+  type ApiDependencies,
+  type ApiDependencyOverrides,
+  createApiDependencies,
+} from '../composition/api-dependencies.js';
 import { type ApiModules, createApiModules } from '../composition/create-api-modules.js';
 import { type ApiEnvironment, parseApiConfig } from '../config/api-config.js';
 import { type CapturingLogger, createCapturingLogger } from './capturing-logger.js';
@@ -16,6 +20,7 @@ export interface TestApiOptions {
   readonly fixture?: ProjectFixture;
   readonly environment?: ApiEnvironment;
   readonly clock?: ManualClockOptions;
+  readonly overrides?: Omit<ApiDependencyOverrides, 'clock' | 'httpFetch' | 'logger'>;
 }
 
 export interface TestApi {
@@ -45,7 +50,12 @@ export async function createTestApi(options: TestApiOptions = {}): Promise<TestA
   const http = stubGlobalFetch();
   const clock = createManualClock(options.clock);
   const logs = createCapturingLogger();
-  const dependencies = createApiDependencies(config, { clock, httpFetch: http.fetch, logger: logs.logger });
+  const dependencies = createApiDependencies(config, {
+    clock,
+    httpFetch: http.fetch,
+    logger: logs.logger,
+    ...options.overrides,
+  });
   const modules = createApiModules(dependencies);
   const app = buildApiApp(dependencies, modules);
   onTestFinished(() => app.close());

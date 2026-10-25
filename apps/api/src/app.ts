@@ -13,7 +13,6 @@ import { charactersRoutes } from './modules/characters/index.js';
 import { chatsRoutes } from './modules/chats/index.js';
 import { generationRoutes } from './modules/generation/index.js';
 import { lorebooksRoutes } from './modules/lorebooks/index.js';
-import { openAiCompatRoutes } from './modules/openai-compat/index.js';
 import { providersRoutes } from './modules/providers/index.js';
 import { runtimeRoutes } from './modules/runtime/index.js';
 import { scenariosRoutes } from './modules/scenarios/index.js';
@@ -50,7 +49,7 @@ export function buildApiApp(dependencies: ApiDependencies, modules: ApiModules):
   app.register(settingsRoutes, { prefix: '/api/settings' });
   app.register(providersRoutes, { prefix: '/api/providers' });
   app.register(runtimeRoutes, { prefix: '/api/runtime' });
-  app.register(openAiCompatRoutes, { prefix: '/v1' });
+  app.register(modules.openAiCompat.routes, { prefix: '/v1' });
 
   return app;
 }

@@ -5,6 +5,7 @@ import http from 'node:http';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createDeferred } from './test-support/deferred.js';
+import { FakeChatCompletionClient } from './test-support/fake-chat-completion-client.js';
 import type { HttpResponder } from './test-support/http-stub.js';
 import {
   OpenAiChatCompletionChunkFixtureSchema,
@@ -21,6 +22,7 @@ import {
 } from './test-support/provider-responses.js';
 import { createServerSentEventDataDecoder } from './test-support/server-sent-event-data.js';
 import { requestOverSocket } from './test-support/socket-request.js';
+import { createTestApi } from './test-support/test-api.js';
 import { useTestApi } from './test-support/use-test-api.js';
 
 const PROVIDER_URL = 'http://127.0.0.1:6007';
@@ -689,5 +691,37 @@ describe('OpenAI-compatible endpoint', () => {
 
     expect(OpenAiModelListFixtureSchema.parse(response.json()).data).toEqual([]);
     expect(api().http.requestLines()).toEqual([]);
+  });
+});
+
+describe('OpenAI-compatible endpoint on an injected chat completion client', () => {
+  it('serves a completion from an injected ChatCompletionClient without outbound HTTP', async () => {
+    const clockStart = new Date('2026-10-26T12:00:00.000Z');
+    const client = new FakeChatCompletionClient().reply({ content: 'Ответ без сети.' });
+    const api = await createTestApi({
+      clock: { start: clockStart, stepMs: 0 },
+      fixture: 'smoke',
+      overrides: { chatCompletionClient: client },
+    });
+    await api.settings.patch({
+      activeProvider: 'custom',
+      backendMode: 'external',
+      providerConfigs: { custom: { model: 'fixture-model', url: PROVIDER_URL } },
+    });
+
+    const response = await api.app.inject({
+      method: 'POST',
+      payload: { messages: [{ content: 'Скажи привет.', role: 'user' }] },
+      url: '/v1/chat/completions',
+    });
+    const payload = OpenAiChatCompletionFixtureSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(payload.choices[0].message.content).toBe('Ответ без сети.');
+    expect(payload.created).toBe(clockStart.getTime() / 1000);
+    expect(client.requests.map((request) => request.endpoint)).toEqual([
+      { apiKey: null, apiKind: 'openai-compatible', baseUrl: PROVIDER_URL, model: 'fixture-model' },
+    ]);
+    expect(api.http.requests).toEqual([]);
   });
 });
