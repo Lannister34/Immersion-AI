@@ -1,38 +1,62 @@
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { getSharedApiLogger } from '../../../platform/logging/shared-api-logger.js';
 import { failFileStatOf } from '../../../test-support/failing-file-stat.js';
+import { readStoredChatFile } from '../../../test-support/stored-chat-file.js';
+import { useTemporaryDataRoot } from '../../../test-support/use-temporary-data-root.js';
 import { ChatTranscriptChangedError } from '../application/chat-conflicts.js';
+import type { ChatMessageRecord } from '../application/chat-records.js';
 import { FileChatRepository } from './file-chat-repository.js';
 
 const CONCURRENT_DISK_APPENDS_TIMEOUT_MS = 30_000;
 
+type StoredMessage = Pick<ChatMessageRecord, 'content' | 'role'>;
+
+interface TruncateGuardCase {
+  readonly name: string;
+  readonly messagesOnDisk: readonly StoredMessage[];
+  readonly expectedRemovedMessages: readonly StoredMessage[];
+}
+
+const TRUNCATE_GUARD_CASES: readonly TruncateGuardCase[] = [
+  {
+    name: 'the reply was edited since the read',
+    messagesOnDisk: [
+      { role: 'user', content: 'вопрос' },
+      { role: 'assistant', content: 'ответ после правки' },
+    ],
+    expectedRemovedMessages: [{ role: 'assistant', content: 'ответ' }],
+  },
+  {
+    name: 'a message was appended since the read',
+    messagesOnDisk: [
+      { role: 'user', content: 'вопрос' },
+      { role: 'assistant', content: 'ответ' },
+      { role: 'user', content: 'новый вопрос' },
+    ],
+    expectedRemovedMessages: [{ role: 'assistant', content: 'ответ' }],
+  },
+  {
+    name: 'a message to remove was deleted since the read',
+    messagesOnDisk: [
+      { role: 'user', content: 'вопрос' },
+      { role: 'assistant', content: 'ответ' },
+    ],
+    expectedRemovedMessages: [
+      { role: 'assistant', content: 'ответ' },
+      { role: 'assistant', content: 'продолжение' },
+    ],
+  },
+];
+
 describe('FileChatRepository', () => {
-  let previousDataRoot: string | undefined;
-  let temporaryDataRoot: string;
-
-  beforeEach(async () => {
-    previousDataRoot = process.env.IMMERSION_DATA_ROOT;
-    temporaryDataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'immersion-api-chat-repository-'));
-    process.env.IMMERSION_DATA_ROOT = temporaryDataRoot;
-  });
-
-  afterEach(async () => {
-    if (previousDataRoot) {
-      process.env.IMMERSION_DATA_ROOT = previousDataRoot;
-    } else {
-      delete process.env.IMMERSION_DATA_ROOT;
-    }
-
-    await fs.rm(temporaryDataRoot, { recursive: true, force: true });
-  });
+  const dataRoot = useTemporaryDataRoot();
 
   function resolveChatFilePath(chatId: string) {
-    return path.join(temporaryDataRoot, 'chats', '_no_character_', `${chatId}.jsonl`);
+    return path.join(dataRoot(), 'chats', '_no_character_', `${chatId}.jsonl`);
   }
 
   it(
@@ -78,13 +102,10 @@ describe('FileChatRepository', () => {
       expect(session.chat.updatedAt).toBe(expectedMessages.at(-1)?.createdAt);
 
       const chatFilePath = resolveChatFilePath(chatId);
-      const rawLines = (await fs.readFile(chatFilePath, 'utf8'))
-        .split(/\r?\n/u)
-        .filter((line) => line.trim().length > 0);
-      const parsedLines = rawLines.map((line) => JSON.parse(line) as Record<string, unknown>);
+      const storedChat = await readStoredChatFile(chatFilePath);
 
-      expect(parsedLines[0]).toHaveProperty('chat_metadata');
-      expect(parsedLines.slice(1).map((line) => line.mes)).toEqual(expectedMessages.map((message) => message.content));
+      expect(storedChat.header.chat_metadata.title).toBe('Concurrent chat');
+      expect(storedChat.messages.map((line) => line.mes)).toEqual(expectedMessages.map((message) => message.content));
 
       const directoryEntries = await fs.readdir(path.dirname(chatFilePath));
       expect(directoryEntries.filter((entry) => entry.endsWith('.tmp'))).toEqual([]);
@@ -121,11 +142,10 @@ describe('FileChatRepository', () => {
     expect(updatedSession?.chat.messageCount).toBe(3);
 
     const chatFilePath = resolveChatFilePath(chatId);
-    const rawLines = (await fs.readFile(chatFilePath, 'utf8')).split(/\r?\n/u).filter((line) => line.trim().length > 0);
-    const messageLines = rawLines.slice(1).map((line) => JSON.parse(line) as Record<string, unknown>);
+    const { messages } = await readStoredChatFile(chatFilePath);
 
-    expect(messageLines.map((line) => line.mes)).toEqual(['first', 'second-edited', 'third']);
-    expect(messageLines[1]?.send_date).toBe('2026-01-01T00:00:02.000Z');
+    expect(messages.map((line) => line.mes)).toEqual(['first', 'second-edited', 'third']);
+    expect(messages[1]?.send_date).toBe('2026-01-01T00:00:02.000Z');
 
     const directoryEntries = await fs.readdir(path.dirname(chatFilePath));
     expect(directoryEntries.filter((entry) => entry.endsWith('.tmp'))).toEqual([]);
@@ -176,17 +196,16 @@ describe('FileChatRepository', () => {
     const truncatedSession = await repository.truncateGenericChatMessagesFromIndex(
       chatId,
       3,
-      '2026-01-01T00:00:99.000Z',
+      '2026-01-01T00:01:39.000Z',
     );
 
     expect(truncatedSession?.messages.map((message) => message.content)).toEqual(['keep-1', 'keep-2']);
     expect(truncatedSession?.chat.messageCount).toBe(2);
-    expect(truncatedSession?.chat.updatedAt).toBe('2026-01-01T00:00:99.000Z');
+    expect(truncatedSession?.chat.updatedAt).toBe('2026-01-01T00:01:39.000Z');
     expect(truncatedSession?.chat.lastMessagePreview).toBe('keep-2');
 
     const chatFilePath = resolveChatFilePath(chatId);
-    const rawLines = (await fs.readFile(chatFilePath, 'utf8')).split(/\r?\n/u).filter((line) => line.trim().length > 0);
-    expect(rawLines).toHaveLength(3);
+    expect((await readStoredChatFile(chatFilePath)).messages.map((line) => line.mes)).toEqual(['keep-1', 'keep-2']);
 
     const directoryEntries = await fs.readdir(path.dirname(chatFilePath));
     expect(directoryEntries.filter((entry) => entry.endsWith('.tmp'))).toEqual([]);
@@ -217,36 +236,7 @@ describe('FileChatRepository', () => {
     expect(session?.messages.map((message) => message.content)).toEqual(['only']);
   });
 
-  it.each([
-    {
-      name: 'the reply was edited since the read',
-      messagesOnDisk: [
-        { role: 'user' as const, content: 'вопрос' },
-        { role: 'assistant' as const, content: 'ответ после правки' },
-      ],
-      expectedRemovedMessages: [{ role: 'assistant' as const, content: 'ответ' }],
-    },
-    {
-      name: 'a message was appended since the read',
-      messagesOnDisk: [
-        { role: 'user' as const, content: 'вопрос' },
-        { role: 'assistant' as const, content: 'ответ' },
-        { role: 'user' as const, content: 'новый вопрос' },
-      ],
-      expectedRemovedMessages: [{ role: 'assistant' as const, content: 'ответ' }],
-    },
-    {
-      name: 'a message to remove was deleted since the read',
-      messagesOnDisk: [
-        { role: 'user' as const, content: 'вопрос' },
-        { role: 'assistant' as const, content: 'ответ' },
-      ],
-      expectedRemovedMessages: [
-        { role: 'assistant' as const, content: 'ответ' },
-        { role: 'assistant' as const, content: 'продолжение' },
-      ],
-    },
-  ])('refuses to truncate when $name, leaving the file untouched', async ({
+  it.each(TRUNCATE_GUARD_CASES)('refuses to truncate when $name, leaving the file untouched', async ({
     expectedRemovedMessages,
     messagesOnDisk,
   }) => {
@@ -388,7 +378,7 @@ describe('FileChatRepository', () => {
       }),
     ).resolves.toBeNull();
 
-    const directoryEntries = await fs.readdir(path.join(temporaryDataRoot, 'chats', '_no_character_'));
+    const directoryEntries = await fs.readdir(path.join(dataRoot(), 'chats', '_no_character_'));
     expect(directoryEntries).toEqual([`${sourceChatId}.jsonl`]);
   });
 
@@ -488,11 +478,10 @@ describe('FileChatRepository', () => {
     expect(updatedSession?.chat.updatedAt).toBe('2026-01-01T00:00:02.000Z');
 
     const chatFilePath = resolveChatFilePath(chatId);
-    const rawLines = (await fs.readFile(chatFilePath, 'utf8')).split(/\r?\n/u).filter((line) => line.trim().length > 0);
-    const parsedHeader = JSON.parse(rawLines[0] ?? '{}') as Record<string, unknown>;
+    const storedChat = await readStoredChatFile(chatFilePath);
 
-    expect(rawLines).toHaveLength(2);
-    expect(parsedHeader.generation_settings).toMatchObject({
+    expect(storedChat.messages.map((line) => line.mes)).toEqual(['Keep me.']);
+    expect(storedChat.header.generation_settings).toMatchObject({
       sampler_preset_id: 'default',
       system_prompt: 'Chat prompt.',
     });
@@ -502,10 +491,6 @@ describe('FileChatRepository', () => {
   });
 
   describe('listChatFileStats', () => {
-    afterEach(() => {
-      vi.restoreAllMocks();
-    });
-
     async function createChats(repository: FileChatRepository, chatIds: string[]) {
       for (const chatId of chatIds) {
         await repository.createGenericChat({

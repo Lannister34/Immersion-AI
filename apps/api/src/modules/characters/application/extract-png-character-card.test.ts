@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { extractPngCharacterCard } from './extract-png-character-card.js';
+import { buildCharacterCardPng, type CharacterCardPngOptions } from '../../../test-support/character-card-png.js';
+import {
+  extractPngCharacterCard,
+  pngContainsCharacterCard,
+  stripPngCharacterCardChunks,
+} from './extract-png-character-card.js';
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const UNCOMPRESSED = 0;
@@ -38,7 +43,30 @@ const CARD_BASE64 = Buffer.from(
   'utf8',
 ).toString('base64');
 
+const CARD = {
+  spec: 'chara_card_v2',
+  data: { name: 'Эмбер 🐉', first_mes: 'Привет, ты тоже пришёл за светлячками?', tags: ['ru'] },
+};
+
+const ENCODINGS: readonly Required<CharacterCardPngOptions>[] = [
+  { keyword: 'chara', chunkType: 'tEXt' },
+  { keyword: 'chara', chunkType: 'iTXt' },
+  { keyword: 'ccv3', chunkType: 'tEXt' },
+  { keyword: 'ccv3', chunkType: 'iTXt' },
+];
+
 describe('extractPngCharacterCard', () => {
+  it.each(ENCODINGS)('reads back a card the test builder stores under $keyword in a $chunkType chunk', (options) => {
+    const png = buildCharacterCardPng(CARD, options);
+
+    expect(pngContainsCharacterCard(png)).toBe(true);
+    expect(extractPngCharacterCard(png)).toMatchObject({
+      firstMessage: 'Привет, ты тоже пришёл за светлячками?',
+      name: 'Эмбер 🐉',
+      tags: ['ru'],
+    });
+  });
+
   it.each([
     { languageTag: 'ru', translatedKeyword: 'Персонаж' },
     { languageTag: '', translatedKeyword: '' },
@@ -52,5 +80,13 @@ describe('extractPngCharacterCard', () => {
 
     expect(card.name).toBe('Ирис');
     expect(card.firstMessage).toBe('Привет.');
+  });
+});
+
+describe('stripPngCharacterCardChunks', () => {
+  it.each(ENCODINGS)('removes a card stored under $keyword in a $chunkType chunk', (options) => {
+    const stripped = stripPngCharacterCardChunks(buildCharacterCardPng(CARD, options));
+
+    expect(pngContainsCharacterCard(stripped)).toBe(false);
   });
 });
