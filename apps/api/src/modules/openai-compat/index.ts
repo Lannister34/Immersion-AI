@@ -1,3 +1,7 @@
 export const openAiCompatModuleId = 'openai-compat' as const;
 
-export { openAiCompatRoutes } from './interface/http/routes.js';
+export {
+  createOpenAiCompatModule,
+  type OpenAiCompatModule,
+  type OpenAiCompatModuleDependencies,
+} from './openai-compat-module.js';

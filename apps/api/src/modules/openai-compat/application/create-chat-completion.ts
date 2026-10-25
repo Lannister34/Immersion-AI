@@ -1,17 +1,11 @@
 import type { ReplyChannel } from '@immersion/domain/generation';
 
-import { globalHttpFetch } from '../../../platform/outbound-http/global-http-fetch.js';
-import {
-  type ChatCompletionClient,
-  createChatCompletionClient,
-  getProviderTokenCounter,
-} from '../../generation/index.js';
-import type { ChatReplyPromptMessage } from '../../prompting/index.js';
-import { resolveGenerationProviderEndpoint } from '../../providers/index.js';
-import { getSettingsOverview, resolveSamplerPresetForModel } from '../../settings/index.js';
+import type { ChatCompletionClient } from '../../generation/index.js';
+import type { ChatReplyPromptMessage, TokenCounter } from '../../prompting/index.js';
 import { assertSupportedRequest } from '../domain/assert-supported-request.js';
 import { normalizeOpenAiMessages } from '../domain/normalize-openai-messages.js';
 import type { OpenAiChatCompletionRequest } from '../domain/openai-chat-completion-request-schema.js';
+import type { OpenAiCompatProvidersPort, OpenAiCompatSettingsPort } from './openai-compat-ports.js';
 
 const HANDLED_REQUEST_KEYS = new Set([
   'max_completion_tokens',
@@ -42,9 +36,15 @@ function collectServerExtensions(request: OpenAiChatCompletionRequest): Record<s
 const PLACEHOLDER_MODEL_NAMES = new Set(['', 'default', 'immersion', 'immersion-ai', 'gpt-3.5-turbo', 'gpt-4']);
 
 export interface OpenAiChatCompletionDependencies {
-  chatCompletionClient?: ChatCompletionClient;
-  onDelta?: (delta: string, channel: ReplyChannel, model: string) => void;
-  signal?: AbortSignal;
+  readonly chatCompletionClient: ChatCompletionClient;
+  readonly tokenCounter: TokenCounter;
+  readonly providers: Pick<OpenAiCompatProvidersPort, 'resolveGenerationProviderEndpoint'>;
+  readonly settings: OpenAiCompatSettingsPort;
+}
+
+export interface OpenAiChatCompletionOptions {
+  readonly onDelta?: (delta: string, channel: ReplyChannel, model: string) => void;
+  readonly signal?: AbortSignal;
 }
 
 export interface OpenAiChatCompletionResult {
@@ -65,8 +65,7 @@ function toPromptMessages(request: OpenAiChatCompletionRequest): ChatReplyPrompt
   }));
 }
 
-async function countUsage(promptMessages: ChatReplyPromptMessage[], reply: string) {
-  const counter = getProviderTokenCounter();
+async function countUsage(counter: TokenCounter, promptMessages: ChatReplyPromptMessage[], reply: string) {
   const [promptCounts, replyCounts] = await Promise.all([
     counter.countTokens(promptMessages.map((message) => message.content)),
     counter.countTokens([reply]),
@@ -80,22 +79,20 @@ async function countUsage(promptMessages: ChatReplyPromptMessage[], reply: strin
 
 export async function createOpenAiChatCompletion(
   request: OpenAiChatCompletionRequest,
-  dependencies: OpenAiChatCompletionDependencies = {},
+  dependencies: OpenAiChatCompletionDependencies,
+  options: OpenAiChatCompletionOptions = {},
 ): Promise<OpenAiChatCompletionResult> {
   assertSupportedRequest(request);
 
   const messages = toPromptMessages(request);
-  const providerEndpoint = await resolveGenerationProviderEndpoint();
+  const providerEndpoint = await dependencies.providers.resolveGenerationProviderEndpoint();
   const requestedModel = request.model?.trim() ?? '';
   const model = PLACEHOLDER_MODEL_NAMES.has(requestedModel.toLowerCase()) ? providerEndpoint.model : requestedModel;
-  const settings = getSettingsOverview();
-  const preset = resolveSamplerPresetForModel(settings, model);
-  // TODO: require the chat completion client from the composition root (F-33)
-  const client = dependencies.chatCompletionClient ?? createChatCompletionClient({ httpFetch: globalHttpFetch });
-  const { onDelta } = dependencies;
+  const preset = dependencies.settings.resolveSamplerPresetForModel(model);
+  const { onDelta } = options;
 
   const serverExtensions = collectServerExtensions(request);
-  const completion = await client.completeChat({
+  const completion = await dependencies.chatCompletionClient.completeChat({
     allowEmptyContent: true,
     endpoint: { ...providerEndpoint, model },
     maxTokens: request.max_completion_tokens ?? request.max_tokens ?? preset.maxTokens,
@@ -111,13 +108,13 @@ export async function createOpenAiChatCompletion(
       topP: request.top_p ?? preset.topP,
     },
     ...(Object.keys(serverExtensions).length > 0 ? { serverExtensions } : {}),
-    signal: dependencies.signal,
+    signal: options.signal,
   });
 
   return {
     content: completion.content,
     model,
     reasoning: completion.reasoning,
-    usage: await countUsage(messages, completion.content),
+    usage: await countUsage(dependencies.tokenCounter, messages, completion.content),
   };
 }

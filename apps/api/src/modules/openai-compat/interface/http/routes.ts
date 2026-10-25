@@ -3,18 +3,16 @@ import type { ServerResponse } from 'node:http';
 
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 
+import type { Clock } from '../../../../platform/clock/clock.js';
 import { parseRequest } from '../../../../platform/http/parse-request.js';
 import { installNotFoundHandler, installProblemHandler } from '../../../../platform/http/problem-handler.js';
-import { globalHttpFetch } from '../../../../platform/outbound-http/global-http-fetch.js';
-import {
-  GenerationProviderUnavailableError,
-  resolveGenerationProviderEndpoint,
-  testProviderConnection,
-} from '../../../providers/index.js';
+import { GenerationProviderUnavailableError } from '../../../providers/index.js';
 import {
   createOpenAiChatCompletion,
+  type OpenAiChatCompletionDependencies,
   type OpenAiChatCompletionResult,
 } from '../../application/create-chat-completion.js';
+import type { OpenAiCompatProvidersPort } from '../../application/openai-compat-ports.js';
 import { OpenAiChatCompletionRequestSchema } from '../../domain/openai-chat-completion-request-schema.js';
 import type {
   OpenAiChatCompletionChunk,
@@ -24,6 +22,11 @@ import type {
 } from '../../domain/openai-chat-completion-response.js';
 import { openAiCompatProblems, toUnexpectedOpenAiProblem } from './openai-compat-problems.js';
 import { type OpenAiErrorEnvelope, toOpenAiErrorEnvelope } from './openai-error-envelope.js';
+
+export interface OpenAiCompatRoutesDependencies extends OpenAiChatCompletionDependencies {
+  readonly providers: OpenAiCompatProvidersPort;
+  readonly clock: Clock;
+}
 
 interface CompletionIdentity {
   created: number;
@@ -81,9 +84,9 @@ function writeSseData(stream: ServerResponse, payload: OpenAiChatCompletionChunk
   stream.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
-async function findConfiguredModel(): Promise<string | null> {
+async function findConfiguredModel(providers: OpenAiCompatProvidersPort): Promise<string | null> {
   try {
-    return (await resolveGenerationProviderEndpoint()).model;
+    return (await providers.resolveGenerationProviderEndpoint()).model;
   } catch (error) {
     if (error instanceof GenerationProviderUnavailableError) {
       return null;
@@ -103,114 +106,121 @@ function openStream(reply: FastifyReply) {
   });
 }
 
-export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
-  installProblemHandler(app, {
-    render: toOpenAiErrorEnvelope,
-    renderUnexpected: toUnexpectedOpenAiProblem,
-    table: openAiCompatProblems,
-  });
-  installNotFoundHandler(app, toOpenAiErrorEnvelope);
+function unixSecondsOf(clock: Clock): number {
+  return Math.floor(clock.now().getTime() / 1000);
+}
 
-  app.get('/models', async () => {
-    const created = Math.floor(Date.now() / 1000);
-    // TODO: take the HttpFetch from the openai-compat module dependencies (F-33)
-    const connection = await testProviderConnection({ httpFetch: globalHttpFetch });
-    const models = connection.models.map((model) => model.id);
+export function createOpenAiCompatRoutes(dependencies: OpenAiCompatRoutesDependencies): FastifyPluginAsync {
+  const { clock, providers } = dependencies;
 
-    if (models.length === 0) {
-      const configuredModel = await findConfiguredModel();
+  return async (app) => {
+    installProblemHandler(app, {
+      render: toOpenAiErrorEnvelope,
+      renderUnexpected: toUnexpectedOpenAiProblem,
+      table: openAiCompatProblems,
+    });
+    installNotFoundHandler(app, toOpenAiErrorEnvelope);
 
-      if (configuredModel !== null) {
-        models.push(configuredModel);
+    app.get('/models', async () => {
+      const created = unixSecondsOf(clock);
+      const connection = await providers.testConnection();
+      const models = connection.models.map((model) => model.id);
+
+      if (models.length === 0) {
+        const configuredModel = await findConfiguredModel(providers);
+
+        if (configuredModel !== null) {
+          models.push(configuredModel);
+        }
       }
-    }
 
-    return {
-      data: models.map((id) => ({ created, id, object: 'model', owned_by: 'immersion' })),
-      object: 'list',
-    };
-  });
-
-  app.post('/chat/completions', async (request, reply) => {
-    const identity: CompletionIdentity = { created: Math.floor(Date.now() / 1000), id: `chatcmpl-${randomUUID()}` };
-    const command = parseRequest(OpenAiChatCompletionRequestSchema, request.body);
-    const controller = new AbortController();
-
-    if (!command.stream) {
-      const result = await createOpenAiChatCompletion(command, { signal: controller.signal });
-
-      return toChatCompletionResponse(result, identity);
-    }
-
-    let streamOpened = false;
-    let deltaCount = 0;
-
-    reply.raw.on('close', () => {
-      if (!reply.raw.writableEnded) {
-        controller.abort();
-      }
+      return {
+        data: models.map((id) => ({ created, id, object: 'model', owned_by: 'immersion' })),
+        object: 'list',
+      };
     });
 
-    const writeChunk = (
-      model: string,
-      delta: OpenAiChatCompletionDelta,
-      finishReason: OpenAiFinishReason | null = null,
-    ) => {
-      writeSseData(reply.raw, toChatCompletionChunk(identity, model, delta, finishReason));
-    };
+    app.post('/chat/completions', async (request, reply) => {
+      const identity: CompletionIdentity = { created: unixSecondsOf(clock), id: `chatcmpl-${randomUUID()}` };
+      const command = parseRequest(OpenAiChatCompletionRequestSchema, request.body);
+      const controller = new AbortController();
 
-    const ensureStream = (model: string) => {
-      if (streamOpened) {
-        return;
+      if (!command.stream) {
+        const result = await createOpenAiChatCompletion(command, dependencies, { signal: controller.signal });
+
+        return toChatCompletionResponse(result, identity);
       }
 
-      openStream(reply);
-      streamOpened = true;
-      writeChunk(model, { content: '', role: 'assistant' });
-    };
+      let streamOpened = false;
+      let deltaCount = 0;
 
-    try {
-      const result = await createOpenAiChatCompletion(command, {
-        onDelta: (delta, channel, model) => {
-          if (controller.signal.aborted || !reply.raw.writable) {
-            return;
-          }
-
-          ensureStream(model);
-          deltaCount += 1;
-          writeChunk(model, channel === 'reasoning' ? { reasoning_content: delta } : { content: delta });
-        },
-        signal: controller.signal,
+      reply.raw.on('close', () => {
+        if (!reply.raw.writableEnded) {
+          controller.abort();
+        }
       });
 
-      ensureStream(result.model);
+      const writeChunk = (
+        model: string,
+        delta: OpenAiChatCompletionDelta,
+        finishReason: OpenAiFinishReason | null = null,
+      ) => {
+        writeSseData(reply.raw, toChatCompletionChunk(identity, model, delta, finishReason));
+      };
 
-      if (deltaCount === 0 && result.reasoning) {
-        writeChunk(result.model, { reasoning_content: result.reasoning });
+      const ensureStream = (model: string) => {
+        if (streamOpened) {
+          return;
+        }
+
+        openStream(reply);
+        streamOpened = true;
+        writeChunk(model, { content: '', role: 'assistant' });
+      };
+
+      try {
+        const result = await createOpenAiChatCompletion(command, dependencies, {
+          onDelta: (delta, channel, model) => {
+            if (controller.signal.aborted || !reply.raw.writable) {
+              return;
+            }
+
+            ensureStream(model);
+            deltaCount += 1;
+            writeChunk(model, channel === 'reasoning' ? { reasoning_content: delta } : { content: delta });
+          },
+          signal: controller.signal,
+        });
+
+        ensureStream(result.model);
+
+        if (deltaCount === 0 && result.reasoning) {
+          writeChunk(result.model, { reasoning_content: result.reasoning });
+        }
+
+        if (deltaCount === 0 && result.content) {
+          writeChunk(result.model, { content: result.content });
+        }
+
+        writeChunk(result.model, {}, toFinishReason(result));
+      } catch (error) {
+        if (!streamOpened) {
+          throw error;
+        }
+
+        request.log.error({ err: error }, 'OpenAI-compatible chat completion failed after its stream opened');
+        writeSseData(
+          reply.raw,
+          toOpenAiErrorEnvelope(openAiCompatProblems.map(error) ?? toUnexpectedOpenAiProblem(error)),
+        );
+      } finally {
+        if (streamOpened) {
+          reply.raw.write('data: [DONE]\n\n');
+          reply.raw.end();
+        }
       }
 
-      if (deltaCount === 0 && result.content) {
-        writeChunk(result.model, { content: result.content });
-      }
-
-      writeChunk(result.model, {}, toFinishReason(result));
-    } catch (error) {
-      if (!streamOpened) {
-        throw error;
-      }
-
-      request.log.error({ err: error }, 'OpenAI-compatible chat completion failed after its stream opened');
-      writeSseData(
-        reply.raw,
-        toOpenAiErrorEnvelope(openAiCompatProblems.map(error) ?? toUnexpectedOpenAiProblem(error)),
-      );
-    } finally {
-      if (streamOpened) {
-        reply.raw.write('data: [DONE]\n\n');
-        reply.raw.end();
-      }
-    }
-
-    return reply;
-  });
-};
+      return reply;
+    });
+  };
+}
