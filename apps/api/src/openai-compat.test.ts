@@ -156,6 +156,7 @@ describe('OpenAI-compatible endpoint', () => {
     expect(OpenAiErrorFixtureSchema.parse(response.json()).error).toMatchObject({
       code: 'provider_unavailable',
       message: 'Модель провайдера не выбрана. Выберите её на странице API.',
+      type: 'server_error',
     });
     expect(api().http.requestLines()).toEqual([]);
   });
@@ -393,7 +394,10 @@ describe('OpenAI-compatible endpoint', () => {
 
     expect(response.statusCode).toBe(502);
     expect(response.headers['content-type']).toContain('application/json');
-    expect(OpenAiErrorFixtureSchema.parse(response.json()).error.code).toBe('provider_failed');
+    expect(OpenAiErrorFixtureSchema.parse(response.json()).error).toMatchObject({
+      code: 'provider_failed',
+      type: 'upstream_error',
+    });
   });
 
   it('reports a provider failure inside the stream once the stream has started', async () => {
@@ -409,7 +413,10 @@ describe('OpenAI-compatible endpoint', () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('text/event-stream');
     expect(lines.at(-1)).toBe('[DONE]');
-    expect(OpenAiErrorFixtureSchema.parse(JSON.parse(lines.at(-2) ?? '{}')).error.code).toBe('provider_failed');
+    expect(OpenAiErrorFixtureSchema.parse(JSON.parse(lines.at(-2) ?? '{}')).error).toMatchObject({
+      code: 'provider_failed',
+      type: 'upstream_error',
+    });
   });
 
   it('reports reasoning on its own field instead of mixing it into the reply', async () => {
@@ -494,6 +501,111 @@ describe('OpenAI-compatible endpoint', () => {
       url: '/v1/chat/completions',
     });
     expect(noMessages.statusCode).toBe(400);
+    expect(api().http.requestLines()).toEqual([]);
+  });
+
+  it('answers an unsupported feature with 400 invalid_request_error', async () => {
+    const response = await api().app.inject({
+      method: 'POST',
+      payload: { messages: [{ content: 'Привет.', role: 'user' }], tool_choice: 'auto' },
+      url: '/v1/chat/completions',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(OpenAiErrorFixtureSchema.parse(response.json())).toEqual({
+      error: {
+        code: 'unsupported_feature',
+        message: 'Tool calls are not supported by this endpoint.',
+        type: 'invalid_request_error',
+      },
+    });
+    expect(api().http.requestLines()).toEqual([]);
+  });
+
+  it('answers a request body that breaks the schema with 400 invalid_request naming each issue by its path', async () => {
+    const response = await api().app.inject({
+      method: 'POST',
+      payload: { messages: [{ content: 'Привет.', role: '' }], temperature: 'тёплая' },
+      url: '/v1/chat/completions',
+    });
+    const { error } = OpenAiErrorFixtureSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(400);
+    expect(error).toMatchObject({ code: 'invalid_request', type: 'invalid_request_error' });
+    expect(error.message.split('; ').map((issue) => issue.slice(0, issue.indexOf(': ')))).toEqual([
+      'messages.0.role',
+      'temperature',
+    ]);
+  });
+
+  it('answers malformed JSON with an OpenAI error envelope', async () => {
+    const response = await api().app.inject({
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      payload: '{"messages": [{"content": "Привет.",',
+      url: '/v1/chat/completions',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(OpenAiErrorFixtureSchema.parse(response.json()).error).toMatchObject({
+      code: 'invalid_request',
+      type: 'invalid_request_error',
+    });
+  });
+
+  it('answers a body type it cannot read with 415 and a body over the limit with 413, both in the OpenAI envelope', async () => {
+    const xml = await api().app.inject({
+      headers: { 'content-type': 'application/xml' },
+      method: 'POST',
+      payload: '<messages/>',
+      url: '/v1/chat/completions',
+    });
+    const oversized = await api().app.inject({
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      payload: `{"messages": [], "padding": "${'ж'.repeat(8 * 1024 * 1024)}"}`,
+      url: '/v1/chat/completions',
+    });
+
+    expect(xml.statusCode).toBe(415);
+    expect(OpenAiErrorFixtureSchema.parse(xml.json()).error).toMatchObject({
+      code: 'unsupported_media_type',
+      type: 'invalid_request_error',
+    });
+    expect(oversized.statusCode).toBe(413);
+    expect(OpenAiErrorFixtureSchema.parse(oversized.json()).error).toMatchObject({
+      code: 'request_too_large',
+      type: 'invalid_request_error',
+    });
+  });
+
+  it('answers an unknown /v1 route with an OpenAI 404 envelope while unknown /api routes keep the API problem', async () => {
+    const embeddings = await api().app.inject({ method: 'POST', payload: { input: 'текст' }, url: '/v1/embeddings' });
+    const unknownApi = await api().app.inject({ method: 'GET', url: '/api/embeddings' });
+
+    expect(embeddings.statusCode).toBe(404);
+    expect(OpenAiErrorFixtureSchema.parse(embeddings.json()).error).toMatchObject({
+      code: 'route_not_found',
+      type: 'invalid_request_error',
+    });
+    expect(unknownApi.statusCode).toBe(404);
+    expect(unknownApi.json()).toEqual({ code: 'route_not_found', message: expect.any(String) });
+  });
+
+  it('answers a blank provider URL with 500 server_error, since stored settings that break their schema are a server fault and not the caller', async () => {
+    await api().settings.useExternalProvider({ model: 'fixture-model', url: '' });
+
+    const response = await api().app.inject({
+      method: 'POST',
+      payload: { messages: [{ content: 'Привет.', role: 'user' }] },
+      url: '/v1/chat/completions',
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(OpenAiErrorFixtureSchema.parse(response.json()).error).toMatchObject({
+      code: 'internal_error',
+      type: 'server_error',
+    });
     expect(api().http.requestLines()).toEqual([]);
   });
 
