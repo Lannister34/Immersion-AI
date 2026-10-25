@@ -1,4 +1,5 @@
 import { charactersProblems } from '../modules/characters/index.js';
+import { chatsProblems } from '../modules/chats/index.js';
 import { lorebooksProblems } from '../modules/lorebooks/index.js';
 import { providersProblems } from '../modules/providers/index.js';
 import { runtimeProblems } from '../modules/runtime/index.js';
@@ -12,6 +13,7 @@ export const apiProblems: ProblemTable = createProblemTable(
   charactersProblems,
   lorebooksProblems,
   scenariosProblems,
+  chatsProblems,
   settingsProblems,
   providersProblems,
   runtimeProblems,

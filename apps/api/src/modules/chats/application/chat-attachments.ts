@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import {
   type ChatMessageAttachmentDto,
   type UploadChatAttachmentCommand,
-  UploadChatAttachmentCommandSchema,
   type UploadChatAttachmentResponse,
   UploadChatAttachmentResponseSchema,
 } from '@immersion/contracts/chats';
@@ -73,8 +72,10 @@ function detectImageMimeType(bytes: Buffer): ChatAttachmentMimeTypeRecord | null
   return null;
 }
 
-export async function uploadChatAttachment(chatId: string, input: unknown): Promise<UploadChatAttachmentResponse> {
-  const command: UploadChatAttachmentCommand = UploadChatAttachmentCommandSchema.parse(input);
+export async function uploadChatAttachment(
+  chatId: string,
+  command: UploadChatAttachmentCommand,
+): Promise<UploadChatAttachmentResponse> {
   const chatRepository = new FileChatRepository();
 
   if (!(await chatRepository.getGenericChatSession(chatId))) {
