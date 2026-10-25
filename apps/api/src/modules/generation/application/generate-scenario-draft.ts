@@ -4,9 +4,6 @@ import {
   GenerateScenarioDraftResponseSchema,
 } from '@immersion/contracts/generation';
 
-import { globalHttpFetch } from '../../../platform/outbound-http/global-http-fetch.js';
-import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
-import type { ChatCompletionClient } from './chat-completion-client.js';
 import {
   buildGenderHint,
   buildPlayerContextBlock,
@@ -17,13 +14,9 @@ import {
   resolveDraftGenerationContext,
 } from './draft-generation-support.js';
 import { ProviderGenerationError } from './generation-errors.js';
+import type { DraftGenerationDependencies, DraftGenerationOptions } from './generation-ports.js';
 import { asJsonRecord, extractJsonFromModelOutput } from './model-json-output.js';
 import { SKIP_THINKING_SERVER_EXTENSIONS } from './skip-thinking-server-extensions.js';
-
-export interface GenerateScenarioDraftDependencies {
-  chatCompletionClient?: ChatCompletionClient;
-  signal?: AbortSignal;
-}
 
 const SCENARIO_DRAFT_MAX_TOKENS = 2048;
 
@@ -94,13 +87,11 @@ RULES:
 
 export async function generateScenarioDraft(
   command: GenerateScenarioDraftCommand,
-  dependencies: GenerateScenarioDraftDependencies = {},
+  dependencies: DraftGenerationDependencies,
+  options: DraftGenerationOptions = {},
 ): Promise<GenerateScenarioDraftResponse> {
-  // TODO: require the chat completion client from the composition root (F-34)
-  const chatCompletionClient =
-    dependencies.chatCompletionClient ?? createChatCompletionClient({ httpFetch: globalHttpFetch });
-  const context = await resolveDraftGenerationContext();
-  const completion = await chatCompletionClient.completeChat({
+  const context = await resolveDraftGenerationContext(dependencies);
+  const completion = await dependencies.chatCompletionClient.completeChat({
     endpoint: context.endpoint,
     maxTokens: SCENARIO_DRAFT_MAX_TOKENS,
     messages: [
@@ -116,7 +107,7 @@ export async function generateScenarioDraft(
     requireCompleteReply: true,
     sampling: context.sampling,
     serverExtensions: SKIP_THINKING_SERVER_EXTENSIONS,
-    signal: dependencies.signal,
+    signal: options.signal,
   });
   const record = asJsonRecord(extractJsonFromModelOutput(completion.content), 'a scenario draft');
   const content = replaceNamesWithPlaceholders(normalizeDraftText(record.content, 20_000), null, context.userName);

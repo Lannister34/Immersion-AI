@@ -11,7 +11,6 @@ import { apiProblems } from './composition/api-problems.js';
 import type { ApiModules } from './composition/create-api-modules.js';
 import { charactersRoutes } from './modules/characters/index.js';
 import { chatsRoutes } from './modules/chats/index.js';
-import { generationRoutes } from './modules/generation/index.js';
 import { lorebooksRoutes } from './modules/lorebooks/index.js';
 import { providersRoutes } from './modules/providers/index.js';
 import { runtimeRoutes } from './modules/runtime/index.js';
@@ -43,7 +42,7 @@ export function buildApiApp(dependencies: ApiDependencies, modules: ApiModules):
   app.register(modules.system.routes);
   app.register(charactersRoutes, { prefix: '/api/characters' });
   app.register(chatsRoutes, { prefix: '/api/chats' });
-  app.register(generationRoutes, { prefix: '/api/generation' });
+  app.register(modules.generation.routes, { prefix: '/api/generation' });
   app.register(lorebooksRoutes, { prefix: '/api/lorebooks' });
   app.register(scenariosRoutes, { prefix: '/api/scenarios' });
   app.register(settingsRoutes, { prefix: '/api/settings' });

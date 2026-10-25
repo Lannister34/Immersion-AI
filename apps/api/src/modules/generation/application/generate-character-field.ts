@@ -6,21 +6,14 @@ import {
   GenerateCharacterFieldResponseSchema,
 } from '@immersion/contracts/generation';
 
-import { globalHttpFetch } from '../../../platform/outbound-http/global-http-fetch.js';
-import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
-import type { ChatCompletionClient } from './chat-completion-client.js';
 import {
   type DraftGenerationContext,
   normalizeDraftText,
   resolveDraftGenerationContext,
 } from './draft-generation-support.js';
 import { ProviderGenerationError } from './generation-errors.js';
+import type { DraftGenerationDependencies, DraftGenerationOptions } from './generation-ports.js';
 import { SKIP_THINKING_SERVER_EXTENSIONS } from './skip-thinking-server-extensions.js';
-
-export interface GenerateCharacterFieldDependencies {
-  chatCompletionClient?: ChatCompletionClient;
-  signal?: AbortSignal;
-}
 
 const CHARACTER_FIELD_MAX_TOKENS = 1024;
 const FIELD_MAX_LENGTHS: Record<CharacterDraftFieldName, number> = {
@@ -121,14 +114,12 @@ ${input.context.languageSentence} Keep it consistent with the rest of the charac
 
 export async function generateCharacterField(
   command: GenerateCharacterFieldCommand,
-  dependencies: GenerateCharacterFieldDependencies = {},
+  dependencies: DraftGenerationDependencies,
+  options: DraftGenerationOptions = {},
 ): Promise<GenerateCharacterFieldResponse> {
-  // TODO: require the chat completion client from the composition root (F-34)
-  const chatCompletionClient =
-    dependencies.chatCompletionClient ?? createChatCompletionClient({ httpFetch: globalHttpFetch });
-  const context = await resolveDraftGenerationContext();
+  const context = await resolveDraftGenerationContext(dependencies);
   const isRegeneration = (command.current[command.field] ?? '').trim().length > 0;
-  const completion = await chatCompletionClient.completeChat({
+  const completion = await dependencies.chatCompletionClient.completeChat({
     endpoint: context.endpoint,
     maxTokens: CHARACTER_FIELD_MAX_TOKENS,
     messages: [
@@ -154,7 +145,7 @@ export async function generateCharacterField(
         : context.sampling.temperature,
     },
     serverExtensions: SKIP_THINKING_SERVER_EXTENSIONS,
-    signal: dependencies.signal,
+    signal: options.signal,
   });
   const value = normalizeDraftText(completion.content, FIELD_MAX_LENGTHS[command.field]);
 
