@@ -1,7 +1,7 @@
 import {
   type ChatReplyGenerationResponse,
   ChatReplyGenerationResponseSchema,
-  StartChatReplyGenerationCommandSchema,
+  type StartChatReplyGenerationCommand,
 } from '@immersion/contracts/generation';
 
 import { ChatNotFoundError } from '../../chats/application/append-chat-messages.js';
@@ -21,10 +21,9 @@ export interface GenerateChatReplyDependencies {
 }
 
 export async function generateChatReply(
-  input: unknown,
+  command: StartChatReplyGenerationCommand,
   dependencies: GenerateChatReplyDependencies = {},
 ): Promise<ChatReplyGenerationResponse> {
-  const command = StartChatReplyGenerationCommandSchema.parse(input);
   const now = dependencies.now ?? (() => new Date());
   const session = await getChatSession(command.chatId);
 

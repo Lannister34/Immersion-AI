@@ -4,4 +4,5 @@ export type { ChatCompletionClient } from './application/chat-completion-client.
 export { ProviderGenerationError } from './application/generation-errors.js';
 export { createChatCompletionClient } from './infrastructure/provider-clients/create-chat-completion-client.js';
 export { getProviderTokenCounter } from './infrastructure/provider-clients/shared-token-counter.js';
+export { generationProblems } from './interface/http/generation-problems.js';
 export { generationRoutes } from './interface/http/routes.js';

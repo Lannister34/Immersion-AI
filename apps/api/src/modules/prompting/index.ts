@@ -10,3 +10,4 @@ export * from './application/prompt-variable-values.js';
 export * from './application/resolve-chat-generation-settings.js';
 export * from './application/resolve-chat-reply-generation-plan.js';
 export * from './application/token-counter.js';
+export { promptingProblems } from './interface/http/prompting-problems.js';

@@ -1,7 +1,7 @@
 import {
   type CharacterDraftFieldName,
   type CharacterDraftFields,
-  GenerateCharacterFieldCommandSchema,
+  type GenerateCharacterFieldCommand,
   type GenerateCharacterFieldResponse,
   GenerateCharacterFieldResponseSchema,
 } from '@immersion/contracts/generation';
@@ -119,10 +119,9 @@ ${input.context.languageSentence} Keep it consistent with the rest of the charac
 }
 
 export async function generateCharacterField(
-  input: unknown,
+  command: GenerateCharacterFieldCommand,
   dependencies: GenerateCharacterFieldDependencies = {},
 ): Promise<GenerateCharacterFieldResponse> {
-  const command = GenerateCharacterFieldCommandSchema.parse(input);
   const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
   const context = await resolveDraftGenerationContext();
   const isRegeneration = (command.current[command.field] ?? '').trim().length > 0;

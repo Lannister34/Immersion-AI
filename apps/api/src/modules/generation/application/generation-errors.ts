@@ -50,6 +50,13 @@ export class NoAssistantMessageToRegenerateError extends Error {
   }
 }
 
+export class GenerationJobNotFoundError extends Error {
+  constructor(readonly jobId: string) {
+    super(`Generation job not found: ${jobId}`);
+    this.name = 'GenerationJobNotFoundError';
+  }
+}
+
 export class ChatReplyGenerationFailedError extends Error {
   declare readonly session: ChatSessionDto;
 

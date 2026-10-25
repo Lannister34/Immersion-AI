@@ -1,6 +1,6 @@
 import type { ChatMessageDto } from '@immersion/contracts/chats';
 import {
-  GenerateChatTitleCommandSchema,
+  type GenerateChatTitleCommand,
   type GenerateChatTitleResponse,
   GenerateChatTitleResponseSchema,
 } from '@immersion/contracts/generation';
@@ -63,10 +63,9 @@ export function sanitizeGeneratedChatTitle(raw: string): string {
 }
 
 export async function generateChatTitle(
-  input: unknown,
+  command: GenerateChatTitleCommand,
   dependencies: GenerateChatTitleDependencies = {},
 ): Promise<GenerateChatTitleResponse> {
-  const command = GenerateChatTitleCommandSchema.parse(input);
   const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
   const session = await getChatSession(command.chatId);
 

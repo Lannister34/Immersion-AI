@@ -1,6 +1,6 @@
 import {
   type CharacterDraftFields,
-  GenerateCharacterAvatarPromptCommandSchema,
+  type GenerateCharacterAvatarPromptCommand,
   type GenerateCharacterAvatarPromptResponse,
   GenerateCharacterAvatarPromptResponseSchema,
 } from '@immersion/contracts/generation';
@@ -36,10 +36,9 @@ Return JSON:
 }
 
 export async function generateCharacterAvatarPrompt(
-  input: unknown,
+  command: GenerateCharacterAvatarPromptCommand,
   dependencies: GenerateCharacterAvatarPromptDependencies = {},
 ): Promise<GenerateCharacterAvatarPromptResponse> {
-  const command = GenerateCharacterAvatarPromptCommandSchema.parse(input);
   const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
   const context = await resolveDraftGenerationContext();
   const completion = await chatCompletionClient.completeChat({

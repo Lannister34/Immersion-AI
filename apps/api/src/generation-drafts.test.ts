@@ -761,4 +761,24 @@ describe('generation draft routes', () => {
       expect(api().http.requestLines()).toEqual([]);
     });
   });
+
+  it.each([
+    ['/api/generation/chat-reply', { chatId: 'ceramics-chat', message: '   ' }],
+    ['/api/generation/chat-title', { chatId: 42 }],
+    ['/api/generation/first-message', {}],
+    ['/api/generation/character', { concept: '   ' }],
+    ['/api/generation/character-field', { field: 'backstory' }],
+    ['/api/generation/character-avatar-prompt', { card: { name: 42 } }],
+    ['/api/generation/scenario', { concept: 'Пустоши', name: '' }],
+    ['/api/generation/scenario-first-message', { concept: 'x'.repeat(2_001) }],
+    ['/api/generation/lorebook', { concept: 'Пустоши', entryCount: 21 }],
+  ])('rejects an invalid draft command with 400 validation_error: %s', async (url, payload) => {
+    answerWith('Should not be called.');
+
+    const response = await api().app.inject({ method: 'POST', url, payload });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ code: 'validation_error', message: expect.any(String) });
+    expect(api().http.requestLines()).toEqual([]);
+  });
 });

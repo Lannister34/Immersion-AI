@@ -17,7 +17,6 @@
   "apps/api/src/modules/runtime/infrastructure/llm-process-manager.ts": "explicit-return-type:6",
   "apps/api/src/platform/storage/atomic-file.ts": "explicit-return-type:2",
   "apps/api/src/shared/infrastructure/legacy-settings-source.ts": "explicit-return-type:2",
-  "apps/api/src/shared/interface/http/problem.ts": "explicit-return-type:1",
   "apps/web/src/app/query-client.ts": "explicit-return-type:1",
   "apps/web/src/modules/characters/api/character-avatar.ts": "explicit-return-type:2",
   "apps/web/src/modules/characters/api/get-character.ts": "explicit-return-type:1",

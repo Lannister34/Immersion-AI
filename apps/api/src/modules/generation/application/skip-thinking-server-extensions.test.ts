@@ -41,11 +41,11 @@ const CONCEPT = 'Гончар из приморского города, кото
 
 const DRAFT_USE_CASES: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
   ['character draft', () => generateCharacterDraft({ concept: CONCEPT })],
-  ['character field', () => generateCharacterField({ concept: CONCEPT, field: 'personality' })],
+  ['character field', () => generateCharacterField({ concept: CONCEPT, current: {}, field: 'personality' })],
   ['character avatar prompt', () => generateCharacterAvatarPrompt({ card: { name: 'Ария Глинская' } })],
   ['scenario draft', () => generateScenarioDraft({ concept: CONCEPT })],
   ['scenario first message', () => generateScenarioFirstMessage({ concept: CONCEPT })],
-  ['lorebook draft', () => generateLorebookDraft({ concept: CONCEPT })],
+  ['lorebook draft', () => generateLorebookDraft({ concept: CONCEPT, entryCount: 8 })],
   ['chat title', generateTitleForSeededChat],
 ];
 

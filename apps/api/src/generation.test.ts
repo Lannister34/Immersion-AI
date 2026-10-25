@@ -10,6 +10,7 @@ import {
   UploadChatAttachmentResponseSchema,
 } from '@immersion/contracts/chats';
 import {
+  ActiveGenerationJobProblemSchema,
   ChatReplyGenerationErrorResponseSchema,
   ChatReplyGenerationResponseSchema,
   ChatReplyPromptPreviewResponseSchema,
@@ -959,7 +960,54 @@ describe('generation routes', () => {
     ]);
   });
 
-  it('rejects a second active chat reply job without duplicating user messages', async () => {
+  it('returns 404 generation_job_not_found for an unknown job on get, cancel and events', async () => {
+    const unknownJobId = '00000000-0000-4000-8000-000000000000';
+    const requests = [
+      { method: 'GET', url: `/api/generation/jobs/${unknownJobId}` },
+      { method: 'POST', url: `/api/generation/jobs/${unknownJobId}/cancel` },
+      { method: 'GET', url: `/api/generation/jobs/${unknownJobId}/events` },
+    ] as const;
+
+    for (const request of requests) {
+      const response = await api().app.inject(request);
+
+      expect(response.statusCode, request.url).toBe(404);
+      expect(response.json(), request.url).toEqual({
+        code: 'generation_job_not_found',
+        message: 'Generation job not found.',
+      });
+    }
+  });
+
+  it('rejects a job id that is not a uuid with 400 validation_error before looking the job up', async () => {
+    const response = await api().app.inject({ method: 'GET', url: '/api/generation/jobs/not-a-job/events' });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: 'validation_error' });
+  });
+
+  it('rejects an invalid job command with 400 validation_error without touching the chat', async () => {
+    const chat = await createChat();
+    const invalidCommands = [
+      { url: '/api/generation/chat-reply-jobs', payload: { chatId: chat.id, message: '   ' } },
+      { url: '/api/generation/chat-reply-jobs/regenerate', payload: { chatId: 42 } },
+    ];
+
+    for (const { payload, url } of invalidCommands) {
+      const response = await api().app.inject({ method: 'POST', url, payload });
+
+      expect(response.statusCode, url).toBe(400);
+      expect(response.json(), url).toMatchObject({ code: 'validation_error' });
+    }
+
+    const jobsResponse = await api().app.inject({ method: 'GET', url: `/api/generation/jobs?chatId=${chat.id}` });
+
+    expect(ListGenerationJobsResponseSchema.parse(jobsResponse.json()).items).toEqual([]);
+    expect(await readTranscript(chat.id)).toEqual([]);
+    expect(api().http.requestLines()).toEqual([]);
+  });
+
+  it('answers a second job for the same chat with 409 and the active job in a contracted body', async () => {
     const provider = api().http.hold('POST', CHAT_COMPLETIONS_URL);
     const chat = await createChat();
     const firstResponse = await api().app.inject({
@@ -984,11 +1032,10 @@ describe('generation routes', () => {
     });
 
     expect(secondResponse.statusCode).toBe(409);
-    expect(secondResponse.json()).toMatchObject({
+    expect(ActiveGenerationJobProblemSchema.parse(secondResponse.json())).toEqual({
       code: 'active_generation_job_exists',
-      job: {
-        id: firstPayload.job.id,
-      },
+      job: expect.objectContaining({ chatId: chat.id, id: firstPayload.job.id, status: 'running' }),
+      message: 'An active generation job already exists for this chat.',
     });
     expect(await readTranscript(chat.id)).toEqual([
       {

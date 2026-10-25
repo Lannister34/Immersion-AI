@@ -1,6 +1,6 @@
 import {
   type CharacterDraftFields,
-  GenerateCharacterDraftCommandSchema,
+  type GenerateCharacterDraftCommand,
   type GenerateCharacterDraftResponse,
   GenerateCharacterDraftResponseSchema,
 } from '@immersion/contracts/generation';
@@ -127,10 +127,9 @@ function normalizeCharacterDraft(
 }
 
 export async function generateCharacterDraft(
-  input: unknown,
+  command: GenerateCharacterDraftCommand,
   dependencies: GenerateCharacterDraftDependencies = {},
 ): Promise<GenerateCharacterDraftResponse> {
-  const command = GenerateCharacterDraftCommandSchema.parse(input);
   const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
   const context: DraftGenerationContext = await resolveDraftGenerationContext();
   const completion = await chatCompletionClient.completeChat({

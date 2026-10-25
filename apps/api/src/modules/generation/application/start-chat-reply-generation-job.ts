@@ -1,7 +1,7 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 import {
   type ContinueChatReplyCommand,
-  StartChatReplyGenerationCommandSchema,
+  type StartChatReplyGenerationCommand,
   type StartChatReplyGenerationJobResponse,
   StartChatReplyGenerationJobResponseSchema,
 } from '@immersion/contracts/generation';
@@ -60,10 +60,9 @@ function startContinueChatReplyJob(
 }
 
 export async function startChatReplyGenerationJob(
-  input: unknown,
+  command: StartChatReplyGenerationCommand,
   dependencies: StartChatReplyGenerationJobDependencies,
 ): Promise<StartChatReplyGenerationJobResponse> {
-  const command = StartChatReplyGenerationCommandSchema.parse(input);
   const now = dependencies.now ?? (() => new Date());
   const session = await getChatSession(command.chatId);
 
