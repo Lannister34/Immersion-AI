@@ -85,6 +85,11 @@ are reported as errors instead of being silently ignored. When a reasoning model
 whole budget on thinking, the answer comes back with `finish_reason: "length"` and the
 thinking in `reasoning_content`, not as an error.
 
+Errors on `/v1`, a malformed body and an unknown `/v1` route included, come back in OpenAI's
+error shape, `{ "error": { "message", "type", "code" } }`, which OpenAI client libraries read.
+A failure after a stream has started arrives as one more `data:` event in that shape, followed by
+`data: [DONE]`.
+
 ### Managing the provider
 
 The provider is switched over the same API, without opening the web UI:
@@ -209,6 +214,11 @@ OpenAI-совместимым серверам. Облакам OpenAI и Anthrop
 `n > 1` возвращают ошибку, а не молчаливую подмену. Если модель-рассуждатель потратила весь
 лимит на размышления, ответ приходит с `finish_reason: "length"` и мыслями в
 `reasoning_content` — это не ошибка.
+
+Ошибки `/v1`, включая неразборчивое тело запроса и неизвестный адрес под `/v1`, приходят
+в формате ошибки OpenAI, `{ "error": { "message", "type", "code" } }`, который читают
+клиентские библиотеки OpenAI. Сбой после начала стрима приходит ещё одним событием `data:` в
+этом формате, а за ним `data: [DONE]`.
 
 ### Управление провайдером
 

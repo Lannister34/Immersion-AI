@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto';
 import type { ServerResponse } from 'node:http';
 
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
-import { z } from 'zod';
 
-import { ProviderGenerationError } from '../../../generation/index.js';
+import { parseRequest } from '../../../../platform/http/parse-request.js';
+import { installNotFoundHandler, installProblemHandler } from '../../../../platform/http/problem-handler.js';
 import {
   GenerationProviderUnavailableError,
   resolveGenerationProviderEndpoint,
@@ -21,62 +21,8 @@ import type {
   OpenAiChatCompletionResponse,
   OpenAiFinishReason,
 } from '../../domain/openai-chat-completion-response.js';
-import { UnsupportedOpenAiFeatureError } from '../../domain/unsupported-openai-feature-error.js';
-
-interface OpenAiErrorBody {
-  error: {
-    code: string;
-    message: string;
-    type: string;
-  };
-}
-
-function toOpenAiError(error: unknown): { body: OpenAiErrorBody; statusCode: number } {
-  if (error instanceof UnsupportedOpenAiFeatureError) {
-    return {
-      body: { error: { code: 'unsupported_feature', message: error.message, type: 'invalid_request_error' } },
-      statusCode: 400,
-    };
-  }
-
-  if (error instanceof z.ZodError) {
-    return {
-      body: {
-        error: {
-          code: 'invalid_request',
-          message: error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; '),
-          type: 'invalid_request_error',
-        },
-      },
-      statusCode: 400,
-    };
-  }
-
-  if (error instanceof GenerationProviderUnavailableError) {
-    return {
-      body: { error: { code: 'provider_unavailable', message: error.message, type: 'server_error' } },
-      statusCode: 503,
-    };
-  }
-
-  if (error instanceof ProviderGenerationError) {
-    return {
-      body: { error: { code: 'provider_failed', message: error.message, type: 'upstream_error' } },
-      statusCode: 502,
-    };
-  }
-
-  return {
-    body: {
-      error: {
-        code: 'internal_error',
-        message: error instanceof Error ? error.message : 'Chat completion failed.',
-        type: 'server_error',
-      },
-    },
-    statusCode: 500,
-  };
-}
+import { openAiCompatProblems, toUnexpectedOpenAiProblem } from './openai-compat-problems.js';
+import { type OpenAiErrorEnvelope, toOpenAiErrorEnvelope } from './openai-error-envelope.js';
 
 interface CompletionIdentity {
   created: number;
@@ -130,7 +76,7 @@ function toChatCompletionChunk(
   };
 }
 
-function writeSseData(stream: ServerResponse, payload: OpenAiChatCompletionChunk | OpenAiErrorBody) {
+function writeSseData(stream: ServerResponse, payload: OpenAiChatCompletionChunk | OpenAiErrorEnvelope) {
   stream.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
@@ -157,6 +103,13 @@ function openStream(reply: FastifyReply) {
 }
 
 export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
+  installProblemHandler(app, {
+    render: toOpenAiErrorEnvelope,
+    renderUnexpected: toUnexpectedOpenAiProblem,
+    table: openAiCompatProblems,
+  });
+  installNotFoundHandler(app, toOpenAiErrorEnvelope);
+
   app.get('/models', async () => {
     const created = Math.floor(Date.now() / 1000);
     const connection = await testProviderConnection();
@@ -178,43 +131,43 @@ export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
 
   app.post('/chat/completions', async (request, reply) => {
     const identity: CompletionIdentity = { created: Math.floor(Date.now() / 1000), id: `chatcmpl-${randomUUID()}` };
+    const command = parseRequest(OpenAiChatCompletionRequestSchema, request.body);
     const controller = new AbortController();
+
+    if (!command.stream) {
+      const result = await createOpenAiChatCompletion(command, { signal: controller.signal });
+
+      return toChatCompletionResponse(result, identity);
+    }
+
     let streamOpened = false;
     let deltaCount = 0;
 
-    try {
-      const command = OpenAiChatCompletionRequestSchema.parse(request.body);
+    reply.raw.on('close', () => {
+      if (!reply.raw.writableEnded) {
+        controller.abort();
+      }
+    });
 
-      if (!command.stream) {
-        const result = await createOpenAiChatCompletion(command, { signal: controller.signal });
+    const writeChunk = (
+      model: string,
+      delta: OpenAiChatCompletionDelta,
+      finishReason: OpenAiFinishReason | null = null,
+    ) => {
+      writeSseData(reply.raw, toChatCompletionChunk(identity, model, delta, finishReason));
+    };
 
-        return toChatCompletionResponse(result, identity);
+    const ensureStream = (model: string) => {
+      if (streamOpened) {
+        return;
       }
 
-      reply.raw.on('close', () => {
-        if (!reply.raw.writableEnded) {
-          controller.abort();
-        }
-      });
+      openStream(reply);
+      streamOpened = true;
+      writeChunk(model, { content: '', role: 'assistant' });
+    };
 
-      const writeChunk = (
-        model: string,
-        delta: OpenAiChatCompletionDelta,
-        finishReason: OpenAiFinishReason | null = null,
-      ) => {
-        writeSseData(reply.raw, toChatCompletionChunk(identity, model, delta, finishReason));
-      };
-
-      const ensureStream = (model: string) => {
-        if (streamOpened) {
-          return;
-        }
-
-        openStream(reply);
-        streamOpened = true;
-        writeChunk(model, { content: '', role: 'assistant' });
-      };
-
+    try {
       const result = await createOpenAiChatCompletion(command, {
         onDelta: (delta, channel, model) => {
           if (controller.signal.aborted || !reply.raw.writable) {
@@ -239,23 +192,23 @@ export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
       }
 
       writeChunk(result.model, {}, toFinishReason(result));
-      reply.raw.write('data: [DONE]\n\n');
-      reply.raw.end();
-
-      return reply;
     } catch (error) {
-      const mapped = toOpenAiError(error);
-      request.log.error({ err: error }, 'OpenAI-compatible chat completion failed');
-
       if (!streamOpened) {
-        return reply.status(mapped.statusCode).send(mapped.body);
+        throw error;
       }
 
-      writeSseData(reply.raw, mapped.body);
-      reply.raw.write('data: [DONE]\n\n');
-      reply.raw.end();
-
-      return reply;
+      request.log.error({ err: error }, 'OpenAI-compatible chat completion failed after its stream opened');
+      writeSseData(
+        reply.raw,
+        toOpenAiErrorEnvelope(openAiCompatProblems.map(error) ?? toUnexpectedOpenAiProblem(error)),
+      );
+    } finally {
+      if (streamOpened) {
+        reply.raw.write('data: [DONE]\n\n');
+        reply.raw.end();
+      }
     }
+
+    return reply;
   });
 };

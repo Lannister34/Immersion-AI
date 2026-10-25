@@ -2,6 +2,8 @@ import type { ProviderConnectionResponse } from '@immersion/contracts/providers'
 import Fastify from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { OpenAiErrorFixtureSchema } from '../../test-support/openai-response-fixture-schemas.js';
+
 import {
   GenerationProviderUnavailableError,
   type resolveGenerationProviderEndpoint,
@@ -62,6 +64,10 @@ describe('GET /v1/models without a provider model catalog', () => {
     const response = await listModels();
 
     expect(response.statusCode).toBe(500);
-    expect(response.json().message).toBe('EACCES: user-settings.json');
+    expect(OpenAiErrorFixtureSchema.parse(response.json()).error).toEqual({
+      code: 'internal_error',
+      message: 'EACCES: user-settings.json',
+      type: 'server_error',
+    });
   });
 });
