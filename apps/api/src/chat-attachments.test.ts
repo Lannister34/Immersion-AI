@@ -10,6 +10,7 @@ import { IMAGE_UPLOAD_MAX_BYTES, IMAGE_UPLOAD_MAX_MEGABYTES } from '@immersion/c
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { snapshotDataRoot } from './test-support/data-root-snapshot.js';
 import { buildPng } from './test-support/png-image.js';
 import type { TestApi } from './test-support/test-api.js';
 import { useTestApi } from './test-support/use-test-api.js';
@@ -93,6 +94,22 @@ describe('chat attachments', () => {
     expect(response.json()).toMatchObject({ code: 'invalid_chat_attachment' });
   });
 
+  it('rejects an attachment upload without base64 data with 400 validation_error', async () => {
+    const { app, dataRoot } = api();
+    const chat = await createChat(app);
+    const before = await snapshotDataRoot(dataRoot);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/chats/${chat.id}/attachments`,
+      payload: { mimeType: 'image/png' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: 'validation_error' });
+    expect(await snapshotDataRoot(dataRoot)).toEqual(before);
+  });
+
   it('returns 404 for an attachment of another chat', async () => {
     const { app } = api();
     const chat = await createChat(app);
@@ -105,6 +122,10 @@ describe('chat attachments', () => {
     });
 
     expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      code: 'chat_attachment_not_found',
+      message: 'Вложение не найдено — загрузите изображение заново.',
+    });
   });
 
   it.each([

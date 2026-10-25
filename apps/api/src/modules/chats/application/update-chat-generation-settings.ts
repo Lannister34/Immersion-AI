@@ -1,6 +1,5 @@
 import {
   type UpdateChatGenerationSettingsCommand,
-  UpdateChatGenerationSettingsCommandSchema,
   type UpdateChatGenerationSettingsResponse,
   UpdateChatGenerationSettingsResponseSchema,
 } from '@immersion/contracts/chats';
@@ -84,9 +83,8 @@ function toChatGenerationSettingsRecord(command: UpdateChatGenerationSettingsCom
 
 export async function updateChatGenerationSettings(
   chatId: string,
-  input: unknown,
+  command: UpdateChatGenerationSettingsCommand,
 ): Promise<UpdateChatGenerationSettingsResponse> {
-  const command: UpdateChatGenerationSettingsCommand = UpdateChatGenerationSettingsCommandSchema.parse(input);
   const impossibleBudget = impossibleReplyBudget(command.sampling, findChatSamplerPreset(command.samplerPresetId));
   const nextSettings = toChatGenerationSettingsRecord(command);
   const chatRepository = new FileChatRepository();

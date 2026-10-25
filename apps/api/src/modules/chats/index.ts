@@ -11,4 +11,5 @@ export { listChatFileStats, readChatSummaryWithSearchText } from './application/
 export type { ChatSummaryRecord } from './application/chat-records.js';
 export { createChat } from './application/create-chat.js';
 export { getChatSession } from './application/get-chat-session.js';
+export { chatsProblems } from './interface/http/chats-problems.js';
 export { chatsRoutes } from './interface/http/routes.js';

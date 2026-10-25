@@ -14,6 +14,7 @@ import {
 import { CHAT_IMPORT_MAX_BYTES } from '@immersion/contracts/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { snapshotDataRoot } from './test-support/data-root-snapshot.js';
 import { readStoredChatFile } from './test-support/stored-chat-file.js';
 import type { StoredUserSettingsFixture } from './test-support/stored-user-settings-fixture-schema.js';
 import { useTestApi } from './test-support/use-test-api.js';
@@ -218,7 +219,7 @@ describe('chat routes', () => {
     });
   });
 
-  it('returns 400 for invalid chat generation settings', async () => {
+  it('rejects an invalid generation-settings payload with 400 validation_error', async () => {
     const { app } = api();
     const createResponse = await app.inject({
       method: 'POST',
@@ -228,6 +229,7 @@ describe('chat routes', () => {
       },
     });
     const createPayload = CreateChatResponseSchema.parse(createResponse.json());
+    const before = await snapshotDataRoot(api().dataRoot);
     const updateResponse = await app.inject({
       method: 'PUT',
       url: `/api/chats/${createPayload.chat.id}/generation-settings`,
@@ -254,6 +256,7 @@ describe('chat routes', () => {
     expect(updateResponse.json()).toMatchObject({
       code: 'validation_error',
     });
+    expect(await snapshotDataRoot(api().dataRoot)).toEqual(before);
   });
 
   it('returns 400 when chat generation settings reference an unknown sampler preset', async () => {
@@ -687,17 +690,19 @@ describe('chat routes', () => {
     });
   });
 
-  it('returns 404 for an unknown chat id', async () => {
-    const { app } = api();
+  it('GET of a missing chat returns chat_not_found from the table', async () => {
+    const { app, logs } = api();
     const response = await app.inject({
       method: 'GET',
       url: '/api/chats/missing-chat',
     });
 
     expect(response.statusCode).toBe(404);
-    expect(response.json()).toMatchObject({
-      code: 'chat_not_found',
-    });
+    expect(response.json()).toEqual({ code: 'chat_not_found', message: 'Chat session not found.' });
+    expect(logs.lines).toContainEqual(
+      expect.objectContaining({ code: 'chat_not_found', level: 'info', statusCode: 404 }),
+    );
+    expect(logs.lines.filter((line) => line.level === 'error')).toEqual([]);
   });
 
   it('patches a single message content and returns the refreshed session', async () => {
