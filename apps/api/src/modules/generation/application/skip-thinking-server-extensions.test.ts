@@ -5,11 +5,12 @@ import path from 'node:path';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { z } from 'zod';
 
-import { stubGlobalFetch } from '../../../test-support/global-fetch-stub.js';
-import type { HttpStub } from '../../../test-support/http-stub.js';
+import { createHttpStub, type HttpStub } from '../../../test-support/http-stub.js';
 import { openAiChatCompletion } from '../../../test-support/provider-responses.js';
 import { appendChatMessages } from '../../chats/application/append-chat-messages.js';
 import { createChat } from '../../chats/application/create-chat.js';
+import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
+import type { ChatCompletionClient } from './chat-completion-client.js';
 import { generateCharacterAvatarPrompt } from './generate-character-avatar-prompt.js';
 import { generateCharacterDraft } from './generate-character-draft.js';
 import { generateCharacterField } from './generate-character-field.js';
@@ -39,24 +40,40 @@ const REPLY_EVERY_DRAFT_ACCEPTS = JSON.stringify({
 
 const CONCEPT = 'Гончар из приморского города, который лепит амфоры для {{user}}';
 
-const DRAFT_USE_CASES: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
-  ['character draft', () => generateCharacterDraft({ concept: CONCEPT })],
-  ['character field', () => generateCharacterField({ concept: CONCEPT, current: {}, field: 'personality' })],
-  ['character avatar prompt', () => generateCharacterAvatarPrompt({ card: { name: 'Ария Глинская' } })],
-  ['scenario draft', () => generateScenarioDraft({ concept: CONCEPT })],
-  ['scenario first message', () => generateScenarioFirstMessage({ concept: CONCEPT })],
-  ['lorebook draft', () => generateLorebookDraft({ concept: CONCEPT, entryCount: 8 })],
+type DraftUseCase = (chatCompletionClient: ChatCompletionClient) => Promise<unknown>;
+
+const DRAFT_USE_CASES: ReadonlyArray<readonly [string, DraftUseCase]> = [
+  ['character draft', (chatCompletionClient) => generateCharacterDraft({ concept: CONCEPT }, { chatCompletionClient })],
+  [
+    'character field',
+    (chatCompletionClient) =>
+      generateCharacterField({ concept: CONCEPT, current: {}, field: 'personality' }, { chatCompletionClient }),
+  ],
+  [
+    'character avatar prompt',
+    (chatCompletionClient) =>
+      generateCharacterAvatarPrompt({ card: { name: 'Ария Глинская' } }, { chatCompletionClient }),
+  ],
+  ['scenario draft', (chatCompletionClient) => generateScenarioDraft({ concept: CONCEPT }, { chatCompletionClient })],
+  [
+    'scenario first message',
+    (chatCompletionClient) => generateScenarioFirstMessage({ concept: CONCEPT }, { chatCompletionClient }),
+  ],
+  [
+    'lorebook draft',
+    (chatCompletionClient) => generateLorebookDraft({ concept: CONCEPT, entryCount: 8 }, { chatCompletionClient }),
+  ],
   ['chat title', generateTitleForSeededChat],
 ];
 
-async function generateTitleForSeededChat(): Promise<unknown> {
+async function generateTitleForSeededChat(chatCompletionClient: ChatCompletionClient): Promise<unknown> {
   const { chat } = await createChat({ title: 'Чат о керамике' });
   await appendChatMessages(chat.id, [
     { content: 'Расскажи про обжиг керамики.', createdAt: '2026-01-01T00:00:00.000Z', role: 'user' },
     { content: 'Обжиг превращает глину в керамику.', createdAt: '2026-01-01T00:00:01.000Z', role: 'assistant' },
   ]);
 
-  return generateChatTitle({ chatId: chat.id });
+  return generateChatTitle({ chatId: chat.id }, { chatCompletionClient });
 }
 
 async function useProviderSettings(settings: object): Promise<void> {
@@ -72,7 +89,7 @@ async function useProviderSettings(settings: object): Promise<void> {
 const ProviderRequestBodySchema = z.record(z.string(), z.unknown());
 
 function stubProviderReply(): HttpStub {
-  const http = stubGlobalFetch();
+  const http = createHttpStub();
   http.on('POST', /\/chat\/completions$/u, () => openAiChatCompletion(REPLY_EVERY_DRAFT_ACCEPTS));
 
   return http;
@@ -94,7 +111,7 @@ describe('llama-server counts reasoning tokens against max_tokens, so drafts ask
     await useProviderSettings(LOCAL_PROVIDER_SETTINGS);
     const http = stubProviderReply();
 
-    await generate();
+    await generate(createChatCompletionClient({ httpFetch: http.fetch }));
 
     expect(onlyRequestBody(http)).toMatchObject({ chat_template_kwargs: { enable_thinking: false } });
   });
@@ -103,7 +120,7 @@ describe('llama-server counts reasoning tokens against max_tokens, so drafts ask
     await useProviderSettings(CLOUD_PROVIDER_SETTINGS);
     const http = stubProviderReply();
 
-    await generate();
+    await generate(createChatCompletionClient({ httpFetch: http.fetch }));
 
     expect(onlyRequestBody(http)).not.toHaveProperty('chat_template_kwargs');
   });

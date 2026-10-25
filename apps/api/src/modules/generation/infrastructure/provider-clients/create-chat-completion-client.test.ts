@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { stubGlobalFetch } from '../../../../test-support/global-fetch-stub.js';
+import { createHttpStub } from '../../../../test-support/http-stub.js';
 import { anthropicMessage, openAiChatCompletion } from '../../../../test-support/provider-responses.js';
 import type { ChatCompletionRequest } from '../../application/chat-completion-client.js';
 import { createChatCompletionClient } from './create-chat-completion-client.js';
@@ -24,10 +24,10 @@ function requestFor(endpoint: ChatCompletionRequest['endpoint']): ChatCompletion
 
 describe('createChatCompletionClient', () => {
   it('picks the dialect per request, so one client follows a provider switch between generations', async () => {
-    const http = stubGlobalFetch();
+    const http = createHttpStub();
     http.on('POST', 'https://api.anthropic.com/v1/messages', () => anthropicMessage('Claude.'));
     http.on('POST', 'http://127.0.0.1:5001/v1/chat/completions', () => openAiChatCompletion('Local.'));
-    const client = createChatCompletionClient();
+    const client = createChatCompletionClient({ httpFetch: http.fetch });
 
     const anthropicReply = await client.completeChat(
       requestFor({

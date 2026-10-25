@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-
+import type { Clock } from '../../../../platform/clock/clock.js';
+import type { HttpFetch } from '../../../../platform/outbound-http/http-fetch.js';
 import {
   countTokensHeuristic,
   type TokenCounter,
@@ -22,8 +23,9 @@ export interface TokenizeTarget {
 }
 
 export interface ProviderTokenCounterDependencies {
-  now?: () => number;
-  resolveTokenizeTarget?: () => Promise<TokenizeTarget | null>;
+  readonly httpFetch: HttpFetch;
+  readonly clock: Clock;
+  readonly resolveTokenizeTarget?: () => Promise<TokenizeTarget | null>;
 }
 
 async function resolveBuiltinRuntimeTarget(): Promise<TokenizeTarget | null> {
@@ -50,8 +52,12 @@ function hashText(text: string): string {
   return createHash('sha1').update(text).digest('base64');
 }
 
-async function postJson(url: string, body: Record<string, string>): Promise<Record<string, unknown> | null> {
-  const response = await fetch(url, {
+async function postJson(
+  httpFetch: HttpFetch,
+  url: string,
+  body: Record<string, string>,
+): Promise<Record<string, unknown> | null> {
+  const response = await httpFetch(url, {
     body: JSON.stringify(body),
     headers: { 'Content-Type': 'application/json' },
     method: 'POST',
@@ -87,22 +93,29 @@ function parseKoboldTokenCount(payload: Record<string, unknown> | null): number 
   return Math.floor(payload.value);
 }
 
-async function requestTokenCount(baseUrl: string, kind: TokenizeEndpointKind, text: string): Promise<number | null> {
+async function requestTokenCount(
+  httpFetch: HttpFetch,
+  baseUrl: string,
+  kind: TokenizeEndpointKind,
+  text: string,
+): Promise<number | null> {
   if (kind === 'llama') {
-    return parseLlamaTokenCount(await postJson(`${baseUrl}/tokenize`, { content: text }));
+    return parseLlamaTokenCount(await postJson(httpFetch, `${baseUrl}/tokenize`, { content: text }));
   }
 
-  return parseKoboldTokenCount(await postJson(`${baseUrl}/api/extra/tokencount`, { prompt: text }));
+  return parseKoboldTokenCount(await postJson(httpFetch, `${baseUrl}/api/extra/tokencount`, { prompt: text }));
 }
 
 export class ProviderTokenCounter implements TokenCounter {
   private readonly capabilities = new Map<string, TokenizeCapability>();
   private readonly countCache = new Map<string, number>();
-  private readonly now: () => number;
+  private readonly httpFetch: HttpFetch;
+  private readonly clock: Clock;
   private readonly resolveTokenizeTarget: () => Promise<TokenizeTarget | null>;
 
-  constructor(dependencies: ProviderTokenCounterDependencies = {}) {
-    this.now = dependencies.now ?? (() => Date.now());
+  constructor(dependencies: ProviderTokenCounterDependencies) {
+    this.httpFetch = dependencies.httpFetch;
+    this.clock = dependencies.clock;
     this.resolveTokenizeTarget = dependencies.resolveTokenizeTarget ?? resolveBuiltinRuntimeTarget;
   }
 
@@ -142,7 +155,7 @@ export class ProviderTokenCounter implements TokenCounter {
         return cached.kind;
       }
 
-      if (this.now() < cached.retryAtMs) {
+      if (this.nowMs() < cached.retryAtMs) {
         return null;
       }
     }
@@ -162,7 +175,7 @@ export class ProviderTokenCounter implements TokenCounter {
 
   private async detectCapability(baseUrl: string): Promise<TokenizeEndpointKind | null> {
     for (const kind of ['llama', 'kobold'] as const) {
-      const probeCount = await requestTokenCount(baseUrl, kind, '').catch(() => null);
+      const probeCount = await requestTokenCount(this.httpFetch, baseUrl, kind, '').catch(() => null);
 
       if (probeCount !== null) {
         return kind;
@@ -172,8 +185,12 @@ export class ProviderTokenCounter implements TokenCounter {
     return null;
   }
 
+  private nowMs(): number {
+    return this.clock.now().getTime();
+  }
+
   private markAbsent(baseUrl: string) {
-    this.capabilities.set(baseUrl, { kind: 'absent', retryAtMs: this.now() + ABSENT_RETRY_MS });
+    this.capabilities.set(baseUrl, { kind: 'absent', retryAtMs: this.nowMs() + ABSENT_RETRY_MS });
   }
 
   private async countText(target: TokenizeTarget, kind: TokenizeEndpointKind, text: string): Promise<number> {
@@ -188,7 +205,7 @@ export class ProviderTokenCounter implements TokenCounter {
       return cachedCount;
     }
 
-    const count = await requestTokenCount(baseUrl, kind, text);
+    const count = await requestTokenCount(this.httpFetch, baseUrl, kind, text);
 
     if (count === null) {
       throw new Error(`Tokenize request failed for ${baseUrl}`);

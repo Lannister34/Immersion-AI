@@ -6,6 +6,7 @@ import {
 import type { FastifyPluginAsync } from 'fastify';
 
 import { parseRequest } from '../../../../platform/http/parse-request.js';
+import { globalHttpFetch } from '../../../../platform/outbound-http/global-http-fetch.js';
 import { getProviderSettings } from '../../application/get-provider-settings.js';
 import { getProvidersOverview } from '../../application/get-providers-overview.js';
 import { patchProviderSettings } from '../../application/patch-provider-settings.js';
@@ -23,12 +24,14 @@ export const providersRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.get('/connection', async () => testProviderConnection());
+  // TODO: take the HttpFetch from the providers module dependencies (F-40)
+  app.get('/connection', async () => testProviderConnection({ httpFetch: globalHttpFetch }));
 
   app.post('/models', async (request) => {
     const command = parseRequest(ProviderModelsProbeCommandSchema, request.body);
 
-    return probeProviderModels(command);
+    // TODO: take the HttpFetch from the providers module dependencies (F-40)
+    return probeProviderModels(command, { httpFetch: globalHttpFetch });
   });
 
   app.get('/settings', async () => getProviderSettings());

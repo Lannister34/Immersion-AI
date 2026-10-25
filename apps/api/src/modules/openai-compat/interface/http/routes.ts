@@ -5,6 +5,7 @@ import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 
 import { parseRequest } from '../../../../platform/http/parse-request.js';
 import { installNotFoundHandler, installProblemHandler } from '../../../../platform/http/problem-handler.js';
+import { globalHttpFetch } from '../../../../platform/outbound-http/global-http-fetch.js';
 import {
   GenerationProviderUnavailableError,
   resolveGenerationProviderEndpoint,
@@ -112,7 +113,8 @@ export const openAiCompatRoutes: FastifyPluginAsync = async (app) => {
 
   app.get('/models', async () => {
     const created = Math.floor(Date.now() / 1000);
-    const connection = await testProviderConnection();
+    // TODO: take the HttpFetch from the openai-compat module dependencies (F-33)
+    const connection = await testProviderConnection({ httpFetch: globalHttpFetch });
     const models = connection.models.map((model) => model.id);
 
     if (models.length === 0) {

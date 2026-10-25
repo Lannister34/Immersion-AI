@@ -6,6 +6,7 @@ import {
 } from '@immersion/contracts/generation';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
 
+import { globalHttpFetch } from '../../../platform/outbound-http/global-http-fetch.js';
 import { appendChatMessages, ChatNotFoundError } from '../../chats/application/append-chat-messages.js';
 import { ChatTranscriptNotEmptyError } from '../../chats/application/chat-conflicts.js';
 import { getChatSession } from '../../chats/application/get-chat-session.js';
@@ -72,7 +73,9 @@ export async function generateFirstMessage(
   dependencies: GenerateFirstMessageDependencies = {},
 ): Promise<GenerateFirstMessageResponse> {
   const now = dependencies.now ?? (() => new Date());
-  const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
+  // TODO: require the chat completion client from the composition root (F-35)
+  const chatCompletionClient =
+    dependencies.chatCompletionClient ?? createChatCompletionClient({ httpFetch: globalHttpFetch });
   const session = await getChatSession(command.chatId);
 
   if (!session) {

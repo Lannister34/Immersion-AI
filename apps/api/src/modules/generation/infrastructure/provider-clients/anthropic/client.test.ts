@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { stubGlobalFetch } from '../../../../../test-support/global-fetch-stub.js';
+import { createHttpStub } from '../../../../../test-support/http-stub.js';
 import { readProviderChatRequest } from '../../../../../test-support/provider-chat-request.js';
 import { anthropicMessage, anthropicMessageStream } from '../../../../../test-support/provider-responses.js';
 import type { ChatCompletionRequest } from '../../../application/chat-completion-client.js';
@@ -79,10 +79,10 @@ describe('buildAnthropicPayload', () => {
 
 describe('AnthropicClient', () => {
   it('posts to /v1/messages with the key in x-api-key and the API version in a header, not in the URL', async () => {
-    const http = stubGlobalFetch();
+    const http = createHttpStub();
     http.on('POST', MESSAGES_URL, () => anthropicMessage('Здравствуй.'));
 
-    const response = await new AnthropicClient().completeChat(BASE_REQUEST);
+    const response = await new AnthropicClient({ httpFetch: http.fetch }).completeChat(BASE_REQUEST);
 
     expect(http.requestLines()).toEqual([`POST ${MESSAGES_URL}`]);
     expect(http.requests[0]?.headers.get('x-api-key')).toBe('sk-ant-test');
@@ -92,10 +92,10 @@ describe('AnthropicClient', () => {
   });
 
   it('clamps temperature to 1 and drops repetition penalties, which the Anthropic API does not accept', async () => {
-    const http = stubGlobalFetch();
+    const http = createHttpStub();
     http.on('POST', MESSAGES_URL, () => anthropicMessage('Ага.'));
 
-    await new AnthropicClient().completeChat(BASE_REQUEST);
+    await new AnthropicClient({ httpFetch: http.fetch }).completeChat(BASE_REQUEST);
     const body = readProviderChatRequest(http);
 
     expect(body.temperature).toBe(1);
@@ -106,10 +106,10 @@ describe('AnthropicClient', () => {
   });
 
   it('sends Claude either temperature or top_p, since newer Claude models reject both together', async () => {
-    const http = stubGlobalFetch();
+    const http = createHttpStub();
     http.on('POST', MESSAGES_URL, () => anthropicMessage('Ага.'));
 
-    await new AnthropicClient().completeChat({
+    await new AnthropicClient({ httpFetch: http.fetch }).completeChat({
       ...BASE_REQUEST,
       sampling: { ...BASE_REQUEST.sampling, temperature: 0.7, topP: 0.9 },
     });
@@ -120,7 +120,7 @@ describe('AnthropicClient', () => {
   });
 
   it('keeps thinking blocks out of the reply', async () => {
-    const http = stubGlobalFetch();
+    const http = createHttpStub();
     http.on('POST', MESSAGES_URL, () =>
       Response.json({
         content: [
@@ -130,14 +130,14 @@ describe('AnthropicClient', () => {
       }),
     );
 
-    const response = await new AnthropicClient().completeChat(BASE_REQUEST);
+    const response = await new AnthropicClient({ httpFetch: http.fetch }).completeChat(BASE_REQUEST);
 
     expect(response.content).toBe('Ответ.');
     expect(response.reasoning).toBe('Взвешиваю варианты.');
   });
 
   it('passes over content blocks of unknown types, such as tool_use and redacted_thinking, without failing', async () => {
-    const http = stubGlobalFetch();
+    const http = createHttpStub();
     http.on('POST', MESSAGES_URL, () =>
       Response.json({
         content: [
@@ -148,22 +148,25 @@ describe('AnthropicClient', () => {
       }),
     );
 
-    const response = await new AnthropicClient().completeChat(BASE_REQUEST);
+    const response = await new AnthropicClient({ httpFetch: http.fetch }).completeChat(BASE_REQUEST);
 
     expect(response).toEqual({ content: 'Ответ.', reasoning: '' });
   });
 
   it('never forwards server extensions, which the Anthropic API would reject', async () => {
-    const http = stubGlobalFetch();
+    const http = createHttpStub();
     http.on('POST', MESSAGES_URL, () => anthropicMessage('Ага.'));
 
-    await new AnthropicClient().completeChat({ ...BASE_REQUEST, serverExtensions: { enable_thinking: false } });
+    await new AnthropicClient({ httpFetch: http.fetch }).completeChat({
+      ...BASE_REQUEST,
+      serverExtensions: { enable_thinking: false },
+    });
 
     expect(readProviderChatRequest(http)).not.toHaveProperty('enable_thinking');
   });
 
   it('reports streamed text and thinking on their own channels', async () => {
-    const http = stubGlobalFetch();
+    const http = createHttpStub();
     http.on('POST', MESSAGES_URL, () =>
       anthropicMessageStream([
         { type: 'message_start' },
@@ -175,7 +178,7 @@ describe('AnthropicClient', () => {
     );
     const deltas: Array<[string, string]> = [];
 
-    const response = await new AnthropicClient().completeChat({
+    const response = await new AnthropicClient({ httpFetch: http.fetch }).completeChat({
       ...BASE_REQUEST,
       onDelta: (delta, channel) => deltas.push([channel, delta]),
     });
@@ -190,7 +193,7 @@ describe('AnthropicClient', () => {
   });
 
   it('splits a think tag out of streamed text, which local proxies of this format emit', async () => {
-    const http = stubGlobalFetch();
+    const http = createHttpStub();
     http.on('POST', MESSAGES_URL, () =>
       anthropicMessageStream([
         { delta: { text: '<think>Прикидываю</think>', type: 'text_delta' }, type: 'content_block_delta' },
@@ -200,7 +203,7 @@ describe('AnthropicClient', () => {
     );
     const deltas: Array<[string, string]> = [];
 
-    const response = await new AnthropicClient().completeChat({
+    const response = await new AnthropicClient({ httpFetch: http.fetch }).completeChat({
       ...BASE_REQUEST,
       onDelta: (delta, channel) => deltas.push([channel, delta]),
     });
@@ -213,13 +216,30 @@ describe('AnthropicClient', () => {
   });
 
   it('fails loudly when the stream reports an error event', async () => {
-    const http = stubGlobalFetch();
+    const http = createHttpStub();
     http.on('POST', MESSAGES_URL, () =>
       anthropicMessageStream([{ error: { message: 'overloaded_error' }, type: 'error' }]),
     );
 
-    await expect(new AnthropicClient().completeChat({ ...BASE_REQUEST, onDelta: () => undefined })).rejects.toThrow(
-      /overloaded_error/u,
-    );
+    await expect(
+      new AnthropicClient({ httpFetch: http.fetch }).completeChat({ ...BASE_REQUEST, onDelta: () => undefined }),
+    ).rejects.toThrow(/overloaded_error/u);
+  });
+
+  it('hands the caller signal to the HTTP port, so cancelling a generation stops the provider request', async () => {
+    const http = createHttpStub();
+    const held = http.hold('POST', MESSAGES_URL);
+    const controller = new AbortController();
+
+    const completion = new AnthropicClient({ httpFetch: http.fetch }).completeChat({
+      ...BASE_REQUEST,
+      onDelta: () => undefined,
+      signal: controller.signal,
+    });
+    const sent = await held.started;
+    controller.abort();
+
+    expect(sent.signal?.aborted).toBe(true);
+    await expect(completion).rejects.toMatchObject({ name: 'AbortError' });
   });
 });
