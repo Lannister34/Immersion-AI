@@ -11,6 +11,8 @@ import { describe, expect, it } from 'vitest';
 import { selectRuntimeInstallPlan } from './modules/runtime/application/install-runtime.js';
 import { useTestApi } from './test-support/use-test-api.js';
 
+const LLAMA_CPP_LATEST_RELEASE_URL = 'https://api.github.com/repos/ggml-org/llama.cpp/releases/latest';
+
 describe('runtime control routes', () => {
   const api = useTestApi();
 
@@ -200,13 +202,14 @@ describe('runtime control routes', () => {
     expect(overview.modelsDirsStatus).toEqual([]);
   });
 
-  it('rejects model start when the requested model path does not exist', async () => {
+  it('answers a start with a missing model file with 400 validation_error', async () => {
     const { app, dataRoot } = api();
+    const modelPath = path.join(dataRoot, 'Удалённая-модель.gguf');
     const response = await app.inject({
       method: 'POST',
       url: '/api/runtime/start',
       payload: {
-        modelPath: path.join(dataRoot, 'missing.gguf'),
+        modelPath,
         port: 5001,
         gpuLayers: 0,
         contextSize: 8192,
@@ -216,9 +219,28 @@ describe('runtime control routes', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({
+    expect(response.json()).toEqual({
       code: 'validation_error',
+      message: `Model not found: ${modelPath}`,
     });
+  });
+
+  it('answers a start body without a model path with 400 validation_error', async () => {
+    const { app } = api();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/runtime/start',
+      payload: {
+        port: 5001,
+        gpuLayers: 0,
+        contextSize: 8192,
+        flashAttention: false,
+        threads: 0,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: 'validation_error' });
   });
 
   it('rejects a missing mmproj projector before launch, since llama-server would die after starting and bury the cause in its log', async () => {
@@ -241,7 +263,10 @@ describe('runtime control routes', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().message).toContain('Multimodal projector not found');
+    expect(response.json()).toEqual({
+      code: 'validation_error',
+      message: `Multimodal projector not found: ${path.join(dataRoot, 'missing-mmproj.gguf')}`,
+    });
   });
 
   it('returns runtime overview after stop on an idle server', async () => {
@@ -258,6 +283,104 @@ describe('runtime control routes', () => {
   });
 });
 
+describe('runtime install failures', () => {
+  const api = useTestApi();
+
+  it('answers a failed release lookup with 502 runtime_install_failed', async () => {
+    const { app, http } = api();
+    http.on('GET', LLAMA_CPP_LATEST_RELEASE_URL, () => new Response('upstream down', { status: 500 }));
+
+    const response = await app.inject({ method: 'POST', url: '/api/runtime/install', payload: { variant: 'cpu' } });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({
+      code: 'runtime_install_failed',
+      message: 'Не удалось получить релиз llama.cpp: HTTP 500.',
+    });
+    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_LATEST_RELEASE_URL}`]);
+  });
+
+  it('answers an unreachable release server with 502 runtime_install_failed and a message of its own, not the network error', async () => {
+    const { app, http } = api();
+
+    const response = await app.inject({ method: 'POST', url: '/api/runtime/install', payload: { variant: 'cpu' } });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({
+      code: 'runtime_install_failed',
+      message: 'Не удалось получить релиз llama.cpp.',
+    });
+    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_LATEST_RELEASE_URL}`]);
+  });
+
+  it("answers a release without the variant's asset with 502 runtime_install_failed before anything is downloaded", async () => {
+    const { app, http } = api();
+    http.on('GET', LLAMA_CPP_LATEST_RELEASE_URL, () =>
+      Response.json({
+        tag_name: 'b8766',
+        assets: [
+          {
+            name: 'llama-b8766-bin-win-cpu-x64.zip',
+            browser_download_url: 'https://example.test/cpu.zip',
+          },
+        ],
+      }),
+    );
+
+    const response = await app.inject({ method: 'POST', url: '/api/runtime/install', payload: { variant: 'vulkan' } });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({
+      code: 'runtime_install_failed',
+      message: 'В релизе llama.cpp b8766 не найден asset llama-b8766-bin-win-vulkan-x64.zip.',
+    });
+    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_LATEST_RELEASE_URL}`]);
+  });
+
+  it('answers a release body GitHub would never send with 502 runtime_install_failed before anything is downloaded', async () => {
+    const { app, http } = api();
+    http.on('GET', LLAMA_CPP_LATEST_RELEASE_URL, () => Response.json({ message: 'Moved Permanently' }));
+
+    const response = await app.inject({ method: 'POST', url: '/api/runtime/install', payload: { variant: 'cpu' } });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({
+      code: 'runtime_install_failed',
+      message: 'Ответ GitHub о релизе llama.cpp не распознан.',
+    });
+    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_LATEST_RELEASE_URL}`]);
+  });
+
+  it('refuses a release whose asset would download over plain HTTP before anything is downloaded', async () => {
+    const { app, http } = api();
+    http.on('GET', LLAMA_CPP_LATEST_RELEASE_URL, () =>
+      Response.json({
+        tag_name: 'b8766',
+        assets: [{ name: 'llama-b8766-bin-win-cpu-x64.zip', browser_download_url: 'http://example.test/cpu.zip' }],
+      }),
+    );
+
+    const response = await app.inject({ method: 'POST', url: '/api/runtime/install', payload: { variant: 'cpu' } });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({
+      code: 'runtime_install_failed',
+      message: 'Ответ GitHub о релизе llama.cpp не распознан.',
+    });
+    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_LATEST_RELEASE_URL}`]);
+  });
+
+  it('answers an unknown install variant with 400 validation_error before the release is looked up', async () => {
+    const { app, http } = api();
+
+    const response = await app.inject({ method: 'POST', url: '/api/runtime/install', payload: { variant: 'rocm' } });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: 'validation_error' });
+    expect(http.requests).toEqual([]);
+  });
+});
+
 describe('runtime installer planning', () => {
   it('selects CPU release asset by latest release tag', () => {
     const plan = selectRuntimeInstallPlan(
@@ -267,7 +390,6 @@ describe('runtime installer planning', () => {
           {
             name: 'llama-b8766-bin-win-cpu-x64.zip',
             browser_download_url: 'https://example.test/cpu.zip',
-            size: 1,
           },
         ],
       },
@@ -285,12 +407,10 @@ describe('runtime installer planning', () => {
           {
             name: 'llama-b8766-bin-win-cuda-12.4-x64.zip',
             browser_download_url: 'https://example.test/cuda.zip',
-            size: 1,
           },
           {
             name: 'cudart-llama-bin-win-cuda-12.4-x64.zip',
             browser_download_url: 'https://example.test/cudart.zip',
-            size: 1,
           },
         ],
       },

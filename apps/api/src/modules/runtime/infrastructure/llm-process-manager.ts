@@ -7,6 +7,7 @@ import type { RuntimeConfigCommand, RuntimeEngineInfo, RuntimeStatusSnapshot } f
 import { findProjectRoot } from '../../../config/find-project-root.js';
 import { readDataRoot } from '../../../config/read-api-config.js';
 import { getSharedApiLogger } from '../../../platform/logging/shared-api-logger.js';
+import { RuntimeBinaryMissingError } from '../application/runtime-errors.js';
 
 const PID_FILE_NAME = '.llm-server.json';
 const LOG_FILE_NAME = 'llm-server.log';
@@ -270,7 +271,7 @@ export class LlmProcessManager {
     const binary = findBinary();
 
     if (!binary) {
-      throw new Error('llama-server не найден. Проверьте bin/ в основном рабочем дереве.');
+      throw new RuntimeBinaryMissingError();
     }
 
     this.logBuffer.length = 0;
