@@ -85,6 +85,13 @@ describe('model binding routes', () => {
     });
 
     expect(response.statusCode).toBe(404);
-    expect(response.json()).toMatchObject({ code: 'model_binding_not_found' });
+    expect(response.json()).toEqual({
+      code: 'model_binding_not_found',
+      message: 'Model binding not found: never-bound.gguf',
+    });
+    expect(api().logs.lines).toContainEqual(
+      expect.objectContaining({ code: 'model_binding_not_found', level: 'info', statusCode: 404 }),
+    );
+    expect(api().logs.lines.filter((line) => line.level === 'error')).toEqual([]);
   });
 });

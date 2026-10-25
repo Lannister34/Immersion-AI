@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 
+import { ApiProblemSchema } from '@immersion/contracts/common';
 import {
   ProviderConnectionResponseSchema,
   ProviderSettingsSnapshotSchema,
@@ -499,5 +500,44 @@ describe('provider settings routes', () => {
       mode: 'builtin',
       activeProvider: 'custom',
     });
+  });
+
+  it('rejects an invalid provider settings payload with 400 validation_error', async () => {
+    await api().settings.write({
+      userName: 'Misha',
+      backendMode: 'external',
+      activeProvider: 'custom',
+      providerConfigs: { custom: { url: 'http://127.0.0.1:6001' } },
+    });
+    const before = await fs.readFile(api().settings.path, 'utf8');
+    const { app, logs } = api();
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/providers/settings',
+      payload: { mode: 'cloud', activeProvider: 'custom', providerConfigs: {} },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(ApiProblemSchema.parse(response.json())).toMatchObject({ code: 'validation_error' });
+    expect(await fs.readFile(api().settings.path, 'utf8')).toBe(before);
+    expect(logs.lines.filter((line) => line.level === 'error')).toEqual([]);
+  });
+
+  it('a malformed stored provider config makes GET /api/providers/settings a logged 500, not a 400', async () => {
+    await fs.writeFile(
+      api().settings.path,
+      JSON.stringify({ activeProvider: 'no-such-provider', backendMode: 'external' }),
+      'utf8',
+    );
+    const { app, logs } = api();
+
+    const response = await app.inject({ method: 'GET', url: '/api/providers/settings' });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({ code: 'internal_error', message: 'Unexpected error.' });
+    expect(logs.lines).toContainEqual(
+      expect.objectContaining({ err: expect.objectContaining({ type: 'ZodError' }), level: 'error' }),
+    );
   });
 });

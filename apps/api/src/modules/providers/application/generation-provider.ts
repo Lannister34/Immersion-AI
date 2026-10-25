@@ -32,17 +32,13 @@ export function normalizeGenerationProviderBaseUrl(value: string) {
     throw new GenerationProviderUnavailableError('Provider URL is empty.');
   }
 
-  try {
-    const url = new URL(trimmed);
+  const url = URL.parse(trimmed);
 
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-      throw new Error('Unsupported provider URL protocol.');
-    }
-
-    return trimTrailingSlashes(url.toString());
-  } catch {
+  if (!url || (url.protocol !== 'http:' && url.protocol !== 'https:')) {
     throw new GenerationProviderUnavailableError(`Provider URL is invalid: ${value}`);
   }
+
+  return trimTrailingSlashes(url.toString());
 }
 
 export function resolveVersionedUrl(baseUrl: string, path: string): string {

@@ -10,4 +10,5 @@ export { testProviderConnection } from './application/test-provider-connection.j
 export { buildAnthropicAuthHeaders } from './domain/anthropic-auth-headers.js';
 export { findCloudProviderReadinessIssue } from './domain/provider-readiness.js';
 export { getProviderVisionProbe } from './infrastructure/provider-vision-probe.js';
+export { providersProblems } from './interface/http/providers-problems.js';
 export { providersRoutes } from './interface/http/routes.js';

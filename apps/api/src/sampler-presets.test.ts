@@ -195,7 +195,7 @@ describe('sampler preset routes', () => {
   });
 
   it('DELETE /sampler/presets/:presetId refuses to delete the last preset', async () => {
-    const { app, settings } = api();
+    const { app, logs, settings } = api();
     await settings.write({
       userName: 'Tester',
       samplerPresets: [storedSamplerPreset('only', 'Only')],
@@ -204,7 +204,11 @@ describe('sampler preset routes', () => {
     const response = await app.inject({ method: 'DELETE', url: '/api/settings/sampler/presets/only' });
 
     expect(response.statusCode).toBe(409);
-    expect(response.json()).toMatchObject({ code: 'last_sampler_preset' });
+    expect(response.json()).toEqual({ code: 'last_sampler_preset', message: 'Cannot delete the last sampler preset.' });
+    expect(logs.lines).toContainEqual(
+      expect.objectContaining({ code: 'last_sampler_preset', level: 'info', statusCode: 409 }),
+    );
+    expect(logs.lines.filter((line) => line.level === 'error')).toEqual([]);
   });
 
   it('PUT /sampler/active-preset switches the active preset', async () => {
@@ -226,6 +230,20 @@ describe('sampler preset routes', () => {
       payload: { presetId: 'nope' },
     });
     expect(response.statusCode).toBe(404);
-    expect(response.json()).toMatchObject({ code: 'sampler_preset_not_found' });
+    expect(response.json()).toEqual({ code: 'sampler_preset_not_found', message: 'Sampler preset not found: nope' });
+  });
+
+  it('PUT /sampler/active-preset rejects a non-string preset id with 400 validation_error', async () => {
+    const { app, dataRoot } = api();
+    const before = await snapshotDataRoot(dataRoot);
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/sampler/active-preset',
+      payload: { presetId: 42 },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: 'validation_error' });
+    expect(await snapshotDataRoot(dataRoot)).toEqual(before);
   });
 });
