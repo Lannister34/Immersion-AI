@@ -1,7 +1,7 @@
 import {
   type PatchProviderSettingsCommand,
-  PatchProviderSettingsCommandSchema,
   type ProviderConfig,
+  type ProviderSettingsSnapshot,
   UpdateProviderSettingsCommandSchema,
 } from '@immersion/contracts/providers';
 
@@ -31,8 +31,10 @@ function mergeConfig(current: ProviderConfig, patch: PatchProviderSettingsComman
   return next;
 }
 
-export async function patchProviderSettings(input: unknown, repository = new ProviderSettingsRepository()) {
-  const command = PatchProviderSettingsCommandSchema.parse(input);
+export async function patchProviderSettings(
+  command: PatchProviderSettingsCommand,
+  repository = new ProviderSettingsRepository(),
+): Promise<ProviderSettingsSnapshot> {
   const updated = await repository.update((current) => {
     const activeProvider = command.activeProvider ?? current.activeProvider;
     const currentConfig = current.providerConfigs[activeProvider] ?? createDefaultProviderConfig(activeProvider);
