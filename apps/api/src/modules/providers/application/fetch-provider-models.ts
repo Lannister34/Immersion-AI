@@ -1,14 +1,13 @@
 import type { ProviderApiKind, ProviderConnectionResponse } from '@immersion/contracts/providers';
 
-import { globalHttpFetch } from '../../../platform/outbound-http/global-http-fetch.js';
 import type { HttpFetch } from '../../../platform/outbound-http/http-fetch.js';
 import { type ConnectionSubject, createErrorResponse, createOkResponse } from './provider-connection-response.js';
 import { ProviderModelsPayloadSchema } from './provider-models-payload-schema.js';
 import { buildProviderModelsRequestHeaders } from './provider-models-request-headers.js';
 
 export interface ProviderModelsFetchDependencies {
-  fetcher?: HttpFetch;
-  timeoutMs?: number;
+  readonly httpFetch: HttpFetch;
+  readonly timeoutMs?: number;
 }
 
 export async function fetchProviderModels(
@@ -18,12 +17,10 @@ export async function fetchProviderModels(
   apiKey: string | null,
   dependencies: ProviderModelsFetchDependencies,
 ): Promise<ProviderConnectionResponse> {
-  // TODO: require the HttpFetch from the composition root and drop this default (F-32)
-  const fetcher = dependencies.fetcher ?? globalHttpFetch;
   let response: Response;
 
   try {
-    response = await fetcher(endpoint, {
+    response = await dependencies.httpFetch(endpoint, {
       headers: buildProviderModelsRequestHeaders(apiKind, apiKey),
       signal: AbortSignal.timeout(dependencies.timeoutMs ?? 5000),
     });

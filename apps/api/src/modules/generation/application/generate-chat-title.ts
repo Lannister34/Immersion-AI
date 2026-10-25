@@ -5,6 +5,7 @@ import {
   GenerateChatTitleResponseSchema,
 } from '@immersion/contracts/generation';
 
+import { globalHttpFetch } from '../../../platform/outbound-http/global-http-fetch.js';
 import { ChatNotFoundError } from '../../chats/application/append-chat-messages.js';
 import { getChatSession } from '../../chats/application/get-chat-session.js';
 import { updateChatTitle } from '../../chats/application/update-chat-title.js';
@@ -66,7 +67,9 @@ export async function generateChatTitle(
   command: GenerateChatTitleCommand,
   dependencies: GenerateChatTitleDependencies = {},
 ): Promise<GenerateChatTitleResponse> {
-  const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
+  // TODO: require the chat completion client from the composition root (F-35)
+  const chatCompletionClient =
+    dependencies.chatCompletionClient ?? createChatCompletionClient({ httpFetch: globalHttpFetch });
   const session = await getChatSession(command.chatId);
 
   if (!session) {

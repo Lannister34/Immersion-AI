@@ -6,6 +6,7 @@ import {
   GenerateCharacterFieldResponseSchema,
 } from '@immersion/contracts/generation';
 
+import { globalHttpFetch } from '../../../platform/outbound-http/global-http-fetch.js';
 import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import {
@@ -122,7 +123,9 @@ export async function generateCharacterField(
   command: GenerateCharacterFieldCommand,
   dependencies: GenerateCharacterFieldDependencies = {},
 ): Promise<GenerateCharacterFieldResponse> {
-  const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
+  // TODO: require the chat completion client from the composition root (F-34)
+  const chatCompletionClient =
+    dependencies.chatCompletionClient ?? createChatCompletionClient({ httpFetch: globalHttpFetch });
   const context = await resolveDraftGenerationContext();
   const isRegeneration = (command.current[command.field] ?? '').trim().length > 0;
   const completion = await chatCompletionClient.completeChat({

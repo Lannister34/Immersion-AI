@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { stubGlobalFetch } from '../../../../test-support/global-fetch-stub.js';
-import type { HttpStub } from '../../../../test-support/http-stub.js';
+import { createHttpStub, type HttpStub } from '../../../../test-support/http-stub.js';
+import { createManualClock, type ManualClock } from '../../../../test-support/manual-clock.js';
 import { ProviderTokenCounter } from './token-counter.js';
 
 const BASE_URL = 'http://127.0.0.1:6021';
@@ -35,18 +35,19 @@ function tokenizedTexts(http: HttpStub): string[] {
   return http.requests.map((request) => request.json(LlamaTokenizeRequestSchema).content);
 }
 
-function buildCounter(now?: () => number): ProviderTokenCounter {
+function buildCounter(http: HttpStub, clock: ManualClock = createManualClock()): ProviderTokenCounter {
   return new ProviderTokenCounter({
-    ...(now ? { now } : {}),
+    clock,
+    httpFetch: http.fetch,
     resolveTokenizeTarget: () => Promise.resolve({ baseUrl: BASE_URL, model: null }),
   });
 }
 
 describe('ProviderTokenCounter', () => {
   it('counts exactly via the llama-server dialect after a single probe and serves repeats from the cache', async () => {
-    const http = stubGlobalFetch();
+    const http = createHttpStub();
     serveLlamaTokenize(http);
-    const counter = buildCounter();
+    const counter = buildCounter(http);
 
     const first = await counter.countTokens(['abcd', 'ef']);
 
@@ -60,9 +61,9 @@ describe('ProviderTokenCounter', () => {
   });
 
   it('counts exactly via the KoboldCpp dialect when /tokenize is absent', async () => {
-    const http = stubGlobalFetch();
+    const http = createHttpStub();
     serveKoboldTokenCount(http, 'missing');
-    const counter = buildCounter();
+    const counter = buildCounter(http);
 
     const result = await counter.countTokens(['abcde']);
 
@@ -71,9 +72,9 @@ describe('ProviderTokenCounter', () => {
   });
 
   it('falls through to the KoboldCpp dialect when the llama-server probe is refused', async () => {
-    const http = stubGlobalFetch();
+    const http = createHttpStub();
     serveKoboldTokenCount(http, 'refused');
-    const counter = buildCounter();
+    const counter = buildCounter(http);
 
     const result = await counter.countTokens(['abcde']);
 
@@ -82,10 +83,12 @@ describe('ProviderTokenCounter', () => {
   });
 
   it('counts a text again once a different model serves the same base URL', async () => {
-    const http = stubGlobalFetch();
+    const http = createHttpStub();
     serveLlamaTokenize(http);
     let model = 'first.gguf';
     const counter = new ProviderTokenCounter({
+      clock: createManualClock(),
+      httpFetch: http.fetch,
       resolveTokenizeTarget: () => Promise.resolve({ baseUrl: BASE_URL, model }),
     });
 
@@ -97,9 +100,9 @@ describe('ProviderTokenCounter', () => {
   });
 
   it('evicts the least recently counted text once the count cache is full', async () => {
-    const http = stubGlobalFetch();
+    const http = createHttpStub();
     serveLlamaTokenize(http);
-    const counter = buildCounter();
+    const counter = buildCounter(http);
 
     await counter.countTokens(Array.from({ length: COUNT_CACHE_CAPACITY }, (_, index) => `text ${index}`));
     await counter.countTokens(['text 0']);
@@ -111,9 +114,9 @@ describe('ProviderTokenCounter', () => {
   });
 
   it('falls back to the chars/4 heuristic and skips tokenize calls until the retry window passes', async () => {
-    const http = stubGlobalFetch();
-    let currentTime = 1_000_000;
-    const counter = buildCounter(() => currentTime);
+    const http = createHttpStub();
+    const clock = createManualClock({ stepMs: 0 });
+    const counter = buildCounter(http, clock);
     const detectionRound = [`POST ${TOKENIZE_URL}`, `POST ${TOKEN_COUNT_URL}`];
 
     const first = await counter.countTokens(['abcdefgh']);
@@ -126,7 +129,7 @@ describe('ProviderTokenCounter', () => {
     expect(second.method).toBe('approximate');
     expect(http.requestLines()).toEqual(detectionRound);
 
-    currentTime += 61_000;
+    clock.advance(61_000);
 
     const third = await counter.countTokens(['abcdefgh']);
 
@@ -135,8 +138,10 @@ describe('ProviderTokenCounter', () => {
   });
 
   it('uses the heuristic without any provider traffic when no tokenize base URL resolves', async () => {
-    const http = stubGlobalFetch();
+    const http = createHttpStub();
     const counter = new ProviderTokenCounter({
+      clock: createManualClock(),
+      httpFetch: http.fetch,
       resolveTokenizeTarget: () => Promise.resolve(null),
     });
 

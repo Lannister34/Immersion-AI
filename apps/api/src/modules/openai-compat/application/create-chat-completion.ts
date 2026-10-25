@@ -1,5 +1,6 @@
 import type { ReplyChannel } from '@immersion/domain/generation';
 
+import { globalHttpFetch } from '../../../platform/outbound-http/global-http-fetch.js';
 import {
   type ChatCompletionClient,
   createChatCompletionClient,
@@ -89,7 +90,8 @@ export async function createOpenAiChatCompletion(
   const model = PLACEHOLDER_MODEL_NAMES.has(requestedModel.toLowerCase()) ? providerEndpoint.model : requestedModel;
   const settings = getSettingsOverview();
   const preset = resolveSamplerPresetForModel(settings, model);
-  const client = dependencies.chatCompletionClient ?? createChatCompletionClient();
+  // TODO: require the chat completion client from the composition root (F-33)
+  const client = dependencies.chatCompletionClient ?? createChatCompletionClient({ httpFetch: globalHttpFetch });
   const { onDelta } = dependencies;
 
   const serverExtensions = collectServerExtensions(request);

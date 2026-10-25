@@ -1,3 +1,4 @@
+import type { HttpFetch } from '../../../../../platform/outbound-http/http-fetch.js';
 import { resolveAnthropicMessagesUrl } from '../../../../providers/index.js';
 import type {
   ChatCompletionClient,
@@ -6,16 +7,23 @@ import type {
 } from '../../../application/chat-completion-client.js';
 import { ProviderGenerationError } from '../../../application/generation-errors.js';
 import { buildRequestSignal, isAbortError, readProviderErrorText } from '../http.js';
+import type { ProviderClientDependencies } from '../provider-client-dependencies.js';
 import { readProviderReply } from '../reply-reader.js';
 import { readAnthropicJsonReply, readAnthropicStreamData } from './reply.js';
 import { buildAnthropicBody, buildAnthropicHeaders } from './request.js';
 
 export class AnthropicClient implements ChatCompletionClient {
+  private readonly httpFetch: HttpFetch;
+
+  constructor(dependencies: ProviderClientDependencies) {
+    this.httpFetch = dependencies.httpFetch;
+  }
+
   async completeChat(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
     let response: Response;
 
     try {
-      response = await fetch(resolveAnthropicMessagesUrl(request.endpoint), {
+      response = await this.httpFetch(resolveAnthropicMessagesUrl(request.endpoint), {
         method: 'POST',
         headers: buildAnthropicHeaders(request.endpoint.apiKey),
         body: JSON.stringify(buildAnthropicBody(request)),

@@ -26,7 +26,7 @@ describe('probeProviderModels', () => {
 
     const response = await probeProviderModels(
       { apiKey: 'sk-ant-test', provider: 'anthropic', url: 'https://api.anthropic.com/v1' },
-      { fetcher: http.fetch },
+      { httpFetch: http.fetch },
     );
 
     expect(http.requestLines()).toEqual(['GET https://api.anthropic.com/v1/models']);
@@ -41,7 +41,7 @@ describe('probeProviderModels', () => {
 
     await probeProviderModels(
       { apiKey: 'sk-test', provider: 'openai', url: 'https://api.openai.com' },
-      { fetcher: http.fetch },
+      { httpFetch: http.fetch },
     );
 
     expect(http.requestLines()).toEqual(['GET https://api.openai.com/v1/models']);
@@ -53,7 +53,7 @@ describe('probeProviderModels', () => {
 
     const response = await probeProviderModels(
       { provider: 'openai', url: 'https://api.openai.com/v1' },
-      { fetcher: http.fetch },
+      { httpFetch: http.fetch },
     );
 
     expect(http.requests).toEqual([]);
@@ -63,7 +63,7 @@ describe('probeProviderModels', () => {
   it('rejects a relative URL before touching the network', async () => {
     const http = createHttpStub();
 
-    const response = await probeProviderModels({ provider: 'custom', url: '/v1' }, { fetcher: http.fetch });
+    const response = await probeProviderModels({ provider: 'custom', url: '/v1' }, { httpFetch: http.fetch });
 
     expect(http.requests).toEqual([]);
     expect(response.issue?.code).toBe('provider_url_invalid');

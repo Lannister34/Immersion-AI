@@ -8,7 +8,7 @@ import type { TestProviderConnectionDependencies } from './test-provider-connect
 
 export async function probeProviderModels(
   command: ProviderModelsProbeCommand,
-  dependencies: TestProviderConnectionDependencies = {},
+  dependencies: TestProviderConnectionDependencies,
 ): Promise<ProviderConnectionResponse> {
   const subject: ConnectionSubject = { activeProvider: command.provider, mode: 'external' };
   const apiKey = command.apiKey?.trim() || null;

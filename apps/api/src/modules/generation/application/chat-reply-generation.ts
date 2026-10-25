@@ -6,6 +6,7 @@ import type {
 } from '@immersion/contracts/generation';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
 import type { ReplyChannel } from '@immersion/domain/generation';
+import { globalHttpFetch } from '../../../platform/outbound-http/global-http-fetch.js';
 import { appendChatMessages } from '../../chats/application/append-chat-messages.js';
 import { readChatAttachmentDataUrl, resolveChatAttachments } from '../../chats/application/chat-attachments.js';
 import { ChatLastMessageChangedError } from '../../chats/application/chat-conflicts.js';
@@ -82,7 +83,9 @@ async function runChatCompletionForSession(
   dependencies: ChatReplyGenerationDependencies,
   buildTrailingInstruction?: (settings: SettingsOverviewResponse) => string,
 ): Promise<ChatCompletionResponse> {
-  const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
+  // TODO: require the chat completion client from the composition root (F-35)
+  const chatCompletionClient =
+    dependencies.chatCompletionClient ?? createChatCompletionClient({ httpFetch: globalHttpFetch });
 
   try {
     throwIfAborted(dependencies.signal);

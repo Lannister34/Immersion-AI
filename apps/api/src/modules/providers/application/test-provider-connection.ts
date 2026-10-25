@@ -27,7 +27,7 @@ function getConfiguredExternalApiKey(settings: ProviderSettingsSnapshot) {
 }
 
 export async function testProviderConnection(
-  dependencies: TestProviderConnectionDependencies = {},
+  dependencies: TestProviderConnectionDependencies,
 ): Promise<ProviderConnectionResponse> {
   const settings = await getProviderSettings();
   const subject = toSubject(settings);

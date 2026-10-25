@@ -1,6 +1,10 @@
 import type { VisionSupport } from '@immersion/contracts/generation';
 import type { ProviderType } from '@immersion/contracts/providers';
 
+import type { Clock } from '../../../platform/clock/clock.js';
+import { systemClock } from '../../../platform/clock/system-clock.js';
+import { globalHttpFetch } from '../../../platform/outbound-http/global-http-fetch.js';
+import type { HttpFetch } from '../../../platform/outbound-http/http-fetch.js';
 import { normalizeGenerationProviderBaseUrl } from '../application/generation-provider.js';
 
 const PROBE_TIMEOUT_MS = 1500;
@@ -14,8 +18,8 @@ export interface VisionProbeTarget {
 }
 
 export interface VisionProbeDependencies {
-  fetchJson?: (url: string) => Promise<unknown>;
-  now?: () => number;
+  readonly httpFetch: HttpFetch;
+  readonly clock: Clock;
 }
 
 interface CachedSupport {
@@ -23,8 +27,8 @@ interface CachedSupport {
   support: VisionSupport;
 }
 
-async function fetchJsonOverHttp(url: string): Promise<unknown> {
-  const response = await fetch(url, {
+async function fetchJson(httpFetch: HttpFetch, url: string): Promise<unknown> {
+  const response = await httpFetch(url, {
     headers: { Accept: 'application/json' },
     signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
   });
@@ -107,27 +111,31 @@ function readLmStudioModels(payload: unknown, model: string | null): VisionSuppo
 
 export class ProviderVisionProbe {
   private readonly cache = new Map<string, CachedSupport>();
-  private readonly fetchJson: (url: string) => Promise<unknown>;
-  private readonly now: () => number;
+  private readonly httpFetch: HttpFetch;
+  private readonly clock: Clock;
 
-  constructor(dependencies: VisionProbeDependencies = {}) {
-    this.fetchJson = dependencies.fetchJson ?? fetchJsonOverHttp;
-    this.now = dependencies.now ?? (() => Date.now());
+  constructor(dependencies: VisionProbeDependencies) {
+    this.httpFetch = dependencies.httpFetch;
+    this.clock = dependencies.clock;
   }
 
   async getVisionSupport(target: VisionProbeTarget): Promise<VisionSupport> {
     const cacheKey = `${target.provider ?? ''}\u0000${target.baseUrl}\u0000${target.model ?? ''}`;
     const cached = this.cache.get(cacheKey);
 
-    if (cached && this.now() < cached.expiresAtMs) {
+    if (cached && this.nowMs() < cached.expiresAtMs) {
       return cached.support;
     }
 
     const support = await this.detect(target);
     const ttl = support === 'unknown' ? UNKNOWN_TTL_MS : KNOWN_TTL_MS;
-    this.cache.set(cacheKey, { expiresAtMs: this.now() + ttl, support });
+    this.cache.set(cacheKey, { expiresAtMs: this.nowMs() + ttl, support });
 
     return support;
+  }
+
+  private nowMs(): number {
+    return this.clock.now().getTime();
   }
 
   private async detect(target: VisionProbeTarget): Promise<VisionSupport> {
@@ -148,9 +156,9 @@ export class ProviderVisionProbe {
     }
 
     const probes: (() => Promise<VisionSupport>)[] = [
-      async () => readLlamaProps(await this.fetchJson(`${origin}/props`)),
-      async () => readLmStudioModels(await this.fetchJson(`${origin}/api/v1/models`), target.model),
-      async () => readLmStudioModels(await this.fetchJson(`${origin}/api/v0/models`), target.model),
+      async () => readLlamaProps(await fetchJson(this.httpFetch, `${origin}/props`)),
+      async () => readLmStudioModels(await fetchJson(this.httpFetch, `${origin}/api/v1/models`), target.model),
+      async () => readLmStudioModels(await fetchJson(this.httpFetch, `${origin}/api/v0/models`), target.model),
     ];
 
     for (const probe of probes) {
@@ -169,7 +177,8 @@ let sharedProbe: ProviderVisionProbe | null = null;
 
 export function getProviderVisionProbe(): ProviderVisionProbe {
   if (!sharedProbe) {
-    sharedProbe = new ProviderVisionProbe();
+    // TODO: construct one vision probe per app in the composition root and delete this singleton (F-35)
+    sharedProbe = new ProviderVisionProbe({ clock: systemClock, httpFetch: globalHttpFetch });
   }
 
   return sharedProbe;
