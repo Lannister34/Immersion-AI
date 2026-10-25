@@ -6,33 +6,37 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
 
-import {
-  RuntimeInstallCommandSchema,
-  type RuntimeInstallVariant,
-  type RuntimeOverviewResponse,
+import type {
+  RuntimeInstallCommand,
+  RuntimeInstallVariant,
+  RuntimeOverviewResponse,
 } from '@immersion/contracts/runtime';
 
+import { getSharedApiLogger } from '../../../platform/logging/shared-api-logger.js';
 import { getPrimaryRuntimeRoot } from '../infrastructure/llm-process-manager.js';
 import { getRuntimeOverview } from './get-runtime-overview.js';
+import { type GitHubRelease, type GitHubReleaseAsset, GitHubReleaseSchema } from './github-release-schema.js';
+import { RuntimeInstallError } from './runtime-errors.js';
 
 const LLAMA_CPP_LATEST_RELEASE_URL = 'https://api.github.com/repos/ggml-org/llama.cpp/releases/latest';
 const execFileAsync = promisify(execFile);
-
-interface GitHubReleaseAsset {
-  browser_download_url: string;
-  name: string;
-  size: number;
-}
-
-interface GitHubRelease {
-  assets: GitHubReleaseAsset[];
-  tag_name: string;
-}
 
 interface RuntimeInstallPlan {
   assets: GitHubReleaseAsset[];
   releaseTag: string;
   variant: RuntimeInstallVariant;
+}
+
+async function runInstallStep<T>(failureMessage: string, step: () => Promise<T>): Promise<T> {
+  try {
+    return await step();
+  } catch (error) {
+    if (error instanceof RuntimeInstallError) {
+      throw error;
+    }
+
+    throw new RuntimeInstallError(failureMessage, { cause: error });
+  }
 }
 
 function getExpectedAssetNames(releaseTag: string, variant: RuntimeInstallVariant) {
@@ -54,7 +58,7 @@ export function selectRuntimeInstallPlan(release: GitHubRelease, variant: Runtim
   const missingAsset = expectedNames.find((_assetName, index) => !assets[index]);
 
   if (missingAsset) {
-    throw new Error(`В релизе llama.cpp ${release.tag_name} не найден asset ${missingAsset}.`);
+    throw new RuntimeInstallError(`В релизе llama.cpp ${release.tag_name} не найден asset ${missingAsset}.`);
   }
 
   return {
@@ -64,33 +68,43 @@ export function selectRuntimeInstallPlan(release: GitHubRelease, variant: Runtim
   };
 }
 
-async function fetchLatestRelease(): Promise<GitHubRelease> {
-  const response = await fetch(LLAMA_CPP_LATEST_RELEASE_URL, {
-    headers: {
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'ImmersionAI-Rewrite',
-    },
+function fetchLatestRelease(): Promise<GitHubRelease> {
+  return runInstallStep('Не удалось получить релиз llama.cpp.', async () => {
+    const response = await fetch(LLAMA_CPP_LATEST_RELEASE_URL, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'ImmersionAI-Rewrite',
+      },
+    });
+
+    if (!response.ok) {
+      throw new RuntimeInstallError(`Не удалось получить релиз llama.cpp: HTTP ${response.status}.`);
+    }
+
+    const release = GitHubReleaseSchema.safeParse(await response.json());
+
+    if (!release.success) {
+      throw new RuntimeInstallError('Ответ GitHub о релизе llama.cpp не распознан.', { cause: release.error });
+    }
+
+    return release.data;
   });
-
-  if (!response.ok) {
-    throw new Error(`Не удалось получить релиз llama.cpp: HTTP ${response.status}.`);
-  }
-
-  return (await response.json()) as GitHubRelease;
 }
 
-async function downloadAsset(asset: GitHubReleaseAsset, destination: string) {
-  const response = await fetch(asset.browser_download_url, {
-    headers: {
-      'User-Agent': 'ImmersionAI-Rewrite',
-    },
+function downloadAsset(asset: GitHubReleaseAsset, destination: string): Promise<void> {
+  return runInstallStep(`Не удалось скачать ${asset.name}.`, async () => {
+    const response = await fetch(asset.browser_download_url, {
+      headers: {
+        'User-Agent': 'ImmersionAI-Rewrite',
+      },
+    });
+
+    if (!response.ok || !response.body) {
+      throw new RuntimeInstallError(`Не удалось скачать ${asset.name}: HTTP ${response.status}.`);
+    }
+
+    await pipeline(Readable.fromWeb(response.body), createWriteStream(destination));
   });
-
-  if (!response.ok || !response.body) {
-    throw new Error(`Не удалось скачать ${asset.name}: HTTP ${response.status}.`);
-  }
-
-  await pipeline(Readable.fromWeb(response.body), createWriteStream(destination));
 }
 
 async function extractZip(zipPath: string, destination: string) {
@@ -162,10 +176,20 @@ async function copyDirectoryContents(source: string, destination: string) {
   }
 }
 
+async function removeInstallDirectory(directory: string): Promise<void> {
+  try {
+    await fs.rm(directory, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 });
+  } catch (error) {
+    getSharedApiLogger().warn({ err: error, directory }, 'Failed to remove the temporary llama.cpp install directory');
+  }
+}
+
 async function installPlan(plan: RuntimeInstallPlan) {
   const runtimeRoot = getPrimaryRuntimeRoot();
   const installDirectory = path.join(runtimeRoot, 'bin');
-  const tempDirectory = await fs.mkdtemp(path.join(runtimeRoot, '.llama-install-'));
+  const tempDirectory = await runInstallStep('Не удалось создать временный каталог для установки llama.cpp.', () =>
+    fs.mkdtemp(path.join(runtimeRoot, '.llama-install-')),
+  );
 
   try {
     for (const asset of plan.assets) {
@@ -173,18 +197,21 @@ async function installPlan(plan: RuntimeInstallPlan) {
       const extractDirectory = path.join(tempDirectory, asset.name.replace(/\.zip$/i, ''));
 
       await downloadAsset(asset, zipPath);
-      await extractZip(zipPath, extractDirectory);
-
-      const serverDirectory = await findServerDirectory(extractDirectory);
-      await copyDirectoryContents(serverDirectory ?? extractDirectory, installDirectory);
+      await runInstallStep(`Не удалось распаковать ${asset.name}.`, () => extractZip(zipPath, extractDirectory));
+      await runInstallStep(
+        `Не удалось скопировать файлы из ${asset.name} в bin/. Если llama-server запущен, остановите его и повторите установку.`,
+        async () => {
+          const serverDirectory = await findServerDirectory(extractDirectory);
+          await copyDirectoryContents(serverDirectory ?? extractDirectory, installDirectory);
+        },
+      );
     }
   } finally {
-    await fs.rm(tempDirectory, { force: true, recursive: true });
+    await removeInstallDirectory(tempDirectory);
   }
 }
 
-export async function installRuntime(input: unknown): Promise<RuntimeOverviewResponse> {
-  const command = RuntimeInstallCommandSchema.parse(input);
+export async function installRuntime(command: RuntimeInstallCommand): Promise<RuntimeOverviewResponse> {
   const release = await fetchLatestRelease();
   const plan = selectRuntimeInstallPlan(release, command.variant);
 
