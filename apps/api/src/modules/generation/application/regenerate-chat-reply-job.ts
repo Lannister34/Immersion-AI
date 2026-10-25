@@ -1,6 +1,6 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 import {
-  RegenerateChatReplyCommandSchema,
+  type RegenerateChatReplyCommand,
   type StartChatReplyCommand,
   type StartChatReplyGenerationJobResponse,
   StartChatReplyGenerationJobResponseSchema,
@@ -30,10 +30,9 @@ async function assertChatReplyCanBeGenerated(session: ChatSessionDto) {
 }
 
 export async function regenerateChatReplyJob(
-  input: unknown,
+  command: RegenerateChatReplyCommand,
   dependencies: RegenerateChatReplyJobDependencies,
 ): Promise<StartChatReplyGenerationJobResponse> {
-  const command = RegenerateChatReplyCommandSchema.parse(input);
   const now = dependencies.now ?? (() => new Date());
   const session = await getChatSession(command.chatId);
 

@@ -1,6 +1,6 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 import {
-  GenerateFirstMessageCommandSchema,
+  type GenerateFirstMessageCommand,
   type GenerateFirstMessageResponse,
   GenerateFirstMessageResponseSchema,
 } from '@immersion/contracts/generation';
@@ -68,10 +68,9 @@ function buildOpeningInstruction(
 }
 
 export async function generateFirstMessage(
-  input: unknown,
+  command: GenerateFirstMessageCommand,
   dependencies: GenerateFirstMessageDependencies = {},
 ): Promise<GenerateFirstMessageResponse> {
-  const command = GenerateFirstMessageCommandSchema.parse(input);
   const now = dependencies.now ?? (() => new Date());
   const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
   const session = await getChatSession(command.chatId);

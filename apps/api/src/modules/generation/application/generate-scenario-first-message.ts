@@ -1,6 +1,5 @@
 import {
   type GenerateScenarioFirstMessageCommand,
-  GenerateScenarioFirstMessageCommandSchema,
   type GenerateScenarioFirstMessageResponse,
   GenerateScenarioFirstMessageResponseSchema,
 } from '@immersion/contracts/generation';
@@ -70,10 +69,9 @@ Use {{user}} and {{char}} as literal placeholders — they will be substituted a
 }
 
 export async function generateScenarioFirstMessage(
-  input: unknown,
+  command: GenerateScenarioFirstMessageCommand,
   dependencies: GenerateScenarioFirstMessageDependencies = {},
 ): Promise<GenerateScenarioFirstMessageResponse> {
-  const command = GenerateScenarioFirstMessageCommandSchema.parse(input);
   const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
   const context = await resolveDraftGenerationContext();
   const completion = await chatCompletionClient.completeChat({

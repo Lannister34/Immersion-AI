@@ -1,6 +1,6 @@
 import {
   type GeneratedLorebookEntryDraft,
-  GenerateLorebookDraftCommandSchema,
+  type GenerateLorebookDraftCommand,
   type GenerateLorebookDraftResponse,
   GenerateLorebookDraftResponseSchema,
 } from '@immersion/contracts/generation';
@@ -119,10 +119,9 @@ function normalizeLorebookEntries(parsed: Record<string, unknown>): GeneratedLor
 }
 
 export async function generateLorebookDraft(
-  input: unknown,
+  command: GenerateLorebookDraftCommand,
   dependencies: GenerateLorebookDraftDependencies = {},
 ): Promise<GenerateLorebookDraftResponse> {
-  const command = GenerateLorebookDraftCommandSchema.parse(input);
   const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
   const context = await resolveDraftGenerationContext();
   const completion = await chatCompletionClient.completeChat({

@@ -368,6 +368,11 @@ export const GenerationJobDtoSchema = z.object({
 });
 export type GenerationJobDto = z.infer<typeof GenerationJobDtoSchema>;
 
+export const ActiveGenerationJobProblemSchema = ApiProblemSchema.extend({
+  job: GenerationJobDtoSchema,
+});
+export type ActiveGenerationJobProblem = z.infer<typeof ActiveGenerationJobProblemSchema>;
+
 export const StartChatReplyGenerationJobResponseSchema = z.object({
   job: GenerationJobDtoSchema,
   session: ChatSessionDtoSchema,

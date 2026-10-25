@@ -1,6 +1,8 @@
 import { charactersProblems } from '../modules/characters/index.js';
 import { chatsProblems } from '../modules/chats/index.js';
+import { generationProblems } from '../modules/generation/index.js';
 import { lorebooksProblems } from '../modules/lorebooks/index.js';
+import { promptingProblems } from '../modules/prompting/index.js';
 import { providersProblems } from '../modules/providers/index.js';
 import { runtimeProblems } from '../modules/runtime/index.js';
 import { scenariosProblems } from '../modules/scenarios/index.js';
@@ -17,4 +19,6 @@ export const apiProblems: ProblemTable = createProblemTable(
   settingsProblems,
   providersProblems,
   runtimeProblems,
+  promptingProblems,
+  generationProblems,
 );

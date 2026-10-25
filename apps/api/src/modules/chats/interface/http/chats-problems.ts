@@ -2,7 +2,7 @@ import { problem } from '../../../../platform/http/problem.js';
 import { createProblemTable, type ProblemTable, problemFor } from '../../../../platform/http/problem-table.js';
 import { ChatMessageNotFoundError, ChatNotFoundError } from '../../application/append-chat-messages.js';
 import { ChatAttachmentNotFoundError, InvalidChatAttachmentError } from '../../application/chat-attachments.js';
-import { ChatTitleConflictError } from '../../application/chat-conflicts.js';
+import { ChatTitleConflictError, ChatTranscriptChangedError } from '../../application/chat-conflicts.js';
 import { ChatFileTooLargeError, InvalidChatFileError } from '../../application/import-chat.js';
 import { InvalidChatGenerationSettingsError } from '../../application/update-chat-generation-settings.js';
 
@@ -20,5 +20,8 @@ export const chatsProblems: ProblemTable = createProblemTable(
   problemFor(ChatFileTooLargeError, (error) => problem(413, 'chat_file_too_large', error.message)),
   problemFor(ChatTitleConflictError, () =>
     problem(409, 'chat_title_conflict', 'Chat was renamed while the title was being generated.'),
+  ),
+  problemFor(ChatTranscriptChangedError, () =>
+    problem(409, 'chat_transcript_changed', 'Чат изменился во время запроса — ничего не удалено. Повторите попытку.'),
   ),
 );

@@ -1,21 +1,23 @@
-import { ApiProblemSchema } from '@immersion/contracts/common';
 import {
-  ChatReplyGenerationErrorResponseSchema,
   ChatReplyPromptPreviewCommandSchema,
   ChatReplyPromptPreviewResponseSchema,
+  GenerateCharacterAvatarPromptCommandSchema,
+  GenerateCharacterDraftCommandSchema,
+  GenerateCharacterFieldCommandSchema,
+  GenerateChatTitleCommandSchema,
+  GenerateFirstMessageCommandSchema,
+  GenerateLorebookDraftCommandSchema,
+  GenerateScenarioDraftCommandSchema,
+  GenerateScenarioFirstMessageCommandSchema,
   GenerationJobEventSchema,
   GenerationJobResponseSchema,
   ListGenerationJobsResponseSchema,
+  RegenerateChatReplyCommandSchema,
+  StartChatReplyGenerationCommandSchema,
 } from '@immersion/contracts/generation';
 import type { FastifyPluginAsync } from 'fastify';
 
-import { createToProblem, problem } from '../../../../shared/interface/http/problem.js';
-import { ChatMessageNotFoundError, ChatNotFoundError } from '../../../chats/application/append-chat-messages.js';
-import { ChatAttachmentNotFoundError } from '../../../chats/application/chat-attachments.js';
-import { ChatTitleConflictError } from '../../../chats/application/chat-conflicts.js';
-import { ChatTranscriptChangedError } from '../../../chats/index.js';
-import { InvalidChatGenerationSettingsResolutionError } from '../../../prompting/application/resolve-chat-generation-settings.js';
-import { GenerationProviderUnavailableError } from '../../../providers/application/generation-provider.js';
+import { parseRequest } from '../../../../platform/http/parse-request.js';
 import { generateCharacterAvatarPrompt } from '../../application/generate-character-avatar-prompt.js';
 import { generateCharacterDraft } from '../../application/generate-character-draft.js';
 import { generateCharacterField } from '../../application/generate-character-field.js';
@@ -25,118 +27,13 @@ import { generateFirstMessage } from '../../application/generate-first-message.j
 import { generateLorebookDraft } from '../../application/generate-lorebook-draft.js';
 import { generateScenarioDraft } from '../../application/generate-scenario-draft.js';
 import { generateScenarioFirstMessage } from '../../application/generate-scenario-first-message.js';
-import {
-  ChatNotEmptyError,
-  ChatReplyGenerationFailedError,
-  ChatTranscriptEmptyError,
-  NoAssistantMessageToRegenerateError,
-  NothingToAnswerError,
-  NothingToContinueError,
-  ProviderGenerationError,
-} from '../../application/generation-errors.js';
-import { ActiveGenerationJobExistsError } from '../../application/generation-job-registry.js';
+import { GenerationJobNotFoundError } from '../../application/generation-errors.js';
 import { getGenerationReadiness } from '../../application/get-generation-readiness.js';
 import { previewChatReplyPrompt } from '../../application/preview-chat-reply-prompt.js';
 import { regenerateChatReplyJob } from '../../application/regenerate-chat-reply-job.js';
 import { startChatReplyGenerationJob } from '../../application/start-chat-reply-generation-job.js';
 import { InMemoryGenerationJobRegistry } from '../../infrastructure/in-memory-generation-job-registry.js';
 import { GenerationJobRouteParamsSchema, GenerationJobsQuerySchema } from './request-schemas.js';
-
-const toProblem = createToProblem((error) => {
-  if (error instanceof ChatNotFoundError) {
-    return problem(404, 'chat_not_found', 'Chat session not found.');
-  }
-
-  if (error instanceof ChatAttachmentNotFoundError) {
-    return problem(404, 'chat_attachment_not_found', 'Вложение не найдено — загрузите изображение заново.');
-  }
-
-  if (error instanceof ChatMessageNotFoundError) {
-    return problem(404, 'chat_message_not_found', 'Chat message not found.');
-  }
-
-  if (error instanceof NoAssistantMessageToRegenerateError) {
-    return problem(
-      409,
-      'no_assistant_message_to_regenerate',
-      'Перегенерировать нечего: чат не заканчивается ответом персонажа на сообщение пользователя.',
-    );
-  }
-
-  if (error instanceof NothingToAnswerError) {
-    return problem(
-      409,
-      'nothing_to_answer',
-      'Отвечать не на что: последним в чате должно быть непустое сообщение пользователя.',
-    );
-  }
-
-  if (error instanceof NothingToContinueError) {
-    return problem(
-      409,
-      'nothing_to_continue',
-      'Продолжать нечего: последнее сообщение в чате должно быть непустым ответом персонажа.',
-    );
-  }
-
-  if (error instanceof ChatTranscriptEmptyError) {
-    return problem(409, 'chat_empty', error.message);
-  }
-
-  if (error instanceof ChatNotEmptyError) {
-    return problem(409, 'chat_not_empty', error.message);
-  }
-
-  if (error instanceof ChatTranscriptChangedError) {
-    return problem(
-      409,
-      'chat_transcript_changed',
-      'Чат изменился во время запроса — ничего не удалено. Повторите попытку.',
-    );
-  }
-
-  if (error instanceof ChatTitleConflictError) {
-    return problem(409, 'chat_title_conflict', 'Chat was renamed while the title was being generated.');
-  }
-
-  if (error instanceof GenerationProviderUnavailableError) {
-    return problem(409, 'generation_provider_unavailable', error.message);
-  }
-
-  if (error instanceof InvalidChatGenerationSettingsResolutionError) {
-    return problem(409, 'invalid_chat_generation_settings', error.message);
-  }
-
-  if (error instanceof ActiveGenerationJobExistsError) {
-    return {
-      statusCode: 409,
-      body: {
-        ...ApiProblemSchema.parse({
-          code: 'active_generation_job_exists',
-          message: 'An active generation job already exists for this chat.',
-        }),
-        job: error.job,
-      },
-    };
-  }
-
-  if (error instanceof ChatReplyGenerationFailedError) {
-    return {
-      statusCode: error.statusCode,
-      body: ChatReplyGenerationErrorResponseSchema.parse({
-        code: error.code,
-        message: error.message,
-        session: error.session,
-      }),
-    };
-  }
-
-  if (error instanceof ProviderGenerationError) {
-    return problem(502, 'provider_generation_failed', error.message);
-  }
-
-  return null;
-});
 
 function writeSseEvent(raw: NodeJS.WritableStream, event: unknown) {
   const parsedEvent = GenerationJobEventSchema.parse(event);
@@ -150,333 +47,240 @@ export const generationRoutes: FastifyPluginAsync = async (app) => {
 
   app.get('/readiness', async () => getGenerationReadiness());
 
-  app.post('/chat-reply-preview', async (request, reply) => {
-    try {
-      const command = ChatReplyPromptPreviewCommandSchema.parse(request.body);
+  app.post('/chat-reply-preview', async (request) => {
+    const command = parseRequest(ChatReplyPromptPreviewCommandSchema, request.body);
 
-      return ChatReplyPromptPreviewResponseSchema.parse(await previewChatReplyPrompt(command));
-    } catch (error) {
-      request.log.error({ err: error }, 'Failed to preview chat reply prompt');
-      const mapped = toProblem(error);
-
-      return reply.status(mapped.statusCode).send(mapped.body);
-    }
+    return ChatReplyPromptPreviewResponseSchema.parse(await previewChatReplyPrompt(command));
   });
 
-  app.post('/chat-reply', async (request, reply) => {
+  app.post('/chat-reply', async (request) => {
+    const command = parseRequest(StartChatReplyGenerationCommandSchema, request.body);
     const abortController = new AbortController();
     const abortGeneration = () => abortController.abort();
 
     request.raw.once('aborted', abortGeneration);
 
     try {
-      return await generateChatReply(request.body, {
+      return await generateChatReply(command, {
         signal: abortController.signal,
       });
-    } catch (error) {
-      request.log.error({ err: error }, 'Failed to generate chat reply');
-      const mapped = toProblem(error);
-
-      return reply.status(mapped.statusCode).send(mapped.body);
     } finally {
       request.raw.off('aborted', abortGeneration);
     }
   });
 
-  app.post('/chat-title', async (request, reply) => {
+  app.post('/chat-title', async (request) => {
+    const command = parseRequest(GenerateChatTitleCommandSchema, request.body);
     const abortController = new AbortController();
     const abortGeneration = () => abortController.abort();
 
     request.raw.once('aborted', abortGeneration);
 
     try {
-      return await generateChatTitle(request.body, {
+      return await generateChatTitle(command, {
         signal: abortController.signal,
       });
-    } catch (error) {
-      request.log.error({ err: error }, 'Failed to generate chat title');
-      const mapped = toProblem(error);
-
-      return reply.status(mapped.statusCode).send(mapped.body);
     } finally {
       request.raw.off('aborted', abortGeneration);
     }
   });
 
-  app.post('/first-message', async (request, reply) => {
+  app.post('/first-message', async (request) => {
+    const command = parseRequest(GenerateFirstMessageCommandSchema, request.body);
     const abortController = new AbortController();
     const abortGeneration = () => abortController.abort();
 
     request.raw.once('aborted', abortGeneration);
 
     try {
-      return await generateFirstMessage(request.body, {
+      return await generateFirstMessage(command, {
         signal: abortController.signal,
       });
-    } catch (error) {
-      request.log.error({ err: error }, 'Failed to generate first message');
-      const mapped = toProblem(error);
-
-      return reply.status(mapped.statusCode).send(mapped.body);
     } finally {
       request.raw.off('aborted', abortGeneration);
     }
   });
 
-  app.post('/character', async (request, reply) => {
+  app.post('/character', async (request) => {
+    const command = parseRequest(GenerateCharacterDraftCommandSchema, request.body);
     const abortController = new AbortController();
     const abortGeneration = () => abortController.abort();
 
     request.raw.once('aborted', abortGeneration);
 
     try {
-      return await generateCharacterDraft(request.body, {
+      return await generateCharacterDraft(command, {
         signal: abortController.signal,
       });
-    } catch (error) {
-      request.log.error({ err: error }, 'Failed to generate character draft');
-      const mapped = toProblem(error);
-
-      return reply.status(mapped.statusCode).send(mapped.body);
     } finally {
       request.raw.off('aborted', abortGeneration);
     }
   });
 
-  app.post('/character-field', async (request, reply) => {
+  app.post('/character-field', async (request) => {
+    const command = parseRequest(GenerateCharacterFieldCommandSchema, request.body);
     const abortController = new AbortController();
     const abortGeneration = () => abortController.abort();
 
     request.raw.once('aborted', abortGeneration);
 
     try {
-      return await generateCharacterField(request.body, {
+      return await generateCharacterField(command, {
         signal: abortController.signal,
       });
-    } catch (error) {
-      request.log.error({ err: error }, 'Failed to generate character field');
-      const mapped = toProblem(error);
-
-      return reply.status(mapped.statusCode).send(mapped.body);
     } finally {
       request.raw.off('aborted', abortGeneration);
     }
   });
 
-  app.post('/character-avatar-prompt', async (request, reply) => {
+  app.post('/character-avatar-prompt', async (request) => {
+    const command = parseRequest(GenerateCharacterAvatarPromptCommandSchema, request.body);
     const abortController = new AbortController();
     const abortGeneration = () => abortController.abort();
 
     request.raw.once('aborted', abortGeneration);
 
     try {
-      return await generateCharacterAvatarPrompt(request.body, {
+      return await generateCharacterAvatarPrompt(command, {
         signal: abortController.signal,
       });
-    } catch (error) {
-      request.log.error({ err: error }, 'Failed to generate character avatar prompt');
-      const mapped = toProblem(error);
-
-      return reply.status(mapped.statusCode).send(mapped.body);
     } finally {
       request.raw.off('aborted', abortGeneration);
     }
   });
 
-  app.post('/scenario', async (request, reply) => {
+  app.post('/scenario', async (request) => {
+    const command = parseRequest(GenerateScenarioDraftCommandSchema, request.body);
     const abortController = new AbortController();
     const abortGeneration = () => abortController.abort();
 
     request.raw.once('aborted', abortGeneration);
 
     try {
-      return await generateScenarioDraft(request.body, {
+      return await generateScenarioDraft(command, {
         signal: abortController.signal,
       });
-    } catch (error) {
-      request.log.error({ err: error }, 'Failed to generate scenario draft');
-      const mapped = toProblem(error);
-
-      return reply.status(mapped.statusCode).send(mapped.body);
     } finally {
       request.raw.off('aborted', abortGeneration);
     }
   });
 
-  app.post('/scenario-first-message', async (request, reply) => {
+  app.post('/scenario-first-message', async (request) => {
+    const command = parseRequest(GenerateScenarioFirstMessageCommandSchema, request.body);
     const abortController = new AbortController();
     const abortGeneration = () => abortController.abort();
 
     request.raw.once('aborted', abortGeneration);
 
     try {
-      return await generateScenarioFirstMessage(request.body, {
+      return await generateScenarioFirstMessage(command, {
         signal: abortController.signal,
       });
-    } catch (error) {
-      request.log.error({ err: error }, 'Failed to generate scenario first message');
-      const mapped = toProblem(error);
-
-      return reply.status(mapped.statusCode).send(mapped.body);
     } finally {
       request.raw.off('aborted', abortGeneration);
     }
   });
 
-  app.post('/lorebook', async (request, reply) => {
+  app.post('/lorebook', async (request) => {
+    const command = parseRequest(GenerateLorebookDraftCommandSchema, request.body);
     const abortController = new AbortController();
     const abortGeneration = () => abortController.abort();
 
     request.raw.once('aborted', abortGeneration);
 
     try {
-      return await generateLorebookDraft(request.body, {
+      return await generateLorebookDraft(command, {
         signal: abortController.signal,
       });
-    } catch (error) {
-      request.log.error({ err: error }, 'Failed to generate lorebook draft');
-      const mapped = toProblem(error);
-
-      return reply.status(mapped.statusCode).send(mapped.body);
     } finally {
       request.raw.off('aborted', abortGeneration);
     }
   });
 
   app.post('/chat-reply-jobs', async (request, reply) => {
-    try {
-      const response = await startChatReplyGenerationJob(request.body, {
-        generationJobRegistry,
-      });
+    const command = parseRequest(StartChatReplyGenerationCommandSchema, request.body);
+    const response = await startChatReplyGenerationJob(command, {
+      generationJobRegistry,
+    });
 
-      return reply.status(202).send(response);
-    } catch (error) {
-      request.log.error({ err: error }, 'Failed to start chat reply generation job');
-      const mapped = toProblem(error);
-
-      return reply.status(mapped.statusCode).send(mapped.body);
-    }
+    return reply.status(202).send(response);
   });
 
   app.post('/chat-reply-jobs/regenerate', async (request, reply) => {
-    try {
-      const response = await regenerateChatReplyJob(request.body, {
-        generationJobRegistry,
-      });
+    const command = parseRequest(RegenerateChatReplyCommandSchema, request.body);
+    const response = await regenerateChatReplyJob(command, {
+      generationJobRegistry,
+    });
 
-      return reply.status(202).send(response);
-    } catch (error) {
-      request.log.error({ err: error }, 'Failed to regenerate chat reply');
-      const mapped = toProblem(error);
-
-      return reply.status(mapped.statusCode).send(mapped.body);
-    }
+    return reply.status(202).send(response);
   });
 
-  app.get('/jobs', async (request, reply) => {
-    try {
-      const query = GenerationJobsQuerySchema.parse(request.query);
+  app.get('/jobs', async (request) => {
+    const query = parseRequest(GenerationJobsQuerySchema, request.query);
 
-      return ListGenerationJobsResponseSchema.parse({
-        items: generationJobRegistry.list(query.chatId ? { chatId: query.chatId } : {}),
-      });
-    } catch (error) {
-      request.log.error({ err: error }, 'Failed to list generation jobs');
-      const mapped = toProblem(error);
-
-      return reply.status(mapped.statusCode).send(mapped.body);
-    }
+    return ListGenerationJobsResponseSchema.parse({
+      items: generationJobRegistry.list(query.chatId ? { chatId: query.chatId } : {}),
+    });
   });
 
-  app.get('/jobs/:jobId', async (request, reply) => {
-    try {
-      const { jobId } = GenerationJobRouteParamsSchema.parse(request.params);
-      const job = generationJobRegistry.get(jobId);
+  app.get('/jobs/:jobId', async (request) => {
+    const { jobId } = parseRequest(GenerationJobRouteParamsSchema, request.params);
+    const job = generationJobRegistry.get(jobId);
 
-      if (!job) {
-        return reply.status(404).send(
-          ApiProblemSchema.parse({
-            code: 'generation_job_not_found',
-            message: 'Generation job not found.',
-          }),
-        );
-      }
-
-      return GenerationJobResponseSchema.parse({
-        job,
-      });
-    } catch (error) {
-      request.log.error({ err: error }, 'Failed to load generation job');
-      const mapped = toProblem(error);
-
-      return reply.status(mapped.statusCode).send(mapped.body);
+    if (!job) {
+      throw new GenerationJobNotFoundError(jobId);
     }
+
+    return GenerationJobResponseSchema.parse({
+      job,
+    });
   });
 
-  app.post('/jobs/:jobId/cancel', async (request, reply) => {
-    try {
-      const { jobId } = GenerationJobRouteParamsSchema.parse(request.params);
-      const job = generationJobRegistry.cancel(jobId);
+  app.post('/jobs/:jobId/cancel', async (request) => {
+    const { jobId } = parseRequest(GenerationJobRouteParamsSchema, request.params);
+    const job = generationJobRegistry.cancel(jobId);
 
-      if (!job) {
-        return reply.status(404).send(
-          ApiProblemSchema.parse({
-            code: 'generation_job_not_found',
-            message: 'Generation job not found.',
-          }),
-        );
-      }
-
-      return GenerationJobResponseSchema.parse({
-        job,
-      });
-    } catch (error) {
-      request.log.error({ err: error }, 'Failed to cancel generation job');
-      const mapped = toProblem(error);
-
-      return reply.status(mapped.statusCode).send(mapped.body);
+    if (!job) {
+      throw new GenerationJobNotFoundError(jobId);
     }
+
+    return GenerationJobResponseSchema.parse({
+      job,
+    });
   });
 
   app.get('/jobs/:jobId/events', async (request, reply) => {
-    let hijacked = false;
+    const { jobId } = parseRequest(GenerationJobRouteParamsSchema, request.params);
+    const job = generationJobRegistry.get(jobId);
 
-    try {
-      const { jobId } = GenerationJobRouteParamsSchema.parse(request.params);
-      const job = generationJobRegistry.get(jobId);
+    if (!job) {
+      throw new GenerationJobNotFoundError(jobId);
+    }
 
-      if (!job) {
-        return reply.status(404).send(
-          ApiProblemSchema.parse({
-            code: 'generation_job_not_found',
-            message: 'Generation job not found.',
-          }),
-        );
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
+    let unsubscribe: (() => void) | null = null;
+    let closed = false;
+    const cleanup = () => {
+      if (closed) {
+        return;
       }
 
-      let heartbeat: ReturnType<typeof setInterval> | null = null;
-      let unsubscribe: (() => void) | null = null;
-      let closed = false;
-      const cleanup = () => {
-        if (closed) {
-          return;
-        }
+      closed = true;
 
-        closed = true;
+      if (heartbeat) {
+        clearInterval(heartbeat);
+        heartbeat = null;
+      }
 
-        if (heartbeat) {
-          clearInterval(heartbeat);
-          heartbeat = null;
-        }
+      unsubscribe?.();
+      unsubscribe = null;
+    };
 
-        unsubscribe?.();
-        unsubscribe = null;
-      };
+    request.raw.once('close', cleanup);
 
-      request.raw.once('close', cleanup);
+    reply.hijack();
 
-      reply.hijack();
-      hijacked = true;
+    try {
       reply.raw.writeHead(200, {
         'Cache-Control': 'no-cache, no-transform',
         Connection: 'keep-alive',
@@ -518,15 +322,7 @@ export const generationRoutes: FastifyPluginAsync = async (app) => {
       }, 15_000);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to open generation job event stream');
-
-      if (hijacked) {
-        reply.raw.end();
-        return;
-      }
-
-      const mapped = toProblem(error);
-
-      return reply.status(mapped.statusCode).send(mapped.body);
+      reply.raw.end();
     }
   });
 };

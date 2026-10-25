@@ -1,5 +1,5 @@
 import {
-  GenerateScenarioDraftCommandSchema,
+  type GenerateScenarioDraftCommand,
   type GenerateScenarioDraftResponse,
   GenerateScenarioDraftResponseSchema,
 } from '@immersion/contracts/generation';
@@ -92,10 +92,9 @@ RULES:
 }
 
 export async function generateScenarioDraft(
-  input: unknown,
+  command: GenerateScenarioDraftCommand,
   dependencies: GenerateScenarioDraftDependencies = {},
 ): Promise<GenerateScenarioDraftResponse> {
-  const command = GenerateScenarioDraftCommandSchema.parse(input);
   const chatCompletionClient = dependencies.chatCompletionClient ?? createChatCompletionClient();
   const context = await resolveDraftGenerationContext();
   const completion = await chatCompletionClient.completeChat({
