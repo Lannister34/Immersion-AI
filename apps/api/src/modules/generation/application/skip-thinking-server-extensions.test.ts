@@ -5,9 +5,9 @@ import path from 'node:path';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { z } from 'zod';
 
-import { chatCompletionReply } from '../../../test-support/chat-completion-reply.js';
 import { stubGlobalFetch } from '../../../test-support/global-fetch-stub.js';
 import type { HttpStub } from '../../../test-support/http-stub.js';
+import { openAiChatCompletion } from '../../../test-support/provider-responses.js';
 import { appendChatMessages } from '../../chats/application/append-chat-messages.js';
 import { createChat } from '../../chats/application/create-chat.js';
 import { generateCharacterAvatarPrompt } from './generate-character-avatar-prompt.js';
@@ -73,7 +73,7 @@ const ProviderRequestBodySchema = z.record(z.string(), z.unknown());
 
 function stubProviderReply(): HttpStub {
   const http = stubGlobalFetch();
-  http.on('POST', /\/chat\/completions$/u, () => chatCompletionReply(REPLY_EVERY_DRAFT_ACCEPTS));
+  http.on('POST', /\/chat\/completions$/u, () => openAiChatCompletion(REPLY_EVERY_DRAFT_ACCEPTS));
 
   return http;
 }
