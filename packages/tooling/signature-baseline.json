@@ -1,5 +1,4 @@
 {
-  "apps/api/src/app.ts": "explicit-return-type:1",
   "apps/api/src/modules/chats/application/chat-attachments.ts": "explicit-return-type:1",
   "apps/api/src/modules/chats/application/default-user-name.ts": "explicit-return-type:1",
   "apps/api/src/modules/chats/infrastructure/file-chat-repository.ts": "explicit-return-type:9",
@@ -19,7 +18,7 @@
   "apps/api/src/modules/runtime/application/start-runtime.ts": "explicit-return-type:1",
   "apps/api/src/modules/runtime/application/stop-runtime.ts": "explicit-return-type:1",
   "apps/api/src/modules/runtime/application/update-runtime-config.ts": "explicit-return-type:1",
-  "apps/api/src/modules/runtime/infrastructure/llm-process-manager.ts": "explicit-return-type:7",
+  "apps/api/src/modules/runtime/infrastructure/llm-process-manager.ts": "explicit-return-type:6",
   "apps/api/src/platform/storage/atomic-file.ts": "explicit-return-type:2",
   "apps/api/src/shared/infrastructure/legacy-settings-source.ts": "explicit-return-type:3",
   "apps/api/src/shared/interface/http/problem.ts": "explicit-return-type:1",
