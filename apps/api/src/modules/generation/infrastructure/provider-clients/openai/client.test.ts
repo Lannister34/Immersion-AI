@@ -1,8 +1,18 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
+import { stubGlobalFetch } from '../../../../../test-support/global-fetch-stub.js';
+import { readProviderChatRequest } from '../../../../../test-support/provider-chat-request.js';
+import {
+  eventStream,
+  eventStreamResponse,
+  openAiChatCompletion,
+  openAiChatStream,
+} from '../../../../../test-support/provider-responses.js';
 import type { ChatCompletionRequest } from '../../../application/chat-completion-client.js';
 import { ProviderGenerationError, ProviderReplyTruncatedError } from '../../../application/generation-errors.js';
 import { OpenAiClient } from './client.js';
+
+const COMPLETIONS_URL = 'http://127.0.0.1:5001/v1/chat/completions';
 
 const BASE_REQUEST: Omit<ChatCompletionRequest, 'onDelta'> = {
   endpoint: { apiKey: null, apiKind: 'openai-compatible', baseUrl: 'http://127.0.0.1:5001', model: 'test-model' },
@@ -19,43 +29,32 @@ const BASE_REQUEST: Omit<ChatCompletionRequest, 'onDelta'> = {
   },
 };
 
-function mockFetch(body: string, contentType: string) {
-  const requests: Array<Record<string, unknown>> = [];
-
-  globalThis.fetch = vi.fn<typeof fetch>(async (_input, init) => {
-    requests.push(typeof init?.body === 'string' ? JSON.parse(init.body) : {});
-
-    return new Response(body, { headers: { 'Content-Type': contentType }, status: 200 });
-  });
-
-  return requests;
-}
-
-function sseBody(deltas: string[]): string {
-  return [
-    ...deltas.map((delta) => `data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`),
-    'data: [DONE]\n\n',
-  ].join('');
+function encode(text: string): Uint8Array {
+  return new TextEncoder().encode(text);
 }
 
 describe('OpenAiClient request body', () => {
   it('sends the extended sampler set to a local server', async () => {
-    const captured = mockFetch(JSON.stringify({ choices: [{ message: { content: 'раз' } }] }), 'application/json');
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () => openAiChatCompletion('раз'));
+
     await new OpenAiClient().completeChat(BASE_REQUEST);
 
-    expect(captured[0]).toMatchObject({ max_tokens: 128, min_p: 0, rep_pen: 1, top_k: 0 });
+    expect(readProviderChatRequest(http)).toMatchObject({ max_tokens: 128, min_p: 0, rep_pen: 1, top_k: 0 });
   });
 
   it('drops parameters the OpenAI cloud rejects and sends the reply limit as max_completion_tokens, which gpt-4o accepts too', async () => {
-    const captured = mockFetch(JSON.stringify({ choices: [{ message: { content: 'раз' } }] }), 'application/json');
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () => openAiChatCompletion('раз'));
+
     await new OpenAiClient().completeChat({
       ...BASE_REQUEST,
       endpoint: { ...BASE_REQUEST.endpoint, apiKind: 'openai-cloud', model: 'gpt-4o' },
     });
 
-    const body = captured[0];
-    expect(body?.max_completion_tokens).toBe(128);
-    expect(body?.temperature).toBe(1);
+    const body = readProviderChatRequest(http);
+    expect(body.max_completion_tokens).toBe(128);
+    expect(body.temperature).toBe(1);
     expect(body).not.toHaveProperty('max_tokens');
     expect(body).not.toHaveProperty('min_p');
     expect(body).not.toHaveProperty('rep_pen');
@@ -63,58 +62,64 @@ describe('OpenAiClient request body', () => {
   });
 
   it('leaves samplers alone for reasoning models, which only accept defaults', async () => {
-    const captured = mockFetch(JSON.stringify({ choices: [{ message: { content: 'раз' } }] }), 'application/json');
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () => openAiChatCompletion('раз'));
+
     await new OpenAiClient().completeChat({
       ...BASE_REQUEST,
       endpoint: { ...BASE_REQUEST.endpoint, apiKind: 'openai-cloud', model: 'o3-mini' },
     });
 
-    const body = captured[0];
-    expect(body?.max_completion_tokens).toBe(128);
+    const body = readProviderChatRequest(http);
+    expect(body.max_completion_tokens).toBe(128);
     expect(body).not.toHaveProperty('temperature');
     expect(body).not.toHaveProperty('top_p');
     expect(body).not.toHaveProperty('presence_penalty');
   });
 
   it('sends server extensions to a local server only, since the OpenAI cloud rejects unknown fields', async () => {
-    const local = mockFetch(JSON.stringify({ choices: [{ message: { content: 'раз' } }] }), 'application/json');
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () => openAiChatCompletion('раз'));
+
     await new OpenAiClient().completeChat({
       ...BASE_REQUEST,
       serverExtensions: { enable_thinking: false },
     });
-
-    expect(local[0]).toMatchObject({ enable_thinking: false });
-
-    const cloud = mockFetch(JSON.stringify({ choices: [{ message: { content: 'раз' } }] }), 'application/json');
     await new OpenAiClient().completeChat({
       ...BASE_REQUEST,
       endpoint: { ...BASE_REQUEST.endpoint, apiKind: 'openai-cloud', model: 'gpt-4o' },
       serverExtensions: { enable_thinking: false },
     });
 
-    expect(cloud[0]).not.toHaveProperty('enable_thinking');
+    expect(readProviderChatRequest(http, 0)).toMatchObject({ enable_thinking: false });
+    expect(readProviderChatRequest(http, 1)).not.toHaveProperty('enable_thinking');
   });
 
   it('lets our own fields win over server extensions of the same name', async () => {
-    const captured = mockFetch(JSON.stringify({ choices: [{ message: { content: 'раз' } }] }), 'application/json');
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () => openAiChatCompletion('раз'));
+
     await new OpenAiClient().completeChat({
       ...BASE_REQUEST,
       serverExtensions: { max_tokens: 1, model: 'other-model', stream: true, top_k: 99 },
     });
 
-    expect(captured[0]).toMatchObject({ max_tokens: 128, model: 'test-model', stream: false, top_k: 0 });
+    expect(readProviderChatRequest(http)).toMatchObject({
+      max_tokens: 128,
+      model: 'test-model',
+      stream: false,
+      top_k: 0,
+    });
   });
 });
 
 describe('OpenAiClient replies', () => {
   it('fails an empty reply unless the caller allows it, since thinking can use up the whole limit', async () => {
-    const thinkingOnly = JSON.stringify({ choices: [{ message: { content: '<think>Весь лимит ушёл сюда' } }] });
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () => openAiChatCompletion('<think>Весь лимит ушёл сюда'));
     const client = new OpenAiClient();
 
-    mockFetch(thinkingOnly, 'application/json');
     await expect(client.completeChat(BASE_REQUEST)).rejects.toThrow('Provider returned an empty reply.');
-
-    mockFetch(thinkingOnly, 'application/json');
     await expect(client.completeChat({ ...BASE_REQUEST, allowEmptyContent: true })).resolves.toEqual({
       content: '',
       reasoning: 'Весь лимит ушёл сюда',
@@ -122,11 +127,11 @@ describe('OpenAiClient replies', () => {
   });
 
   it('reports a reply that spent the whole token limit on thinking as hitting the limit, not as empty', async () => {
-    mockFetch(
-      JSON.stringify({
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () =>
+      Response.json({
         choices: [{ finish_reason: 'length', message: { content: '', reasoning_content: 'Размышляю о глине' } }],
       }),
-      'application/json',
     );
 
     const completion = new OpenAiClient().completeChat(BASE_REQUEST);
@@ -136,23 +141,20 @@ describe('OpenAiClient replies', () => {
   });
 
   it('fails a reply cut off at the token limit only when the caller needs it complete', async () => {
-    const cutOff = JSON.stringify({ choices: [{ finish_reason: 'length', message: { content: '{"name": "Ари' } }] });
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () => openAiChatCompletion('{"name": "Ари', 'length'));
     const client = new OpenAiClient();
 
-    mockFetch(cutOff, 'application/json');
     await expect(client.completeChat({ ...BASE_REQUEST, requireCompleteReply: true })).rejects.toBeInstanceOf(
       ProviderReplyTruncatedError,
     );
 
-    mockFetch(cutOff, 'application/json');
     await expect(client.completeChat(BASE_REQUEST)).resolves.toEqual({ content: '{"name": "Ари', reasoning: '' });
   });
 
   it('accepts a complete reply when the caller needs it complete', async () => {
-    mockFetch(
-      JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: '{"name": "Ария"}' } }] }),
-      'application/json',
-    );
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () => openAiChatCompletion('{"name": "Ария"}', 'stop'));
 
     await expect(new OpenAiClient().completeChat({ ...BASE_REQUEST, requireCompleteReply: true })).resolves.toEqual({
       content: '{"name": "Ария"}',
@@ -161,7 +163,8 @@ describe('OpenAiClient replies', () => {
   });
 
   it('cuts a long provider error body down to its first 500 characters', async () => {
-    globalThis.fetch = vi.fn<typeof fetch>(async () => new Response('x'.repeat(2000), { status: 500 }));
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () => new Response('x'.repeat(2000), { status: 500 }));
 
     await expect(new OpenAiClient().completeChat(BASE_REQUEST)).rejects.toThrow(
       /^Provider returned HTTP 500: x{500}$/u,
@@ -171,7 +174,10 @@ describe('OpenAiClient replies', () => {
 
 describe('OpenAiClient streaming', () => {
   it('reports every chunk in order and returns the joined reply', async () => {
-    mockFetch(sseBody(['Прив', 'ет, ', 'мир.']), 'text/event-stream');
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () =>
+      openAiChatStream([{ content: 'Прив' }, { content: 'ет, ' }, { content: 'мир.' }]),
+    );
     const deltas: string[] = [];
     const client = new OpenAiClient();
 
@@ -182,20 +188,21 @@ describe('OpenAiClient streaming', () => {
   });
 
   it('asks for a stream only when a delta callback is given', async () => {
-    const streamed = mockFetch(sseBody(['раз']), 'text/event-stream');
+    const http = stubGlobalFetch();
+    http.once('POST', COMPLETIONS_URL, () => openAiChatStream([{ content: 'раз' }]));
+    http.once('POST', COMPLETIONS_URL, () => openAiChatCompletion('раз'));
     const client = new OpenAiClient();
+
     await client.completeChat({ ...BASE_REQUEST, onDelta: () => undefined });
-
-    expect(streamed[0]?.stream).toBe(true);
-
-    const plain = mockFetch(JSON.stringify({ choices: [{ message: { content: 'раз' } }] }), 'application/json');
     await client.completeChat(BASE_REQUEST);
 
-    expect(plain[0]?.stream).toBe(false);
+    expect(readProviderChatRequest(http, 0).stream).toBe(true);
+    expect(readProviderChatRequest(http, 1).stream).toBe(false);
   });
 
   it('falls back to the plain response when the server answers a stream request with JSON, going by content-type', async () => {
-    mockFetch(JSON.stringify({ choices: [{ message: { content: 'Целый ответ.' } }] }), 'application/json');
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () => openAiChatCompletion('Целый ответ.'));
     const deltas: string[] = [];
     const client = new OpenAiClient();
 
@@ -207,22 +214,19 @@ describe('OpenAiClient streaming', () => {
 
   it('survives a chunk split across two reads of the stream', async () => {
     const chunk = `data: ${JSON.stringify({ choices: [{ delta: { content: 'склеено' } }] })}\n\n`;
-    const head = chunk.slice(0, 20);
-    const tail = chunk.slice(20);
-
-    globalThis.fetch = vi.fn<typeof fetch>(async () => {
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          const encoder = new TextEncoder();
-          controller.enqueue(encoder.encode(head));
-          controller.enqueue(encoder.encode(tail));
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-          controller.close();
-        },
-      });
-
-      return new Response(stream, { headers: { 'Content-Type': 'text/event-stream' }, status: 200 });
-    });
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () =>
+      eventStreamResponse(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encode(chunk.slice(0, 20)));
+            controller.enqueue(encode(chunk.slice(20)));
+            controller.enqueue(encode('data: [DONE]\n\n'));
+            controller.close();
+          },
+        }),
+      ),
+    );
 
     const deltas: string[] = [];
     const client = new OpenAiClient();
@@ -233,13 +237,13 @@ describe('OpenAiClient streaming', () => {
   });
 
   it('fails on an in-band error chunk instead of returning the reply streamed so far', async () => {
-    mockFetch(
-      [
-        `data: ${JSON.stringify({ choices: [{ delta: { content: 'Half a rep' } }] })}\n\n`,
-        `data: ${JSON.stringify({ error: { message: 'CUDA error: out of memory', type: 'server_error' } })}\n\n`,
-        'data: [DONE]\n\n',
-      ].join(''),
-      'text/event-stream',
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () =>
+      eventStream([
+        JSON.stringify({ choices: [{ delta: { content: 'Half a rep' } }] }),
+        JSON.stringify({ error: { message: 'CUDA error: out of memory', type: 'server_error' } }),
+        '[DONE]',
+      ]),
     );
     const deltas: string[] = [];
 
@@ -255,18 +259,19 @@ describe('OpenAiClient streaming', () => {
 
   it('cancels the provider stream when a chunk fails, so the server stops generating', async () => {
     let canceled = false;
-    globalThis.fetch = vi.fn<typeof fetch>(async () => {
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ error: 'out of memory' })}\n\n`));
-        },
-        cancel() {
-          canceled = true;
-        },
-      });
-
-      return new Response(stream, { headers: { 'Content-Type': 'text/event-stream' }, status: 200 });
-    });
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () =>
+      eventStreamResponse(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encode(`data: ${JSON.stringify({ error: 'out of memory' })}\n\n`));
+          },
+          cancel() {
+            canceled = true;
+          },
+        }),
+      ),
+    );
 
     await expect(new OpenAiClient().completeChat({ ...BASE_REQUEST, onDelta: () => undefined })).rejects.toThrow(
       /out of memory/u,
@@ -275,18 +280,19 @@ describe('OpenAiClient streaming', () => {
   });
 
   it('reports the provider error even when cancelling the stream fails as well', async () => {
-    globalThis.fetch = vi.fn<typeof fetch>(async () => {
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ error: 'out of memory' })}\n\n`));
-        },
-        cancel() {
-          throw new Error('cancel failed');
-        },
-      });
-
-      return new Response(stream, { headers: { 'Content-Type': 'text/event-stream' }, status: 200 });
-    });
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () =>
+      eventStreamResponse(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encode(`data: ${JSON.stringify({ error: 'out of memory' })}\n\n`));
+          },
+          cancel() {
+            throw new Error('cancel failed');
+          },
+        }),
+      ),
+    );
 
     await expect(new OpenAiClient().completeChat({ ...BASE_REQUEST, onDelta: () => undefined })).rejects.toThrow(
       /out of memory/u,
@@ -294,13 +300,13 @@ describe('OpenAiClient streaming', () => {
   });
 
   it('reads the token-limit finish reason from the final stream chunk', async () => {
-    mockFetch(
-      [
-        `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'Размышляю' }, finish_reason: null }] })}\n\n`,
-        `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'length' }] })}\n\n`,
-        'data: [DONE]\n\n',
-      ].join(''),
-      'text/event-stream',
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () =>
+      eventStream([
+        JSON.stringify({ choices: [{ delta: { reasoning_content: 'Размышляю' }, finish_reason: null }] }),
+        JSON.stringify({ choices: [{ delta: {}, finish_reason: 'length' }] }),
+        '[DONE]',
+      ]),
     );
 
     await expect(new OpenAiClient().completeChat({ ...BASE_REQUEST, onDelta: () => undefined })).rejects.toBeInstanceOf(
@@ -309,7 +315,8 @@ describe('OpenAiClient streaming', () => {
   });
 
   it('fails on an in-band error given as a bare string', async () => {
-    mockFetch(`data: ${JSON.stringify({ error: 'upstream closed the connection' })}\n\n`, 'text/event-stream');
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () => eventStream([JSON.stringify({ error: 'upstream closed the connection' })]));
 
     await expect(new OpenAiClient().completeChat({ ...BASE_REQUEST, onDelta: () => undefined })).rejects.toThrow(
       /upstream closed the connection/u,
@@ -317,14 +324,9 @@ describe('OpenAiClient streaming', () => {
   });
 
   it('streams the separate reasoning fields of DeepSeek-style servers straight to the reasoning channel', async () => {
-    mockFetch(
-      [
-        `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'Ду' } }] })}\n\n`,
-        `data: ${JSON.stringify({ choices: [{ delta: { reasoning: 'маю' } }] })}\n\n`,
-        `data: ${JSON.stringify({ choices: [{ delta: { content: 'Ответ.' } }] })}\n\n`,
-        'data: [DONE]\n\n',
-      ].join(''),
-      'text/event-stream',
+    const http = stubGlobalFetch();
+    http.on('POST', COMPLETIONS_URL, () =>
+      openAiChatStream([{ reasoning_content: 'Ду' }, { reasoning: 'маю' }, { content: 'Ответ.' }]),
     );
     const deltas: Array<[string, string]> = [];
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   anthropicMessage,
+  anthropicMessageStream,
   eventStream,
   openAiChatCompletion,
   openAiChatStream,
@@ -31,6 +32,21 @@ describe('provider responses', () => {
 
   it('frames raw event data as given, a malformed frame included', async () => {
     expect(await eventDataOf(eventStream(['{"choices":[]}', '{oops']))).toEqual(['{"choices":[]}', '{oops']);
+  });
+
+  it('names each Anthropic stream event in an event line before its data, as the Messages API does', async () => {
+    const response = anthropicMessageStream([
+      { type: 'message_start' },
+      { delta: { text: 'Прив', type: 'text_delta' }, type: 'content_block_delta' },
+    ]);
+
+    expect(response.headers.get('content-type')).toBe('text/event-stream');
+    expect(await response.text()).toBe(
+      [
+        'event: message_start\ndata: {"type":"message_start"}\n\n',
+        'event: content_block_delta\ndata: {"delta":{"text":"Прив","type":"text_delta"},"type":"content_block_delta"}\n\n',
+      ].join(''),
+    );
   });
 
   it('answers in the JSON shapes the OpenAI and Anthropic clients read', async () => {

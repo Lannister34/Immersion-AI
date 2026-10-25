@@ -1,13 +1,23 @@
 export interface OpenAiStreamDelta {
   readonly content?: string;
+  readonly reasoning?: string;
   readonly reasoning_content?: string;
 }
 
-export function eventStream(frames: readonly string[]): Response {
-  return new Response(frames.map((frame) => `data: ${frame}\n\n`).join(''), {
+export interface AnthropicStreamEventFixture {
+  readonly type: string;
+  readonly [field: string]: unknown;
+}
+
+export function eventStreamResponse(body: string | ReadableStream<Uint8Array>): Response {
+  return new Response(body, {
     headers: { 'Content-Type': 'text/event-stream' },
     status: 200,
   });
+}
+
+export function eventStream(frames: readonly string[]): Response {
+  return eventStreamResponse(frames.map((frame) => `data: ${frame}\n\n`).join(''));
 }
 
 export function openAiChatStream(deltas: readonly OpenAiStreamDelta[]): Response {
@@ -22,6 +32,12 @@ export function openAiChatCompletion(content: string, finishReason: OpenAiFinish
 
 export function anthropicMessage(text: string): Response {
   return Response.json({ content: [{ text, type: 'text' }] });
+}
+
+export function anthropicMessageStream(events: readonly AnthropicStreamEventFixture[]): Response {
+  return eventStreamResponse(
+    events.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''),
+  );
 }
 
 export function providerFailure(): Response {
