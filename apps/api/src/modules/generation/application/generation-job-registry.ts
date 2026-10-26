@@ -21,6 +21,7 @@ export interface CreateChatReplyGenerationJobInput {
 
 export interface GenerationJobRegistry {
   cancel(jobId: GenerationJobId): GenerationJobDto | null;
+  close(): void;
   createChatReplyJob(input: CreateChatReplyGenerationJobInput): GenerationJobDto;
   fail(jobId: GenerationJobId, error: unknown): GenerationJobDto | null;
   get(jobId: GenerationJobId): GenerationJobDto | null;

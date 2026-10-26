@@ -5,21 +5,26 @@ import {
   GenerateChatTitleResponseSchema,
 } from '@immersion/contracts/generation';
 
-import { globalHttpFetch } from '../../../platform/outbound-http/global-http-fetch.js';
-import { ChatNotFoundError } from '../../chats/application/append-chat-messages.js';
-import { getChatSession } from '../../chats/application/get-chat-session.js';
-import { updateChatTitle } from '../../chats/application/update-chat-title.js';
-import { resolveChatGenerationSettings } from '../../prompting/application/resolve-chat-generation-settings.js';
-import { resolveGenerationProviderEndpoint } from '../../providers/application/generation-provider.js';
-import { getSettingsOverview } from '../../settings/application/get-settings-overview.js';
-import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
+import type { Clock } from '../../../platform/clock/clock.js';
+import { ChatNotFoundError } from '../../chats/index.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import { ChatTranscriptEmptyError, ProviderGenerationError } from './generation-errors.js';
+import type {
+  ChatSessionPort,
+  GenerationOptions,
+  GenerationSettingsSource,
+  PromptPlanPort,
+  ProviderEndpointResolver,
+} from './generation-ports.js';
 import { SKIP_THINKING_SERVER_EXTENSIONS } from './skip-thinking-server-extensions.js';
 
 export interface GenerateChatTitleDependencies {
-  chatCompletionClient?: ChatCompletionClient;
-  signal?: AbortSignal;
+  readonly chatCompletionClient: ChatCompletionClient;
+  readonly chats: Pick<ChatSessionPort, 'getChatSession' | 'updateChatTitle'>;
+  readonly clock: Clock;
+  readonly prompting: Pick<PromptPlanPort, 'resolveChatGenerationSettings'>;
+  readonly providers: ProviderEndpointResolver;
+  readonly settings: GenerationSettingsSource;
 }
 
 const TITLE_TRANSCRIPT_MESSAGE_LIMIT = 10;
@@ -65,12 +70,10 @@ export function sanitizeGeneratedChatTitle(raw: string): string {
 
 export async function generateChatTitle(
   command: GenerateChatTitleCommand,
-  dependencies: GenerateChatTitleDependencies = {},
+  dependencies: GenerateChatTitleDependencies,
+  options: GenerationOptions = {},
 ): Promise<GenerateChatTitleResponse> {
-  // TODO: require the chat completion client from the composition root (F-35)
-  const chatCompletionClient =
-    dependencies.chatCompletionClient ?? createChatCompletionClient({ httpFetch: globalHttpFetch });
-  const session = await getChatSession(command.chatId);
+  const session = await dependencies.chats.getChatSession(command.chatId);
 
   if (!session) {
     throw new ChatNotFoundError(command.chatId);
@@ -80,13 +83,13 @@ export async function generateChatTitle(
     throw new ChatTranscriptEmptyError(command.chatId);
   }
 
-  const endpoint = await resolveGenerationProviderEndpoint();
-  const effectiveSettings = resolveChatGenerationSettings(
-    getSettingsOverview(),
+  const endpoint = await dependencies.providers.resolveGenerationProviderEndpoint();
+  const effectiveSettings = dependencies.prompting.resolveChatGenerationSettings(
+    dependencies.settings.getSettingsOverview(),
     endpoint.model,
     session.generationSettings,
   );
-  const completion = await chatCompletionClient.completeChat({
+  const completion = await dependencies.chatCompletionClient.completeChat({
     endpoint,
     maxTokens: TITLE_MAX_TOKENS,
     messages: [
@@ -109,7 +112,7 @@ export async function generateChatTitle(
       topP: effectiveSettings.sampling.topP,
     },
     serverExtensions: SKIP_THINKING_SERVER_EXTENSIONS,
-    signal: dependencies.signal,
+    signal: options.signal,
   });
   const title = sanitizeGeneratedChatTitle(completion.content);
 
@@ -117,10 +120,11 @@ export async function generateChatTitle(
     throw new ProviderGenerationError('Provider returned an unusable chat title.');
   }
 
-  const chat = await updateChatTitle({
+  const chat = await dependencies.chats.updateChatTitle({
     chatId: command.chatId,
-    title,
     expectedCurrentTitle: session.chat.title,
+    now: () => dependencies.clock.now(),
+    title,
   });
 
   return GenerateChatTitleResponseSchema.parse({

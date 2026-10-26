@@ -2,20 +2,13 @@ import type { VisionSupport } from '@immersion/contracts/generation';
 import type { ProviderType } from '@immersion/contracts/providers';
 
 import type { Clock } from '../../../platform/clock/clock.js';
-import { systemClock } from '../../../platform/clock/system-clock.js';
-import { globalHttpFetch } from '../../../platform/outbound-http/global-http-fetch.js';
 import type { HttpFetch } from '../../../platform/outbound-http/http-fetch.js';
 import { normalizeGenerationProviderBaseUrl } from '../application/generation-provider.js';
+import type { VisionProbe, VisionProbeTarget } from '../application/vision-probe.js';
 
 const PROBE_TIMEOUT_MS = 1500;
 const KNOWN_TTL_MS = 60_000;
 const UNKNOWN_TTL_MS = 30_000;
-
-export interface VisionProbeTarget {
-  baseUrl: string;
-  model: string | null;
-  provider?: ProviderType | null;
-}
 
 export interface VisionProbeDependencies {
   readonly httpFetch: HttpFetch;
@@ -109,7 +102,7 @@ function readLmStudioModels(payload: unknown, model: string | null): VisionSuppo
   return 'unknown';
 }
 
-export class ProviderVisionProbe {
+export class ProviderVisionProbe implements VisionProbe {
   private readonly cache = new Map<string, CachedSupport>();
   private readonly httpFetch: HttpFetch;
   private readonly clock: Clock;
@@ -171,15 +164,4 @@ export class ProviderVisionProbe {
 
     return 'unknown';
   }
-}
-
-let sharedProbe: ProviderVisionProbe | null = null;
-
-export function getProviderVisionProbe(): ProviderVisionProbe {
-  if (!sharedProbe) {
-    // TODO: construct one vision probe per app in the composition root and delete this singleton (F-35)
-    sharedProbe = new ProviderVisionProbe({ clock: systemClock, httpFetch: globalHttpFetch });
-  }
-
-  return sharedProbe;
 }

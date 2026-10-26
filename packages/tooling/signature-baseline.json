@@ -2,7 +2,6 @@
   "apps/api/src/modules/chats/application/chat-attachments.ts": "explicit-return-type:1",
   "apps/api/src/modules/chats/application/default-user-name.ts": "explicit-return-type:1",
   "apps/api/src/modules/chats/infrastructure/file-chat-repository.ts": "explicit-return-type:9",
-  "apps/api/src/modules/generation/infrastructure/in-memory-generation-job-registry.ts": "explicit-return-type:7",
   "apps/api/src/modules/generation/infrastructure/provider-clients/anthropic/reply.ts": "explicit-return-type:1",
   "apps/api/src/modules/generation/infrastructure/provider-clients/anthropic/request.ts": "explicit-return-type:2",
   "apps/api/src/modules/generation/infrastructure/provider-clients/http.ts": "explicit-return-type:2",

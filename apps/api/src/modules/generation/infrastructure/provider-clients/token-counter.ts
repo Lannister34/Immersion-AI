@@ -6,8 +6,6 @@ import {
   type TokenCounter,
   type TokenCountResult,
 } from '../../../prompting/application/token-counter.js';
-import { getProviderSettings } from '../../../providers/index.js';
-import { getRunningRuntimeEndpoint } from '../../../runtime/index.js';
 
 const TOKENIZE_TIMEOUT_MS = 2000;
 const ABSENT_RETRY_MS = 60_000;
@@ -25,27 +23,7 @@ export interface TokenizeTarget {
 export interface ProviderTokenCounterDependencies {
   readonly httpFetch: HttpFetch;
   readonly clock: Clock;
-  readonly resolveTokenizeTarget?: () => Promise<TokenizeTarget | null>;
-}
-
-async function resolveBuiltinRuntimeTarget(): Promise<TokenizeTarget | null> {
-  try {
-    const settings = await getProviderSettings();
-
-    if (settings.mode !== 'builtin') {
-      return null;
-    }
-
-    const endpoint = await getRunningRuntimeEndpoint();
-
-    if (!endpoint) {
-      return null;
-    }
-
-    return { baseUrl: endpoint.baseUrl, model: endpoint.model };
-  } catch {
-    return null;
-  }
+  readonly resolveTokenizeTarget: () => Promise<TokenizeTarget | null>;
 }
 
 function hashText(text: string): string {
@@ -116,7 +94,7 @@ export class ProviderTokenCounter implements TokenCounter {
   constructor(dependencies: ProviderTokenCounterDependencies) {
     this.httpFetch = dependencies.httpFetch;
     this.clock = dependencies.clock;
-    this.resolveTokenizeTarget = dependencies.resolveTokenizeTarget ?? resolveBuiltinRuntimeTarget;
+    this.resolveTokenizeTarget = dependencies.resolveTokenizeTarget;
   }
 
   async countTokens(texts: string[]): Promise<TokenCountResult> {

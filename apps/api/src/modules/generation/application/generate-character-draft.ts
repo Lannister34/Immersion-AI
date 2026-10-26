@@ -12,7 +12,7 @@ import {
   resolveDraftGenerationContext,
 } from './draft-generation-support.js';
 import { ProviderGenerationError } from './generation-errors.js';
-import type { DraftGenerationDependencies, DraftGenerationOptions } from './generation-ports.js';
+import type { DraftGenerationDependencies, GenerationOptions } from './generation-ports.js';
 import { asJsonRecord, extractJsonFromModelOutput } from './model-json-output.js';
 import { SKIP_THINKING_SERVER_EXTENSIONS } from './skip-thinking-server-extensions.js';
 
@@ -123,7 +123,7 @@ function normalizeCharacterDraft(
 export async function generateCharacterDraft(
   command: GenerateCharacterDraftCommand,
   dependencies: DraftGenerationDependencies,
-  options: DraftGenerationOptions = {},
+  options: GenerationOptions = {},
 ): Promise<GenerateCharacterDraftResponse> {
   const context: DraftGenerationContext = await resolveDraftGenerationContext(dependencies);
   const completion = await dependencies.chatCompletionClient.completeChat({

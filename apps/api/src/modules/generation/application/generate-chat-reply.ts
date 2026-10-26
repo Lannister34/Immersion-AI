@@ -4,28 +4,22 @@ import {
   type StartChatReplyGenerationCommand,
 } from '@immersion/contracts/generation';
 
-import { ChatNotFoundError } from '../../chats/application/append-chat-messages.js';
-import { getChatSession } from '../../chats/application/get-chat-session.js';
-import type { ChatCompletionClient } from './chat-completion-client.js';
+import { ChatNotFoundError } from '../../chats/index.js';
 import {
   appendUserMessageForChatReply,
+  type ChatReplyGenerationDependencies,
   completeChatReplyContinuationForSession,
   completeChatReplyForSession,
   getAnswerableUserMessage,
 } from './chat-reply-generation.js';
-
-export interface GenerateChatReplyDependencies {
-  chatCompletionClient?: ChatCompletionClient;
-  now?: () => Date;
-  signal?: AbortSignal;
-}
+import type { GenerationOptions } from './generation-ports.js';
 
 export async function generateChatReply(
   command: StartChatReplyGenerationCommand,
-  dependencies: GenerateChatReplyDependencies = {},
+  dependencies: ChatReplyGenerationDependencies,
+  options: GenerationOptions = {},
 ): Promise<ChatReplyGenerationResponse> {
-  const now = dependencies.now ?? (() => new Date());
-  const session = await getChatSession(command.chatId);
+  const session = await dependencies.chats.getChatSession(command.chatId);
 
   if (!session) {
     throw new ChatNotFoundError(command.chatId);
@@ -33,19 +27,21 @@ export async function generateChatReply(
 
   if (command.mode === 'continue') {
     return ChatReplyGenerationResponseSchema.parse(
-      await completeChatReplyContinuationForSession(command, session, dependencies),
+      await completeChatReplyContinuationForSession(command, session, dependencies, options),
     );
   }
 
   if (command.mode === 'answer') {
     getAnswerableUserMessage(command.chatId, session);
 
-    return ChatReplyGenerationResponseSchema.parse(await completeChatReplyForSession(command, session, dependencies));
+    return ChatReplyGenerationResponseSchema.parse(
+      await completeChatReplyForSession(command, session, dependencies, options),
+    );
   }
 
-  const sessionAfterUserMessage = await appendUserMessageForChatReply(command, now);
+  const sessionAfterUserMessage = await appendUserMessageForChatReply(command, dependencies);
 
   return ChatReplyGenerationResponseSchema.parse(
-    await completeChatReplyForSession(command, sessionAfterUserMessage, dependencies),
+    await completeChatReplyForSession(command, sessionAfterUserMessage, dependencies, options),
   );
 }

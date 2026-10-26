@@ -12,7 +12,7 @@ import {
   resolveDraftGenerationContext,
 } from './draft-generation-support.js';
 import { ProviderGenerationError } from './generation-errors.js';
-import type { DraftGenerationDependencies, DraftGenerationOptions } from './generation-ports.js';
+import type { DraftGenerationDependencies, GenerationOptions } from './generation-ports.js';
 import { SKIP_THINKING_SERVER_EXTENSIONS } from './skip-thinking-server-extensions.js';
 
 const CHARACTER_FIELD_MAX_TOKENS = 1024;
@@ -115,7 +115,7 @@ ${input.context.languageSentence} Keep it consistent with the rest of the charac
 export async function generateCharacterField(
   command: GenerateCharacterFieldCommand,
   dependencies: DraftGenerationDependencies,
-  options: DraftGenerationOptions = {},
+  options: GenerationOptions = {},
 ): Promise<GenerateCharacterFieldResponse> {
   const context = await resolveDraftGenerationContext(dependencies);
   const isRegeneration = (command.current[command.field] ?? '').trim().length > 0;
