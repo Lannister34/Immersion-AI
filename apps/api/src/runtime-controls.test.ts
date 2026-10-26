@@ -8,10 +8,11 @@ import {
 } from '@immersion/contracts/runtime';
 import { describe, expect, it } from 'vitest';
 
-import { selectRuntimeInstallPlan } from './modules/runtime/application/install-runtime.js';
+import { llamaCppAsset, llamaCppBuildRelease, llamaCppNightlyTagRelease } from './test-support/llama-cpp-releases.js';
 import { useTestApi } from './test-support/use-test-api.js';
 
-const LLAMA_CPP_LATEST_RELEASE_URL = 'https://api.github.com/repos/ggml-org/llama.cpp/releases/latest';
+const LLAMA_CPP_RELEASES_URL = 'https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=30';
+const B11912_DOWNLOADS = 'https://github.com/ggml-org/llama.cpp/releases/download/b11912';
 
 describe('runtime control routes', () => {
   const api = useTestApi();
@@ -288,16 +289,16 @@ describe('runtime install failures', () => {
 
   it('answers a failed release lookup with 502 runtime_install_failed', async () => {
     const { app, http } = api();
-    http.on('GET', LLAMA_CPP_LATEST_RELEASE_URL, () => new Response('upstream down', { status: 500 }));
+    http.on('GET', LLAMA_CPP_RELEASES_URL, () => new Response('upstream down', { status: 500 }));
 
     const response = await app.inject({ method: 'POST', url: '/api/runtime/install', payload: { variant: 'cpu' } });
 
     expect(response.statusCode).toBe(502);
     expect(response.json()).toEqual({
       code: 'runtime_install_failed',
-      message: 'Не удалось получить релиз llama.cpp: HTTP 500.',
+      message: 'Не удалось получить список релизов llama.cpp: HTTP 500.',
     });
-    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_LATEST_RELEASE_URL}`]);
+    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_RELEASES_URL}`]);
   });
 
   it('answers an unreachable release server with 502 runtime_install_failed and a message of its own, not the network error', async () => {
@@ -308,23 +309,18 @@ describe('runtime install failures', () => {
     expect(response.statusCode).toBe(502);
     expect(response.json()).toEqual({
       code: 'runtime_install_failed',
-      message: 'Не удалось получить релиз llama.cpp.',
+      message: 'Не удалось получить список релизов llama.cpp.',
     });
-    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_LATEST_RELEASE_URL}`]);
+    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_RELEASES_URL}`]);
   });
 
-  it("answers a release without the variant's asset with 502 runtime_install_failed before anything is downloaded", async () => {
+  it("answers builds without the variant's asset with 502 runtime_install_failed before anything is downloaded", async () => {
     const { app, http } = api();
-    http.on('GET', LLAMA_CPP_LATEST_RELEASE_URL, () =>
-      Response.json({
-        tag_name: 'b8766',
-        assets: [
-          {
-            name: 'llama-b8766-bin-win-cpu-x64.zip',
-            browser_download_url: 'https://example.test/cpu.zip',
-          },
-        ],
-      }),
+    http.on('GET', LLAMA_CPP_RELEASES_URL, () =>
+      Response.json([
+        llamaCppNightlyTagRelease(),
+        llamaCppBuildRelease('b8766', [llamaCppAsset('b8766', 'llama-b8766-bin-win-cpu-x64.zip')]),
+      ]),
     );
 
     const response = await app.inject({ method: 'POST', url: '/api/runtime/install', payload: { variant: 'vulkan' } });
@@ -332,94 +328,159 @@ describe('runtime install failures', () => {
     expect(response.statusCode).toBe(502);
     expect(response.json()).toEqual({
       code: 'runtime_install_failed',
-      message: 'В релизе llama.cpp b8766 не найден asset llama-b8766-bin-win-vulkan-x64.zip.',
+      message: 'В последних сборках llama.cpp (до b8766) не найден asset llama-b8766-bin-win-vulkan-x64.zip.',
     });
-    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_LATEST_RELEASE_URL}`]);
+    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_RELEASES_URL}`]);
   });
 
-  it('answers a release body GitHub would never send with 502 runtime_install_failed before anything is downloaded', async () => {
+  it('answers a release list body GitHub would never send with 502 runtime_install_failed before anything is downloaded', async () => {
     const { app, http } = api();
-    http.on('GET', LLAMA_CPP_LATEST_RELEASE_URL, () => Response.json({ message: 'Moved Permanently' }));
+    http.on('GET', LLAMA_CPP_RELEASES_URL, () => Response.json({ message: 'Moved Permanently' }));
 
     const response = await app.inject({ method: 'POST', url: '/api/runtime/install', payload: { variant: 'cpu' } });
 
     expect(response.statusCode).toBe(502);
     expect(response.json()).toEqual({
       code: 'runtime_install_failed',
-      message: 'Ответ GitHub о релизе llama.cpp не распознан.',
+      message: 'Ответ GitHub со списком релизов llama.cpp не распознан.',
     });
-    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_LATEST_RELEASE_URL}`]);
+    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_RELEASES_URL}`]);
   });
 
   it('refuses a release whose asset would download over plain HTTP before anything is downloaded', async () => {
     const { app, http } = api();
-    http.on('GET', LLAMA_CPP_LATEST_RELEASE_URL, () =>
-      Response.json({
-        tag_name: 'b8766',
-        assets: [{ name: 'llama-b8766-bin-win-cpu-x64.zip', browser_download_url: 'http://example.test/cpu.zip' }],
-      }),
-    );
+    const plainHttpAsset = {
+      ...llamaCppAsset('b8766', 'llama-b8766-bin-win-cpu-x64.zip'),
+      browser_download_url: 'http://example.test/cpu.zip',
+    };
+    http.on('GET', LLAMA_CPP_RELEASES_URL, () => Response.json([llamaCppBuildRelease('b8766', [plainHttpAsset])]));
 
     const response = await app.inject({ method: 'POST', url: '/api/runtime/install', payload: { variant: 'cpu' } });
 
     expect(response.statusCode).toBe(502);
     expect(response.json()).toEqual({
       code: 'runtime_install_failed',
-      message: 'Ответ GitHub о релизе llama.cpp не распознан.',
+      message: 'Ответ GitHub со списком релизов llama.cpp не распознан.',
     });
-    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_LATEST_RELEASE_URL}`]);
+    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_RELEASES_URL}`]);
   });
 
-  it('answers an unknown install variant with 400 validation_error before the release is looked up', async () => {
+  it('downloads the newest build behind a semver latest release and refuses an archive whose sha256 differs from its digest', async () => {
+    const { app, http } = api();
+    const assetUrl = `${B11912_DOWNLOADS}/llama-b11912-bin-win-cuda-13.4-x64.zip`;
+    http.on('GET', LLAMA_CPP_RELEASES_URL, () =>
+      Response.json([llamaCppNightlyTagRelease(), llamaCppBuildRelease('b11912'), llamaCppBuildRelease('b11910')]),
+    );
+    http.on('GET', assetUrl, () => new Response('not the archive the digest names'));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/runtime/install',
+      payload: { variant: 'cuda-13.4' },
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({
+      code: 'runtime_install_failed',
+      message: 'Контрольная сумма llama-b11912-bin-win-cuda-13.4-x64.zip не совпадает с указанной в релизе llama.cpp.',
+    });
+    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_RELEASES_URL}`, `GET ${assetUrl}`]);
+  });
+
+  it('downloads and checks every asset of the variant before it unpacks any of them', async () => {
+    const { app, http } = api();
+    const runtimeUrl = `${B11912_DOWNLOADS}/llama-b11912-bin-win-cuda-13.4-x64.zip`;
+    const cudartUrl = `${B11912_DOWNLOADS}/cudart-llama-bin-win-cuda-13.4-x64.zip`;
+    http.on('GET', LLAMA_CPP_RELEASES_URL, () => Response.json([llamaCppBuildRelease('b11912')]));
+    http.on('GET', runtimeUrl, () => new Response('llama-b11912-bin-win-cuda-13.4-x64.zip'));
+    http.on('GET', cudartUrl, () => new Response('not the archive the digest names'));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/runtime/install',
+      payload: { variant: 'cuda-13.4' },
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({
+      code: 'runtime_install_failed',
+      message: 'Контрольная сумма cudart-llama-bin-win-cuda-13.4-x64.zip не совпадает с указанной в релизе llama.cpp.',
+    });
+    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_RELEASES_URL}`, `GET ${runtimeUrl}`, `GET ${cudartUrl}`]);
+  });
+
+  it('downloads an asset GitHub gives no digest for without checking it', async () => {
+    const { app, http } = api();
+    const runtimeUrl = `${B11912_DOWNLOADS}/llama-b11912-bin-win-cuda-13.4-x64.zip`;
+    const cudartUrl = `${B11912_DOWNLOADS}/cudart-llama-bin-win-cuda-13.4-x64.zip`;
+    const undigestedRuntime = llamaCppAsset('b11912', 'llama-b11912-bin-win-cuda-13.4-x64.zip', null);
+    const cudart = llamaCppAsset('b11912', 'cudart-llama-bin-win-cuda-13.4-x64.zip');
+    http.on('GET', LLAMA_CPP_RELEASES_URL, () =>
+      Response.json([llamaCppBuildRelease('b11912', [undigestedRuntime, cudart])]),
+    );
+    http.on('GET', runtimeUrl, () => new Response('any bytes at all'));
+    http.on('GET', cudartUrl, () => new Response('not the archive the digest names'));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/runtime/install',
+      payload: { variant: 'cuda-13.4' },
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({
+      code: 'runtime_install_failed',
+      message: 'Контрольная сумма cudart-llama-bin-win-cuda-13.4-x64.zip не совпадает с указанной в релизе llama.cpp.',
+    });
+    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_RELEASES_URL}`, `GET ${runtimeUrl}`, `GET ${cudartUrl}`]);
+  });
+
+  it('refuses a variant whose second asset has a digest that is not a sha256 before anything is downloaded', async () => {
+    const { app, http } = api();
+    const runtime = llamaCppAsset('b11912', 'llama-b11912-bin-win-cuda-13.4-x64.zip');
+    const md5Cudart = llamaCppAsset('b11912', 'cudart-llama-bin-win-cuda-13.4-x64.zip', 'md5:0123456789abcdef');
+    http.on('GET', LLAMA_CPP_RELEASES_URL, () => Response.json([llamaCppBuildRelease('b11912', [runtime, md5Cudart])]));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/runtime/install',
+      payload: { variant: 'cuda-13.4' },
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({
+      code: 'runtime_install_failed',
+      message:
+        'Контрольная сумма cudart-llama-bin-win-cuda-13.4-x64.zip в релизе llama.cpp указана в неизвестном формате.',
+    });
+    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_RELEASES_URL}`]);
+  });
+
+  it('refuses an asset whose digest is not a sha256 before anything is downloaded', async () => {
+    const { app, http } = api();
+    const md5Asset = llamaCppAsset('b11912', 'llama-b11912-bin-win-cpu-x64.zip', 'md5:0123456789abcdef');
+    http.on('GET', LLAMA_CPP_RELEASES_URL, () => Response.json([llamaCppBuildRelease('b11912', [md5Asset])]));
+
+    const response = await app.inject({ method: 'POST', url: '/api/runtime/install', payload: { variant: 'cpu' } });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({
+      code: 'runtime_install_failed',
+      message: 'Контрольная сумма llama-b11912-bin-win-cpu-x64.zip в релизе llama.cpp указана в неизвестном формате.',
+    });
+    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_RELEASES_URL}`]);
+  });
+
+  it.each([
+    'rocm',
+    'cuda-13.1',
+  ])('answers the install variant %s with 400 validation_error before the release is looked up', async (variant) => {
     const { app, http } = api();
 
-    const response = await app.inject({ method: 'POST', url: '/api/runtime/install', payload: { variant: 'rocm' } });
+    const response = await app.inject({ method: 'POST', url: '/api/runtime/install', payload: { variant } });
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({ code: 'validation_error' });
     expect(http.requests).toEqual([]);
-  });
-});
-
-describe('runtime installer planning', () => {
-  it('selects CPU release asset by latest release tag', () => {
-    const plan = selectRuntimeInstallPlan(
-      {
-        tag_name: 'b8766',
-        assets: [
-          {
-            name: 'llama-b8766-bin-win-cpu-x64.zip',
-            browser_download_url: 'https://example.test/cpu.zip',
-          },
-        ],
-      },
-      'cpu',
-    );
-
-    expect(plan.assets.map((asset) => asset.name)).toEqual(['llama-b8766-bin-win-cpu-x64.zip']);
-  });
-
-  it('selects CUDA runtime and cudart assets together', () => {
-    const plan = selectRuntimeInstallPlan(
-      {
-        tag_name: 'b8766',
-        assets: [
-          {
-            name: 'llama-b8766-bin-win-cuda-12.4-x64.zip',
-            browser_download_url: 'https://example.test/cuda.zip',
-          },
-          {
-            name: 'cudart-llama-bin-win-cuda-12.4-x64.zip',
-            browser_download_url: 'https://example.test/cudart.zip',
-          },
-        ],
-      },
-      'cuda-12.4',
-    );
-
-    expect(plan.assets.map((asset) => asset.name)).toEqual([
-      'llama-b8766-bin-win-cuda-12.4-x64.zip',
-      'cudart-llama-bin-win-cuda-12.4-x64.zip',
-    ]);
   });
 });
