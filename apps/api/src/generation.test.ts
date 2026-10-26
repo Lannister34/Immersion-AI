@@ -25,6 +25,7 @@ import { z } from 'zod';
 import { appendChatMessages, getChatSession } from './modules/chats/index.js';
 import type { VisionProbe } from './modules/providers/index.js';
 import { waitForGenerationJob } from './test-support/generation-jobs.js';
+import { openSocketRequest } from './test-support/open-socket-request.js';
 import { readProviderChatRequest } from './test-support/provider-chat-request.js';
 import { openAiChatCompletion, openAiChatStream, providerFailure } from './test-support/provider-responses.js';
 import { createTestApi, type TestApi } from './test-support/test-api.js';
@@ -1113,6 +1114,45 @@ describe('generation routes', () => {
         role: 'user',
         content: 'Close the app while I am generating.',
       },
+    ]);
+  });
+
+  it('aborts the provider call of a chat reply when the client disconnects mid-generation', async () => {
+    const provider = api().http.hold('POST', CHAT_COMPLETIONS_URL);
+    const chat = await createChat();
+    const client = openSocketRequest(`${await api().listen()}/api/generation/chat-reply`, {
+      chatId: chat.id,
+      message: 'Answer while I am still connected.',
+    });
+    const providerRequest = await provider.started;
+
+    expect(providerRequest.signal?.aborted).toBe(false);
+
+    await client.disconnect();
+    await provider.aborted;
+
+    expect(providerRequest.signal?.aborted).toBe(true);
+  });
+
+  it('keeps a chat reply job running after the client that started it disconnects', async () => {
+    const provider = api().http.hold('POST', CHAT_COMPLETIONS_URL);
+    const chat = await createChat();
+    const client = openSocketRequest(`${await api().listen()}/api/generation/chat-reply-jobs`, {
+      chatId: chat.id,
+      message: 'Keep generating after I leave.',
+    });
+    const providerRequest = await provider.started;
+    const [job] = api().dependencies.generationJobs.list({ chatId: chat.id });
+
+    await client.disconnect();
+    provider.release(openAiChatCompletion('Generated after the client left.'));
+
+    expect(job).toBeDefined();
+    await waitForGenerationJob(api(), job?.id ?? '', 'completed');
+    expect(providerRequest.signal?.aborted).toBe(false);
+    expect(await readTranscript(chat.id)).toEqual([
+      { role: 'user', content: 'Keep generating after I leave.' },
+      { role: 'assistant', content: 'Generated after the client left.' },
     ]);
   });
 

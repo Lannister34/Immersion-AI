@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createDeferred } from './test-support/deferred.js';
 import { FakeChatCompletionClient } from './test-support/fake-chat-completion-client.js';
 import type { HttpResponder } from './test-support/http-stub.js';
+import { openSocketRequest } from './test-support/open-socket-request.js';
 import {
   OpenAiChatCompletionChunkFixtureSchema,
   OpenAiChatCompletionFixtureSchema,
@@ -660,6 +661,21 @@ describe('OpenAI-compatible endpoint', () => {
     request.destroy();
 
     await expect(providerAborted.promise).resolves.toBeUndefined();
+  });
+
+  it('stops the provider request when a non-streaming client disconnects', async () => {
+    const provider = api().http.hold('POST', CHAT_COMPLETIONS_URL);
+    const client = openSocketRequest(`${await api().listen()}/v1/chat/completions`, {
+      messages: [{ content: 'Привет.', role: 'user' }],
+    });
+    const providerRequest = await provider.started;
+
+    expect(providerRequest.signal?.aborted).toBe(false);
+
+    await client.disconnect();
+    await provider.aborted;
+
+    expect(providerRequest.signal?.aborted).toBe(true);
   });
 
   it('lists the models the provider reports', async () => {

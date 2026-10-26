@@ -4,6 +4,7 @@ import type { ServerResponse } from 'node:http';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 
 import type { Clock } from '../../../../platform/clock/clock.js';
+import { clientDisconnectSignal } from '../../../../platform/http/client-disconnect-signal.js';
 import { parseRequest } from '../../../../platform/http/parse-request.js';
 import { installNotFoundHandler, installProblemHandler } from '../../../../platform/http/problem-handler.js';
 import { GenerationProviderUnavailableError } from '../../../providers/index.js';
@@ -143,22 +144,16 @@ export function createOpenAiCompatRoutes(dependencies: OpenAiCompatRoutesDepende
     app.post('/chat/completions', async (request, reply) => {
       const identity: CompletionIdentity = { created: unixSecondsOf(clock), id: `chatcmpl-${randomUUID()}` };
       const command = parseRequest(OpenAiChatCompletionRequestSchema, request.body);
-      const controller = new AbortController();
+      const signal = clientDisconnectSignal(reply.raw);
 
       if (!command.stream) {
-        const result = await createOpenAiChatCompletion(command, dependencies, { signal: controller.signal });
+        const result = await createOpenAiChatCompletion(command, dependencies, { signal });
 
         return toChatCompletionResponse(result, identity);
       }
 
       let streamOpened = false;
       let deltaCount = 0;
-
-      reply.raw.on('close', () => {
-        if (!reply.raw.writableEnded) {
-          controller.abort();
-        }
-      });
 
       const writeChunk = (
         model: string,
@@ -181,7 +176,7 @@ export function createOpenAiCompatRoutes(dependencies: OpenAiCompatRoutesDepende
       try {
         const result = await createOpenAiChatCompletion(command, dependencies, {
           onDelta: (delta, channel, model) => {
-            if (controller.signal.aborted || !reply.raw.writable) {
+            if (signal.aborted || !reply.raw.writable) {
               return;
             }
 
@@ -189,7 +184,7 @@ export function createOpenAiCompatRoutes(dependencies: OpenAiCompatRoutesDepende
             deltaCount += 1;
             writeChunk(model, channel === 'reasoning' ? { reasoning_content: delta } : { content: delta });
           },
-          signal: controller.signal,
+          signal,
         });
 
         ensureStream(result.model);

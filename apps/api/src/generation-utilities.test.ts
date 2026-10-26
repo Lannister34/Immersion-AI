@@ -6,6 +6,7 @@ import { GenerateChatTitleResponseSchema, GenerateFirstMessageResponseSchema } f
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { appendChatMessages } from './modules/chats/index.js';
+import { openSocketRequest } from './test-support/open-socket-request.js';
 import { readProviderChatRequest } from './test-support/provider-chat-request.js';
 import { openAiChatCompletion, providerFailure } from './test-support/provider-responses.js';
 import { useTestApi } from './test-support/use-test-api.js';
@@ -397,6 +398,34 @@ describe('generation utility routes', () => {
 
       const session = await getSession(chat.id);
       expect(session.messages).toEqual([]);
+    });
+  });
+
+  describe('a client that disconnects mid-generation', () => {
+    async function expectDisconnectToAbortTheProviderCall(url: string, chatId: string) {
+      const provider = api().http.hold('POST', CHAT_COMPLETIONS_URL);
+      const client = openSocketRequest(`${await api().listen()}${url}`, { chatId });
+      const providerRequest = await provider.started;
+
+      expect(providerRequest.signal?.aborted).toBe(false);
+
+      await client.disconnect();
+      await provider.aborted;
+
+      expect(providerRequest.signal?.aborted).toBe(true);
+    }
+
+    it('aborts the provider call of a chat title', async () => {
+      const chat = await createChat();
+      await seedChatMessages(chat.id);
+
+      await expectDisconnectToAbortTheProviderCall('/api/generation/chat-title', chat.id);
+    });
+
+    it('aborts the provider call of a first message', async () => {
+      const chat = await createChat();
+
+      await expectDisconnectToAbortTheProviderCall('/api/generation/first-message', chat.id);
     });
   });
 });
