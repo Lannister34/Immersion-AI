@@ -1,14 +1,18 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 import type { PromptCharacterSnapshot } from '@immersion/domain/prompting';
 
-import { findCharacter } from '../../characters/index.js';
-import { findLorebook } from '../../lorebooks/index.js';
-import { findScenario } from '../../scenarios/index.js';
+import type { CharacterDetailReader, LorebookReader, ScenarioReader } from './prompting-ports.js';
 
 export interface ChatPromptContext {
   character: PromptCharacterSnapshot | null;
   characterScenarioContent: string | null;
   lorebookSections: string[];
+}
+
+export interface LoadChatPromptContextDependencies {
+  readonly characters: CharacterDetailReader;
+  readonly lorebooks: LorebookReader;
+  readonly scenarios: ScenarioReader;
 }
 
 const LOREBOOK_TRIGGER_LOOKBACK = 16;
@@ -22,12 +26,15 @@ function buildKeywordMatcher(keys: readonly string[]): ((haystack: string) => bo
   };
 }
 
-export async function loadChatPromptContext(session: ChatSessionDto): Promise<ChatPromptContext> {
+export async function loadChatPromptContext(
+  session: ChatSessionDto,
+  dependencies: LoadChatPromptContextDependencies,
+): Promise<ChatPromptContext> {
   let character: PromptCharacterSnapshot | null = null;
   let characterScenarioContent: string | null = null;
 
   if (session.characterId) {
-    const detail = await findCharacter(session.characterId);
+    const detail = await dependencies.characters.findCharacter(session.characterId);
     if (detail) {
       character = {
         description: detail.description.trim() || null,
@@ -41,7 +48,7 @@ export async function loadChatPromptContext(session: ChatSessionDto): Promise<Ch
   }
 
   if (session.scenarioId) {
-    const scenario = await findScenario(session.scenarioId);
+    const scenario = await dependencies.scenarios.findScenario(session.scenarioId);
     if (scenario) {
       const scene = scenario.content.trim() || scenario.concept.trim();
       if (scene.length > 0) {
@@ -59,12 +66,12 @@ export async function loadChatPromptContext(session: ChatSessionDto): Promise<Ch
     }
   }
 
-  const lorebookSections = await collectLorebookSections(session);
+  const lorebookSections = await collectLorebookSections(session, dependencies.lorebooks);
 
   return { character, characterScenarioContent, lorebookSections };
 }
 
-async function collectLorebookSections(session: ChatSessionDto): Promise<string[]> {
+async function collectLorebookSections(session: ChatSessionDto, lorebooks: LorebookReader): Promise<string[]> {
   if (session.lorebookIds.length === 0) return [];
 
   const recentText = session.messages
@@ -74,7 +81,7 @@ async function collectLorebookSections(session: ChatSessionDto): Promise<string[
 
   const sections: string[] = [];
   for (const lorebookId of session.lorebookIds) {
-    const lorebook = await findLorebook(lorebookId);
+    const lorebook = await lorebooks.findLorebook(lorebookId);
     if (!lorebook) continue;
 
     const triggered: { content: string; priority: number; keys: string[] }[] = [];

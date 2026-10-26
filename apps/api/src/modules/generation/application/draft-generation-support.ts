@@ -1,7 +1,7 @@
 import type { ChatGenerationSettingsDto } from '@immersion/contracts/chats';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
 
-import { resolveChatGenerationSettings } from '../../prompting/application/resolve-chat-generation-settings.js';
+import { resolveChatGenerationSettings } from '../../prompting/index.js';
 import type { ChatCompletionEndpoint, ChatCompletionSamplingOptions } from './chat-completion-client.js';
 import type { DraftGenerationDependencies } from './generation-ports.js';
 
