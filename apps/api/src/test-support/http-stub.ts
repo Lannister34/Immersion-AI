@@ -10,6 +10,7 @@ export type HttpUrlPattern = string | RegExp;
 
 export interface HeldHttpRequest {
   readonly started: Promise<RecordedHttpRequest>;
+  readonly aborted: Promise<void>;
   release(response: Response): void;
 }
 
@@ -101,6 +102,7 @@ export function createHttpStub(): HttpStub {
     hold(method, url) {
       const started = createDeferred<RecordedHttpRequest>();
       const released = createDeferred<Response>();
+      const aborted = createDeferred();
 
       routes.push({
         method,
@@ -108,12 +110,14 @@ export function createHttpStub(): HttpStub {
         once: true,
         respond(request) {
           started.resolve(request);
+          const answer = untilAborted(released.promise, request.signal);
+          answer.catch(() => aborted.resolve());
 
-          return untilAborted(released.promise, request.signal);
+          return answer;
         },
       });
 
-      return { started: started.promise, release: released.resolve };
+      return { started: started.promise, aborted: aborted.promise, release: released.resolve };
     },
   };
 }

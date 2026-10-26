@@ -90,6 +90,7 @@ describe('createHttpStub', () => {
     controller.abort();
 
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(held.aborted).resolves.toBeUndefined();
   });
 
   it('answers a held request with the response it is released with, and holds only the first match', async () => {

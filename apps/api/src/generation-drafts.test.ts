@@ -11,6 +11,7 @@ import {
 import { SaveScenarioCommandSchema } from '@immersion/contracts/scenarios';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { openSocketRequest } from './test-support/open-socket-request.js';
 import { readProviderChatRequest } from './test-support/provider-chat-request.js';
 import type { ProviderChatRequestFixture } from './test-support/provider-chat-request-fixture-schema.js';
 import { openAiChatCompletion, providerFailure } from './test-support/provider-responses.js';
@@ -780,5 +781,28 @@ describe('generation draft routes', () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual({ code: 'validation_error', message: expect.any(String) });
     expect(api().http.requestLines()).toEqual([]);
+  });
+
+  it.each([
+    ['/api/generation/character', { concept: 'Молодая скульпторша из Петербурга' }],
+    ['/api/generation/character-field', { field: 'description', concept: 'Эльфийка-архивариус' }],
+    ['/api/generation/character-avatar-prompt', { card: { name: 'Лириэль' } }],
+    ['/api/generation/scenario', { concept: 'Вечер в мастерской скульптора' }],
+    [
+      '/api/generation/scenario-first-message',
+      { concept: 'Вечер в мастерской скульптора', name: 'Ночная мастерская', content: 'Поздний вечер.' },
+    ],
+    ['/api/generation/lorebook', { concept: 'Пустоши' }],
+  ])('aborts the provider call when the client disconnects mid-generation: %s', async (url, payload) => {
+    const provider = api().http.hold('POST', CHAT_COMPLETIONS_URL);
+    const client = openSocketRequest(`${await api().listen()}${url}`, payload);
+    const providerRequest = await provider.started;
+
+    expect(providerRequest.signal?.aborted).toBe(false);
+
+    await client.disconnect();
+    await provider.aborted;
+
+    expect(providerRequest.signal?.aborted).toBe(true);
   });
 });

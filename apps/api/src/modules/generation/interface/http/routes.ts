@@ -18,6 +18,7 @@ import {
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { Clock } from '../../../../platform/clock/clock.js';
+import { clientDisconnectSignal } from '../../../../platform/http/client-disconnect-signal.js';
 import { parseRequest } from '../../../../platform/http/parse-request.js';
 import type { TokenCounter } from '../../../prompting/index.js';
 import type { ChatCompletionClient } from '../../application/chat-completion-client.js';
@@ -79,130 +80,58 @@ export function createGenerationRoutes(dependencies: GenerationRoutesDependencie
       return ChatReplyPromptPreviewResponseSchema.parse(await previewChatReplyPrompt(command, dependencies));
     });
 
-    app.post('/chat-reply', async (request) => {
+    app.post('/chat-reply', async (request, reply) => {
       const command = parseRequest(StartChatReplyGenerationCommandSchema, request.body);
-      const abortController = new AbortController();
-      const abortGeneration = () => abortController.abort();
 
-      request.raw.once('aborted', abortGeneration);
-
-      try {
-        return await generateChatReply(command, dependencies, { signal: abortController.signal });
-      } finally {
-        request.raw.off('aborted', abortGeneration);
-      }
+      return generateChatReply(command, dependencies, { signal: clientDisconnectSignal(reply.raw) });
     });
 
-    app.post('/chat-title', async (request) => {
+    app.post('/chat-title', async (request, reply) => {
       const command = parseRequest(GenerateChatTitleCommandSchema, request.body);
-      const abortController = new AbortController();
-      const abortGeneration = () => abortController.abort();
 
-      request.raw.once('aborted', abortGeneration);
-
-      try {
-        return await generateChatTitle(command, dependencies, { signal: abortController.signal });
-      } finally {
-        request.raw.off('aborted', abortGeneration);
-      }
+      return generateChatTitle(command, dependencies, { signal: clientDisconnectSignal(reply.raw) });
     });
 
-    app.post('/first-message', async (request) => {
+    app.post('/first-message', async (request, reply) => {
       const command = parseRequest(GenerateFirstMessageCommandSchema, request.body);
-      const abortController = new AbortController();
-      const abortGeneration = () => abortController.abort();
 
-      request.raw.once('aborted', abortGeneration);
-
-      try {
-        return await generateFirstMessage(command, dependencies, { signal: abortController.signal });
-      } finally {
-        request.raw.off('aborted', abortGeneration);
-      }
+      return generateFirstMessage(command, dependencies, { signal: clientDisconnectSignal(reply.raw) });
     });
 
-    app.post('/character', async (request) => {
+    app.post('/character', async (request, reply) => {
       const command = parseRequest(GenerateCharacterDraftCommandSchema, request.body);
-      const abortController = new AbortController();
-      const abortGeneration = () => abortController.abort();
 
-      request.raw.once('aborted', abortGeneration);
-
-      try {
-        return await generateCharacterDraft(command, dependencies, { signal: abortController.signal });
-      } finally {
-        request.raw.off('aborted', abortGeneration);
-      }
+      return generateCharacterDraft(command, dependencies, { signal: clientDisconnectSignal(reply.raw) });
     });
 
-    app.post('/character-field', async (request) => {
+    app.post('/character-field', async (request, reply) => {
       const command = parseRequest(GenerateCharacterFieldCommandSchema, request.body);
-      const abortController = new AbortController();
-      const abortGeneration = () => abortController.abort();
 
-      request.raw.once('aborted', abortGeneration);
-
-      try {
-        return await generateCharacterField(command, dependencies, { signal: abortController.signal });
-      } finally {
-        request.raw.off('aborted', abortGeneration);
-      }
+      return generateCharacterField(command, dependencies, { signal: clientDisconnectSignal(reply.raw) });
     });
 
-    app.post('/character-avatar-prompt', async (request) => {
+    app.post('/character-avatar-prompt', async (request, reply) => {
       const command = parseRequest(GenerateCharacterAvatarPromptCommandSchema, request.body);
-      const abortController = new AbortController();
-      const abortGeneration = () => abortController.abort();
 
-      request.raw.once('aborted', abortGeneration);
-
-      try {
-        return await generateCharacterAvatarPrompt(command, dependencies, { signal: abortController.signal });
-      } finally {
-        request.raw.off('aborted', abortGeneration);
-      }
+      return generateCharacterAvatarPrompt(command, dependencies, { signal: clientDisconnectSignal(reply.raw) });
     });
 
-    app.post('/scenario', async (request) => {
+    app.post('/scenario', async (request, reply) => {
       const command = parseRequest(GenerateScenarioDraftCommandSchema, request.body);
-      const abortController = new AbortController();
-      const abortGeneration = () => abortController.abort();
 
-      request.raw.once('aborted', abortGeneration);
-
-      try {
-        return await generateScenarioDraft(command, dependencies, { signal: abortController.signal });
-      } finally {
-        request.raw.off('aborted', abortGeneration);
-      }
+      return generateScenarioDraft(command, dependencies, { signal: clientDisconnectSignal(reply.raw) });
     });
 
-    app.post('/scenario-first-message', async (request) => {
+    app.post('/scenario-first-message', async (request, reply) => {
       const command = parseRequest(GenerateScenarioFirstMessageCommandSchema, request.body);
-      const abortController = new AbortController();
-      const abortGeneration = () => abortController.abort();
 
-      request.raw.once('aborted', abortGeneration);
-
-      try {
-        return await generateScenarioFirstMessage(command, dependencies, { signal: abortController.signal });
-      } finally {
-        request.raw.off('aborted', abortGeneration);
-      }
+      return generateScenarioFirstMessage(command, dependencies, { signal: clientDisconnectSignal(reply.raw) });
     });
 
-    app.post('/lorebook', async (request) => {
+    app.post('/lorebook', async (request, reply) => {
       const command = parseRequest(GenerateLorebookDraftCommandSchema, request.body);
-      const abortController = new AbortController();
-      const abortGeneration = () => abortController.abort();
 
-      request.raw.once('aborted', abortGeneration);
-
-      try {
-        return await generateLorebookDraft(command, dependencies, { signal: abortController.signal });
-      } finally {
-        request.raw.off('aborted', abortGeneration);
-      }
+      return generateLorebookDraft(command, dependencies, { signal: clientDisconnectSignal(reply.raw) });
     });
 
     app.post('/chat-reply-jobs', async (request, reply) => {
