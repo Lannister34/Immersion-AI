@@ -222,13 +222,21 @@ export class LlmProcessManager {
     const detachedState = this.getDetachedRuntimeState();
 
     if (!detachedState) {
+      if (this.childProcess) {
+        return { ...this.state };
+      }
+
+      if (this.state.status === 'error') {
+        return { ...this.state, pid: null };
+      }
+
       return {
-        status: this.childProcess ? this.state.status : 'idle',
-        model: this.childProcess ? this.state.model : null,
-        modelPath: this.childProcess ? this.state.modelPath : null,
-        error: this.childProcess ? this.state.error : null,
+        status: 'idle',
+        model: null,
+        modelPath: null,
+        error: null,
         port: this.state.port,
-        pid: this.childProcess ? this.state.pid : null,
+        pid: null,
       };
     }
 
@@ -345,7 +353,7 @@ export class LlmProcessManager {
     spawned.on('error', (error) => {
       this.childProcess = null;
       this.setStateStatus('error', {
-        error: error.message,
+        error: `Не удалось запустить llama-server: ${error.message}`,
         pid: null,
       });
       removePidFile();
@@ -364,7 +372,7 @@ export class LlmProcessManager {
         });
       } else if (this.state.status !== 'idle') {
         this.setStateStatus('error', {
-          error: `Process exited with code ${code ?? 'unknown'}`,
+          error: `llama-server завершился с кодом ${code ?? 'неизвестно'}`,
           pid: null,
         });
       }
@@ -414,12 +422,7 @@ export class LlmProcessManager {
   }
 
   private setStateStatus(status: RuntimeLifecycleStatus, overrides: Partial<RuntimeStatusSnapshot> = {}) {
-    this.state.status = status;
-    this.state.model = overrides.model ?? this.state.model;
-    this.state.modelPath = overrides.modelPath ?? this.state.modelPath;
-    this.state.error = overrides.error ?? this.state.error;
-    this.state.port = overrides.port ?? this.state.port;
-    this.state.pid = overrides.pid ?? this.state.pid;
+    Object.assign(this.state, overrides, { status });
   }
 
   private pushLog(line: string) {

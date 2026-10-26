@@ -366,7 +366,7 @@ export function ServerControlScreen() {
                               )}
                             </td>
                             <td style={{ textAlign: 'right' }}>
-                              {isActive ? null : (
+                              {isActive && status !== 'error' ? null : (
                                 <button
                                   className="btn btn--xs btn--ghost-bordered"
                                   disabled={startRuntimeMutation.isPending}
