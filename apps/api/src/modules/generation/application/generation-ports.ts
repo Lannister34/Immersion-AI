@@ -12,6 +12,7 @@ import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
 import type {
   ChatPromptContext,
   ChatReplyGenerationPlan,
+  GenerationSettingsSource,
   ResolveChatReplyGenerationPlanInput,
   ResolvedChatGenerationSettings,
 } from '../../prompting/index.js';
@@ -25,9 +26,7 @@ export interface ProviderSettingsReader {
   getProviderSettings(): Promise<ProviderSettingsSnapshot>;
 }
 
-export interface GenerationSettingsSource {
-  getSettingsOverview(): SettingsOverviewResponse;
-}
+export type { GenerationSettingsSource };
 
 export interface ChatAttachmentReference {
   id: string;

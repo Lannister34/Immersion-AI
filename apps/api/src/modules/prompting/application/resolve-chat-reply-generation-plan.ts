@@ -2,12 +2,12 @@ import type { ChatSessionDto } from '@immersion/contracts/chats';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
 import type { PromptCharacterSnapshot } from '@immersion/domain/prompting';
 
-import { getSettingsOverview } from '../../settings/application/get-settings-overview.js';
 import {
   buildChatReplyPromptBundleWithTokenCounter,
   type ChatReplyPromptBundle,
   type ChatReplyPromptMessage,
 } from './build-chat-reply-prompt.js';
+import type { GenerationSettingsSource } from './prompting-ports.js';
 import {
   type ResolvedChatGenerationSamplingSettings,
   type ResolvedChatGenerationSettings,
@@ -49,6 +49,10 @@ export interface ResolveChatReplyGenerationPlanInput {
   trailingUserInstruction?: string | null;
 }
 
+export interface ResolveChatReplyGenerationPlanDependencies {
+  readonly settings: GenerationSettingsSource;
+}
+
 function toPromptSamplerPreset(
   resolvedSettings: ResolvedChatGenerationSettings,
 ): ResolvedChatGenerationSettings['samplerPreset'] {
@@ -74,8 +78,9 @@ function toProviderSampling(sampling: ResolvedChatGenerationSamplingSettings): C
 
 export async function resolveChatReplyGenerationPlan(
   input: ResolveChatReplyGenerationPlanInput,
+  dependencies: ResolveChatReplyGenerationPlanDependencies,
 ): Promise<ChatReplyGenerationPlan> {
-  const settings = input.settings ?? getSettingsOverview();
+  const settings = input.settings ?? dependencies.settings.getSettingsOverview();
   const effectiveSettings = resolveChatGenerationSettings(
     settings,
     input.providerModelName,

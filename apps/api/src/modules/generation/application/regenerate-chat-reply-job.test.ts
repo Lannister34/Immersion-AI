@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createManualClock } from '../../../test-support/manual-clock.js';
 import { useTemporaryDataRoot } from '../../../test-support/use-temporary-data-root.js';
+import { findCharacter } from '../../characters/index.js';
 import {
   appendAssistantMessageContinuation,
   appendChatMessages,
@@ -13,13 +14,10 @@ import {
   resolveChatAttachments,
   truncateChatMessages,
 } from '../../chats/index.js';
-import {
-  heuristicTokenCounter,
-  loadChatPromptContext,
-  resolveChatGenerationSettings,
-  resolveChatReplyGenerationPlan,
-} from '../../prompting/index.js';
+import { findLorebook } from '../../lorebooks/index.js';
+import { createPromptingModule, heuristicTokenCounter } from '../../prompting/index.js';
 import { resolveGenerationProviderEndpoint } from '../../providers/index.js';
+import { findScenario } from '../../scenarios/index.js';
 import { getSettingsOverview } from '../../settings/index.js';
 import { InMemoryGenerationJobRegistry } from '../infrastructure/in-memory-generation-job-registry.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
@@ -73,7 +71,12 @@ describe('regenerateChatReplyJob', () => {
           },
           clock: createManualClock(),
           generationJobs: registry,
-          prompting: { loadChatPromptContext, resolveChatGenerationSettings, resolveChatReplyGenerationPlan },
+          prompting: createPromptingModule({
+            characters: { findCharacter },
+            lorebooks: { findLorebook },
+            scenarios: { findScenario },
+            settings: { getSettingsOverview },
+          }),
           providers: { resolveGenerationProviderEndpoint: () => resolveGenerationProviderEndpoint() },
           settings: { getSettingsOverview },
           tokenCounter: heuristicTokenCounter,

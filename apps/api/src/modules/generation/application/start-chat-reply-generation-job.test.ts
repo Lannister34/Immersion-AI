@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { FakeChatCompletionClient } from '../../../test-support/fake-chat-completion-client.js';
 import { InMemoryChatSessions } from '../../../test-support/in-memory-chat-sessions.js';
 import { createManualClock } from '../../../test-support/manual-clock.js';
-import { heuristicTokenCounter, resolveChatReplyGenerationPlan } from '../../prompting/index.js';
+import { createPromptingModule, heuristicTokenCounter } from '../../prompting/index.js';
 import { InMemoryGenerationJobRegistry } from '../infrastructure/in-memory-generation-job-registry.js';
 import type { ChatCompletionClient, ChatCompletionEndpoint } from './chat-completion-client.js';
 import { ProviderGenerationError } from './generation-errors.js';
@@ -66,6 +66,7 @@ function createInMemoryPorts(chatCompletionClient: ChatCompletionClient): InMemo
   const clock = createManualClock({ start: new Date('2026-04-01T12:00:00.000Z'), stepMs: 0 });
   const chats = new InMemoryChatSessions();
   chats.create(CHAT_ID, '2026-04-01T11:00:00.000Z');
+  const settings = { getSettingsOverview: () => SETTINGS };
 
   return {
     chats,
@@ -74,13 +75,14 @@ function createInMemoryPorts(chatCompletionClient: ChatCompletionClient): InMemo
       chats,
       clock,
       generationJobs: new InMemoryGenerationJobRegistry({ clock }),
-      prompting: {
-        loadChatPromptContext: () =>
-          Promise.resolve({ character: null, characterScenarioContent: null, lorebookSections: [] }),
-        resolveChatReplyGenerationPlan,
-      },
+      prompting: createPromptingModule({
+        characters: { findCharacter: () => Promise.resolve(null) },
+        lorebooks: { findLorebook: () => Promise.resolve(null) },
+        scenarios: { findScenario: () => Promise.resolve(null) },
+        settings,
+      }),
       providers: { resolveGenerationProviderEndpoint: () => Promise.resolve(CONFIGURED_ENDPOINT) },
-      settings: { getSettingsOverview: () => SETTINGS },
+      settings,
       tokenCounter: heuristicTokenCounter,
     },
   };

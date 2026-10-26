@@ -1,3 +1,4 @@
+import { findCharacter } from '../modules/characters/index.js';
 import {
   appendAssistantMessageContinuation,
   appendChatMessages,
@@ -8,33 +9,45 @@ import {
   updateChatTitle,
 } from '../modules/chats/index.js';
 import { createGenerationModule, type GenerationModule } from '../modules/generation/index.js';
+import { findLorebook } from '../modules/lorebooks/index.js';
 import { createOpenAiCompatModule, type OpenAiCompatModule } from '../modules/openai-compat/index.js';
-import {
-  loadChatPromptContext,
-  resolveChatGenerationSettings,
-  resolveChatReplyGenerationPlan,
-} from '../modules/prompting/index.js';
+import { createPromptingModule, type PromptingModule } from '../modules/prompting/index.js';
 import {
   getProviderSettings,
   resolveGenerationProviderEndpoint,
   testProviderConnection,
 } from '../modules/providers/index.js';
 import { getRunningRuntimeEndpoint, getRuntimeOverview } from '../modules/runtime/index.js';
+import { findScenario } from '../modules/scenarios/index.js';
 import { getSettingsOverview, resolveSamplerPresetForModel } from '../modules/settings/index.js';
 import { createSystemModule, type SystemModule } from '../modules/system/index.js';
 import type { ApiDependencies } from './api-dependencies.js';
 
 export interface ApiModules {
   readonly system: SystemModule;
+  readonly prompting: PromptingModule;
   readonly generation: GenerationModule;
   readonly openAiCompat: OpenAiCompatModule;
 }
 
 export function createApiModules(dependencies: ApiDependencies): ApiModules {
   const { chatCompletionClient, clock, config, generationJobs, httpFetch, tokenCounter, visionProbe } = dependencies;
+  const prompting = createPromptingModule({
+    // TODO: wire to modules.characters once it is composed (F-39)
+    characters: { findCharacter },
+    // TODO: wire to modules.lorebooks once it is composed (F-39)
+    lorebooks: { findLorebook },
+    // TODO: wire to modules.scenarios once it is composed (F-39)
+    scenarios: { findScenario },
+    // TODO: wire to modules.settings once it is composed (F-42)
+    settings: {
+      getSettingsOverview: () => getSettingsOverview(),
+    },
+  });
 
   return {
     system: createSystemModule({ clock, webPort: config.webPort }),
+    prompting,
     generation: createGenerationModule({
       chatCompletionClient,
       clock,
@@ -51,12 +64,7 @@ export function createApiModules(dependencies: ApiDependencies): ApiModules {
         truncateChatMessages,
         updateChatTitle,
       },
-      // TODO: wire to modules.prompting once it is composed (F-36)
-      prompting: {
-        loadChatPromptContext,
-        resolveChatGenerationSettings,
-        resolveChatReplyGenerationPlan,
-      },
+      prompting,
       // TODO: wire to modules.providers once it is composed (F-40)
       providers: {
         getProviderSettings: () => getProviderSettings(),

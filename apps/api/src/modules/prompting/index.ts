@@ -7,7 +7,13 @@ export * from './application/prompt-input-snapshot.js';
 export * from './application/prompt-source.js';
 export * from './application/prompt-template-engine.js';
 export * from './application/prompt-variable-values.js';
+export type { GenerationSettingsSource } from './application/prompting-ports.js';
 export * from './application/resolve-chat-generation-settings.js';
 export * from './application/resolve-chat-reply-generation-plan.js';
 export * from './application/token-counter.js';
 export { promptingProblems } from './interface/http/prompting-problems.js';
+export {
+  createPromptingModule,
+  type PromptingModule,
+  type PromptingModuleDependencies,
+} from './prompting-module.js';
