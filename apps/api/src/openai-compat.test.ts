@@ -4,6 +4,7 @@ import http from 'node:http';
 
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { CLIENT_DISCONNECT_LOG_MESSAGE, clientDisconnectOutcome } from './test-support/client-disconnect-outcome.js';
 import { createDeferred } from './test-support/deferred.js';
 import { FakeChatCompletionClient } from './test-support/fake-chat-completion-client.js';
 import type { HttpResponder } from './test-support/http-stub.js';
@@ -17,6 +18,7 @@ import {
 import { readProviderChatRequest } from './test-support/provider-chat-request.js';
 import {
   anthropicMessage,
+  bodyHeldUntilAborted,
   eventStream,
   openAiChatCompletion,
   openAiChatStream,
@@ -627,28 +629,20 @@ describe('OpenAI-compatible endpoint', () => {
     expect(response.body.trimEnd().endsWith('data: [DONE]')).toBe(true);
   });
 
-  it('stops the provider request when the streaming client disconnects', async () => {
+  function answerWithStreamUntilAborted(): Promise<void> {
     const providerAborted = createDeferred();
 
     answerWith((request) => {
       const firstChunk = `data: ${JSON.stringify({ choices: [{ delta: { content: 'Первый кусок.' } }] })}\n\n`;
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(firstChunk));
-          request.signal?.addEventListener(
-            'abort',
-            () => {
-              providerAborted.resolve();
-              controller.error(new DOMException('Provider request was aborted.', 'AbortError'));
-            },
-            { once: true },
-          );
-        },
-      });
+      request.signal?.addEventListener('abort', () => providerAborted.resolve(), { once: true });
 
-      return new Response(stream, { headers: { 'Content-Type': 'text/event-stream' }, status: 200 });
+      return bodyHeldUntilAborted(request.signal, 'text/event-stream', firstChunk);
     });
-    const origin = await api().listen();
+
+    return providerAborted.promise;
+  }
+
+  async function openStreamThenDisconnect(origin: string): Promise<void> {
     const request = http.request(`${origin}/v1/chat/completions`, {
       agent: false,
       headers: { 'Content-Type': 'application/json' },
@@ -659,8 +653,47 @@ describe('OpenAI-compatible endpoint', () => {
     const [response] = await once(request, 'response');
     await once(response, 'data');
     request.destroy();
+  }
 
-    await expect(providerAborted.promise).resolves.toBeUndefined();
+  it('stops the provider request when the streaming client disconnects', async () => {
+    const providerAborted = answerWithStreamUntilAborted();
+
+    await openStreamThenDisconnect(await api().listen());
+
+    await expect(providerAborted).resolves.toBeUndefined();
+  });
+
+  it('logs a streaming client that disconnects as a client disconnect, not as a server error', async () => {
+    const providerAborted = answerWithStreamUntilAborted();
+    const outcome = clientDisconnectOutcome(api().logs);
+
+    await openStreamThenDisconnect(await api().listen());
+    await providerAborted;
+
+    expect(await outcome).toMatchObject({
+      level: 'info',
+      msg: CLIENT_DISCONNECT_LOG_MESSAGE,
+      reqId: expect.any(String),
+    });
+    expect(api().logs.lines.filter((line) => line.level === 'error')).toEqual([]);
+  });
+
+  it('logs a non-streaming client that disconnects as a client disconnect, not as a server error', async () => {
+    const provider = api().http.hold('POST', CHAT_COMPLETIONS_URL);
+    const client = openSocketRequest(`${await api().listen()}/v1/chat/completions`, {
+      messages: [{ content: 'Привет.', role: 'user' }],
+    });
+    await provider.started;
+    const outcome = clientDisconnectOutcome(api().logs);
+
+    await client.disconnect();
+
+    expect(await outcome).toMatchObject({
+      level: 'info',
+      msg: CLIENT_DISCONNECT_LOG_MESSAGE,
+      reqId: expect.any(String),
+    });
+    expect(api().logs.lines.filter((line) => line.level === 'error')).toEqual([]);
   });
 
   it('stops the provider request when a non-streaming client disconnects', async () => {

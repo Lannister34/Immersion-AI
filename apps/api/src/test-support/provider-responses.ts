@@ -40,6 +40,23 @@ export function anthropicMessageStream(events: readonly AnthropicStreamEventFixt
   );
 }
 
+export function bodyHeldUntilAborted(signal: AbortSignal | null, contentType: string, firstChunk: string): Response {
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(firstChunk));
+
+      if (signal?.aborted) {
+        controller.error(signal.reason);
+        return;
+      }
+
+      signal?.addEventListener('abort', () => controller.error(signal.reason), { once: true });
+    },
+  });
+
+  return new Response(body, { headers: { 'Content-Type': contentType }, status: 200 });
+}
+
 export function providerFailure(): Response {
   return Response.json({ error: 'provider failed' }, { status: 500 });
 }

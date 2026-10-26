@@ -23,7 +23,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { appendChatMessages, getChatSession } from './modules/chats/index.js';
+import type { ChatCompletionClient } from './modules/generation/index.js';
 import type { VisionProbe } from './modules/providers/index.js';
+import { CLIENT_DISCONNECT_LOG_MESSAGE, clientDisconnectOutcome } from './test-support/client-disconnect-outcome.js';
+import { createDeferred } from './test-support/deferred.js';
 import { waitForGenerationJob } from './test-support/generation-jobs.js';
 import { openSocketRequest } from './test-support/open-socket-request.js';
 import { readProviderChatRequest } from './test-support/provider-chat-request.js';
@@ -1132,6 +1135,53 @@ describe('generation routes', () => {
     await provider.aborted;
 
     expect(providerRequest.signal?.aborted).toBe(true);
+  });
+
+  it('logs a client that disconnects mid-generation as a client disconnect, not as a server error', async () => {
+    const provider = api().http.hold('POST', CHAT_COMPLETIONS_URL);
+    const chat = await createChat();
+    const client = openSocketRequest(`${await api().listen()}/api/generation/chat-reply`, {
+      chatId: chat.id,
+      message: 'Answer while I am still connected.',
+    });
+    await provider.started;
+    const outcome = clientDisconnectOutcome(api().logs);
+
+    await client.disconnect();
+
+    expect(await outcome).toMatchObject({
+      level: 'info',
+      msg: CLIENT_DISCONNECT_LOG_MESSAGE,
+      reqId: expect.any(String),
+    });
+    expect(api().logs.lines.filter((line) => line.level === 'error')).toEqual([]);
+  });
+
+  it('logs a client disconnect as such when the provider reply arrives after the client left', async () => {
+    const providerCalled = createDeferred();
+    const lateClient: ChatCompletionClient = {
+      completeChat: (request) =>
+        new Promise((resolve) => {
+          request.signal?.addEventListener('abort', () => resolve({ content: 'Too late.', reasoning: '' }), {
+            once: true,
+          });
+          providerCalled.resolve();
+        }),
+    };
+    const testApi = await createTestApi({ fixture: 'smoke', overrides: { chatCompletionClient: lateClient } });
+    await testApi.settings.useExternalProvider({ url: PROVIDER_URL });
+    const chat = await createChat(testApi);
+    const client = openSocketRequest(`${await testApi.listen()}/api/generation/chat-reply`, {
+      chatId: chat.id,
+      message: 'Answer after I leave.',
+    });
+    await providerCalled.promise;
+    const outcome = clientDisconnectOutcome(testApi.logs);
+
+    await client.disconnect();
+
+    expect(await outcome).toMatchObject({ level: 'info', msg: CLIENT_DISCONNECT_LOG_MESSAGE });
+    expect(testApi.logs.lines.filter((line) => line.level === 'error')).toEqual([]);
   });
 
   it('keeps a chat reply job running after the client that started it disconnects', async () => {

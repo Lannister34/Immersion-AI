@@ -1,3 +1,6 @@
+import { once } from 'node:events';
+import type { ServerResponse } from 'node:http';
+
 import { ApiProblemSchema } from '@immersion/contracts/common';
 import Fastify, {
   type FastifyInstance,
@@ -9,8 +12,15 @@ import { describe, expect, it, onTestFinished } from 'vitest';
 import { z } from 'zod';
 
 import { type CapturingLogger, createCapturingLogger } from '../../test-support/capturing-logger.js';
+import {
+  CLIENT_DISCONNECT_LOG_MESSAGE,
+  clientDisconnectOutcome,
+} from '../../test-support/client-disconnect-outcome.js';
+import { createDeferred } from '../../test-support/deferred.js';
+import { openSocketRequest } from '../../test-support/open-socket-request.js';
 import type { ApiLogger } from '../logging/api-logger.js';
 import { resolveContainedFilePath } from '../storage/contained-path.js';
+import { clientDisconnectSignal } from './client-disconnect-signal.js';
 import { parseRequest } from './parse-request.js';
 import { platformProblems } from './platform-problems.js';
 import { contractProblem, type Problem, problem } from './problem.js';
@@ -360,5 +370,82 @@ describe('installNotFoundHandler', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ error: { code: 'route_not_found', status: 404 } });
+  });
+});
+
+type ErrorAfterDisconnect = (disconnect: AbortSignal) => unknown;
+
+interface DisconnectingShelf {
+  readonly origin: string;
+  readonly logs: CapturingLogger;
+  readonly entered: Promise<ServerResponse>;
+}
+
+async function serveErrorAfterDisconnect(errorAfterDisconnect: ErrorAfterDisconnect): Promise<DisconnectingShelf> {
+  const logs = createCapturingLogger();
+  const app = Fastify({ loggerInstance: logs.logger });
+  const entered = createDeferred<ServerResponse>();
+  onTestFinished(() => app.close());
+
+  function registerWaitRoute(books: FastifyInstance): void {
+    books.post('/wait', async (_request, reply) => {
+      const disconnect = clientDisconnectSignal(reply.raw);
+      entered.resolve(reply.raw);
+
+      if (!disconnect.aborted) {
+        await once(disconnect, 'abort');
+      }
+
+      throw errorAfterDisconnect(disconnect);
+    });
+  }
+
+  installProblemHandler(app, { table: shelfProblems });
+  app.register(async (books) => registerWaitRoute(books), { prefix: '/books' });
+  app.register(
+    async (enveloped) => {
+      installProblemHandler(enveloped, { table: shelfProblems, render: envelope });
+      registerWaitRoute(enveloped);
+    },
+    { prefix: '/v1' },
+  );
+
+  return { entered: entered.promise, logs, origin: await app.listen({ host: '127.0.0.1', port: 0 }) };
+}
+
+describe('installProblemHandler when the client disconnects mid-request', () => {
+  it.each([
+    '/books',
+    '/v1',
+  ])('logs the abort of the client disconnect at info and sends nothing to the closed response: %s', async (prefix) => {
+    const { entered, logs, origin } = await serveErrorAfterDisconnect((disconnect) => disconnect.reason);
+    const client = openSocketRequest(`${origin}${prefix}/wait`, { title: 'Анна Каренина' });
+    const response = await entered;
+    const outcome = clientDisconnectOutcome(logs);
+
+    await client.disconnect();
+
+    expect(await outcome).toMatchObject({
+      level: 'info',
+      msg: CLIENT_DISCONNECT_LOG_MESSAGE,
+      reqId: expect.any(String),
+    });
+    expect(logs.lines.filter((line) => line.level === 'error')).toEqual([]);
+    expect(response.headersSent).toBe(false);
+  });
+
+  it.each([
+    ['an abort the server started itself', () => new DOMException('The server canceled the work.', 'AbortError')],
+    ['a provider timeout', () => new DOMException('The operation was aborted due to timeout.', 'TimeoutError')],
+  ])('logs %s at error although the client has left', async (_name, errorAfterDisconnect) => {
+    const { entered, logs, origin } = await serveErrorAfterDisconnect(errorAfterDisconnect);
+    const client = openSocketRequest(`${origin}/books/wait`, { title: 'Анна Каренина' });
+    await entered;
+    const outcome = clientDisconnectOutcome(logs);
+
+    await client.disconnect();
+
+    expect(await outcome).toMatchObject({ level: 'error', msg: 'Request failed with an unexpected error' });
+    expect(logs.lines).not.toContainEqual(expect.objectContaining({ msg: CLIENT_DISCONNECT_LOG_MESSAGE }));
   });
 });

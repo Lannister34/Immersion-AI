@@ -2,6 +2,7 @@ import type { ReplyChannel } from '@immersion/domain/generation';
 
 import type { ChatCompletionResponse } from '../../../application/chat-completion-client.js';
 import { ProviderGenerationError } from '../../../application/generation-errors.js';
+import { isAbortError } from '../http.js';
 import type { ProviderStreamSink } from '../reply-reader.js';
 import {
   type AnthropicMessageResponse,
@@ -55,6 +56,10 @@ export async function readAnthropicJsonReply(response: Response): Promise<ChatCo
   try {
     payload = AnthropicMessageResponseSchema.parse(JSON.parse(await response.text()));
   } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+
     throw new ProviderGenerationError(
       error instanceof Error
         ? `Provider returned an invalid response: ${error.message}`
