@@ -5,16 +5,19 @@ import {
   type ChatReplyPromptPreviewResponse,
   ChatReplyPromptPreviewResponseSchema,
 } from '@immersion/contracts/generation';
-import { ChatMessageNotFoundError, ChatNotFoundError } from '../../chats/application/append-chat-messages.js';
-import { getChatSession } from '../../chats/application/get-chat-session.js';
-import { deriveLastMessagePreview } from '../../chats/application/last-message-preview.js';
-import { loadChatPromptContext } from '../../prompting/application/load-chat-prompt-context.js';
-import { resolveChatReplyGenerationPlan } from '../../prompting/application/resolve-chat-reply-generation-plan.js';
-import { getProviderSettings } from '../../providers/application/get-provider-settings.js';
-import { DEFAULT_OPENAI_COMPATIBLE_MODEL } from '../../providers/domain/provider-settings.js';
-import { getRuntimeOverview } from '../../runtime/application/get-runtime-overview.js';
-import { getProviderTokenCounter } from '../infrastructure/provider-clients/shared-token-counter.js';
-import { getGenerationReadiness } from './get-generation-readiness.js';
+
+import { ChatMessageNotFoundError, ChatNotFoundError, deriveLastMessagePreview } from '../../chats/index.js';
+import type { TokenCounter } from '../../prompting/index.js';
+import { DEFAULT_OPENAI_COMPATIBLE_MODEL } from '../../providers/index.js';
+import type { ChatSessionPort, GenerationSettingsSource, PromptPlanPort } from './generation-ports.js';
+import { type GenerationReadinessDependencies, getGenerationReadiness } from './get-generation-readiness.js';
+
+export interface PreviewChatReplyPromptDependencies extends GenerationReadinessDependencies {
+  readonly chats: Pick<ChatSessionPort, 'getChatSession'>;
+  readonly prompting: Pick<PromptPlanPort, 'loadChatPromptContext' | 'resolveChatReplyGenerationPlan'>;
+  readonly settings: GenerationSettingsSource;
+  readonly tokenCounter: TokenCounter;
+}
 
 function withMessageOverrides(
   session: ChatSessionDto,
@@ -80,11 +83,11 @@ function withDraftUserMessage(session: ChatSessionDto, draftUserMessage: string 
   };
 }
 
-async function resolvePreviewModelName(): Promise<string | null> {
-  const providerSettings = await getProviderSettings();
+async function resolvePreviewModelName(dependencies: GenerationReadinessDependencies): Promise<string | null> {
+  const providerSettings = await dependencies.providers.getProviderSettings();
 
   if (providerSettings.mode === 'builtin') {
-    const overview = await getRuntimeOverview();
+    const overview = await dependencies.runtime.getRuntimeOverview();
 
     return overview.serverStatus.model?.trim() || null;
   }
@@ -96,24 +99,29 @@ async function resolvePreviewModelName(): Promise<string | null> {
 
 export async function previewChatReplyPrompt(
   command: ChatReplyPromptPreviewCommand,
+  dependencies: PreviewChatReplyPromptDependencies,
 ): Promise<ChatReplyPromptPreviewResponse> {
-  const session = await getChatSession(command.chatId);
+  const session = await dependencies.chats.getChatSession(command.chatId);
 
   if (!session) {
     throw new ChatNotFoundError(command.chatId);
   }
 
-  const [readiness, providerModelName] = await Promise.all([getGenerationReadiness(), resolvePreviewModelName()]);
+  const [readiness, providerModelName] = await Promise.all([
+    getGenerationReadiness(dependencies),
+    resolvePreviewModelName(dependencies),
+  ]);
   const sessionWithOverrides = withMessageOverrides(session, command.messageOverrides);
   const sessionForPlan = withDraftUserMessage(sessionWithOverrides, command.draftUserMessage);
-  const characterContext = await loadChatPromptContext(sessionForPlan);
-  const generationPlan = await resolveChatReplyGenerationPlan({
+  const characterContext = await dependencies.prompting.loadChatPromptContext(sessionForPlan);
+  const generationPlan = await dependencies.prompting.resolveChatReplyGenerationPlan({
     character: characterContext.character,
     characterScenarioContent: characterContext.characterScenarioContent,
     lorebookSections: characterContext.lorebookSections,
     providerModelName,
     session: sessionForPlan,
-    tokenCounter: getProviderTokenCounter(),
+    settings: dependencies.settings.getSettingsOverview(),
+    tokenCounter: dependencies.tokenCounter,
   });
   const systemMessageCount = generationPlan.providerRequest.messages.filter(
     (message) => message.role === 'system',

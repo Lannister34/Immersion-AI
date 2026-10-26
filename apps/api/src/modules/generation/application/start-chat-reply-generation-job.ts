@@ -6,11 +6,10 @@ import {
   StartChatReplyGenerationJobResponseSchema,
 } from '@immersion/contracts/generation';
 
-import { ChatNotFoundError } from '../../chats/application/append-chat-messages.js';
-import { getChatSession } from '../../chats/application/get-chat-session.js';
-import type { ChatCompletionClient } from './chat-completion-client.js';
+import { ChatNotFoundError } from '../../chats/index.js';
 import {
   appendUserMessageForChatReply,
+  type ChatReplyGenerationDependencies,
   completeChatReplyContinuationForSession,
   completeChatReplyForSession,
   getAnswerableUserMessage,
@@ -18,34 +17,24 @@ import {
 } from './chat-reply-generation.js';
 import type { GenerationJobRegistry } from './generation-job-registry.js';
 
-export interface StartChatReplyGenerationJobDependencies {
-  chatCompletionClient?: ChatCompletionClient;
-  generationJobRegistry: GenerationJobRegistry;
-  now?: () => Date;
-}
-
-interface ResolvedJobDependencies {
-  chatCompletionClient?: ChatCompletionClient;
-  now: () => Date;
+export interface StartChatReplyGenerationJobDependencies extends ChatReplyGenerationDependencies {
+  readonly generationJobs: GenerationJobRegistry;
 }
 
 function startContinueChatReplyJob(
   command: ContinueChatReplyCommand,
   session: ChatSessionDto,
-  registry: GenerationJobRegistry,
-  dependencies: ResolvedJobDependencies,
+  dependencies: StartChatReplyGenerationJobDependencies,
 ): StartChatReplyGenerationJobResponse {
   getContinuableAssistantMessage(command.chatId, session);
 
-  const job = registry.createChatReplyJob({
+  const job = dependencies.generationJobs.createChatReplyJob({
     chatId: command.chatId,
     command,
   });
 
-  registry.runChatReplyJob(job.id, async ({ publishDelta, signal }) => {
-    const response = await completeChatReplyContinuationForSession(command, session, {
-      ...(dependencies.chatCompletionClient ? { chatCompletionClient: dependencies.chatCompletionClient } : {}),
-      now: dependencies.now,
+  dependencies.generationJobs.runChatReplyJob(job.id, async ({ publishDelta, signal }) => {
+    const response = await completeChatReplyContinuationForSession(command, session, dependencies, {
       onDelta: publishDelta,
       signal,
     });
@@ -63,32 +52,26 @@ export async function startChatReplyGenerationJob(
   command: StartChatReplyGenerationCommand,
   dependencies: StartChatReplyGenerationJobDependencies,
 ): Promise<StartChatReplyGenerationJobResponse> {
-  const now = dependencies.now ?? (() => new Date());
-  const session = await getChatSession(command.chatId);
+  const session = await dependencies.chats.getChatSession(command.chatId);
 
   if (!session) {
     throw new ChatNotFoundError(command.chatId);
   }
 
   if (command.mode === 'continue') {
-    return startContinueChatReplyJob(command, session, dependencies.generationJobRegistry, {
-      ...(dependencies.chatCompletionClient ? { chatCompletionClient: dependencies.chatCompletionClient } : {}),
-      now,
-    });
+    return startContinueChatReplyJob(command, session, dependencies);
   }
 
   if (command.mode === 'answer') {
     getAnswerableUserMessage(command.chatId, session);
 
-    const answerJob = dependencies.generationJobRegistry.createChatReplyJob({
+    const answerJob = dependencies.generationJobs.createChatReplyJob({
       chatId: command.chatId,
       command,
     });
 
-    dependencies.generationJobRegistry.runChatReplyJob(answerJob.id, async ({ publishDelta, signal }) => {
-      const response = await completeChatReplyForSession(command, session, {
-        ...(dependencies.chatCompletionClient ? { chatCompletionClient: dependencies.chatCompletionClient } : {}),
-        now,
+    dependencies.generationJobs.runChatReplyJob(answerJob.id, async ({ publishDelta, signal }) => {
+      const response = await completeChatReplyForSession(command, session, dependencies, {
         onDelta: publishDelta,
         signal,
       });
@@ -102,23 +85,21 @@ export async function startChatReplyGenerationJob(
     });
   }
 
-  const job = dependencies.generationJobRegistry.createChatReplyJob({
+  const job = dependencies.generationJobs.createChatReplyJob({
     chatId: command.chatId,
     command,
   });
   let sessionAfterUserMessage: ChatSessionDto;
 
   try {
-    sessionAfterUserMessage = await appendUserMessageForChatReply(command, now);
+    sessionAfterUserMessage = await appendUserMessageForChatReply(command, dependencies);
   } catch (error) {
-    dependencies.generationJobRegistry.fail(job.id, error);
+    dependencies.generationJobs.fail(job.id, error);
     throw error;
   }
 
-  dependencies.generationJobRegistry.runChatReplyJob(job.id, async ({ publishDelta, signal }) => {
-    const response = await completeChatReplyForSession(command, sessionAfterUserMessage, {
-      ...(dependencies.chatCompletionClient ? { chatCompletionClient: dependencies.chatCompletionClient } : {}),
-      now,
+  dependencies.generationJobs.runChatReplyJob(job.id, async ({ publishDelta, signal }) => {
+    const response = await completeChatReplyForSession(command, sessionAfterUserMessage, dependencies, {
       onDelta: publishDelta,
       signal,
     });

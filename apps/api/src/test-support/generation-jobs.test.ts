@@ -40,7 +40,7 @@ describe('waitForGenerationJob', () => {
     expect(completed).toMatchObject({ error: null, id: job.id, status: 'completed' });
   });
 
-  it('answers from the snapshot for a job that settled before the wait began', async () => {
+  it('answers from the current status for a job that settled before the wait began', async () => {
     api().http.on('POST', PROVIDER_URL, () => openAiChatCompletion('Готово.'));
     const job = await startReplyJob('Привет.');
     await waitForGenerationJob(api(), job.id, 'completed');
@@ -57,7 +57,7 @@ describe('waitForGenerationJob', () => {
     );
   });
 
-  it('lets go of the event stream when the test finishes first, so the app still closes', async () => {
+  it('stops waiting when the test finishes first', async () => {
     const held = api().http.hold('POST', PROVIDER_URL);
     const job = await startReplyJob('Привет.');
     await held.started;
@@ -68,22 +68,16 @@ describe('waitForGenerationJob', () => {
       );
     });
 
-    const server = await api()
-      .listen()
-      .then(() => api().app.server);
-    const eventsRequested = createDeferred<string | undefined>();
-    server.once('request', (request) => eventsRequested.resolve(request.url));
-
     waitForGenerationJob(api(), job.id, 'completed').then(() => outcome.resolve('resolved'), outcome.resolve);
 
-    expect(await eventsRequested.promise).toBe(`/api/generation/jobs/${job.id}/events`);
+    expect(api().dependencies.generationJobs.get(job.id)).toMatchObject({ status: 'running' });
   });
 
   it('rejects for a job the api does not know', async () => {
     const unknownJobId = '00000000-0000-4000-8000-000000000000';
 
     await expect(waitForGenerationJob(api(), unknownJobId, 'completed')).rejects.toThrow(
-      `The event stream of generation job ${unknownJobId} answered HTTP 404.`,
+      `The api knows no generation job ${unknownJobId}.`,
     );
   });
 });

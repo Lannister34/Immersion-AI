@@ -6,9 +6,10 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { z } from 'zod';
 
 import { createHttpStub, type HttpStub } from '../../../test-support/http-stub.js';
+import { createManualClock } from '../../../test-support/manual-clock.js';
 import { openAiChatCompletion } from '../../../test-support/provider-responses.js';
-import { appendChatMessages } from '../../chats/application/append-chat-messages.js';
-import { createChat } from '../../chats/application/create-chat.js';
+import { appendChatMessages, createChat, getChatSession, updateChatTitle } from '../../chats/index.js';
+import { resolveChatGenerationSettings } from '../../prompting/index.js';
 import { resolveGenerationProviderEndpoint } from '../../providers/index.js';
 import { getSettingsOverview } from '../../settings/index.js';
 import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
@@ -76,7 +77,15 @@ async function generateTitleForSeededChat(chatCompletionClient: ChatCompletionCl
     { content: 'Обжиг превращает глину в керамику.', createdAt: '2026-01-01T00:00:01.000Z', role: 'assistant' },
   ]);
 
-  return generateChatTitle({ chatId: chat.id }, { chatCompletionClient });
+  return generateChatTitle(
+    { chatId: chat.id },
+    {
+      ...onSettingsFile(chatCompletionClient),
+      chats: { getChatSession, updateChatTitle },
+      clock: createManualClock(),
+      prompting: { resolveChatGenerationSettings },
+    },
+  );
 }
 
 async function useProviderSettings(settings: object): Promise<void> {

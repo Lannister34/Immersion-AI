@@ -17,7 +17,10 @@ import {
 } from '@immersion/contracts/generation';
 import type { FastifyPluginAsync } from 'fastify';
 
+import type { Clock } from '../../../../platform/clock/clock.js';
 import { parseRequest } from '../../../../platform/http/parse-request.js';
+import type { TokenCounter } from '../../../prompting/index.js';
+import type { ChatCompletionClient } from '../../application/chat-completion-client.js';
 import { generateCharacterAvatarPrompt } from '../../application/generate-character-avatar-prompt.js';
 import { generateCharacterDraft } from '../../application/generate-character-draft.js';
 import { generateCharacterField } from '../../application/generate-character-field.js';
@@ -28,12 +31,20 @@ import { generateLorebookDraft } from '../../application/generate-lorebook-draft
 import { generateScenarioDraft } from '../../application/generate-scenario-draft.js';
 import { generateScenarioFirstMessage } from '../../application/generate-scenario-first-message.js';
 import { GenerationJobNotFoundError } from '../../application/generation-errors.js';
-import type { DraftGenerationDependencies } from '../../application/generation-ports.js';
+import type { GenerationJobRegistry } from '../../application/generation-job-registry.js';
+import type {
+  ChatSessionPort,
+  GenerationSettingsSource,
+  PromptPlanPort,
+  ProviderEndpointResolver,
+  ProviderSettingsReader,
+  RuntimeEndpointSource,
+  VisionSupportProbe,
+} from '../../application/generation-ports.js';
 import { getGenerationReadiness } from '../../application/get-generation-readiness.js';
 import { previewChatReplyPrompt } from '../../application/preview-chat-reply-prompt.js';
 import { regenerateChatReplyJob } from '../../application/regenerate-chat-reply-job.js';
 import { startChatReplyGenerationJob } from '../../application/start-chat-reply-generation-job.js';
-import { InMemoryGenerationJobRegistry } from '../../infrastructure/in-memory-generation-job-registry.js';
 import { GenerationJobRouteParamsSchema, GenerationJobsQuerySchema } from './request-schemas.js';
 
 function writeSseEvent(raw: NodeJS.WritableStream, event: unknown) {
@@ -43,16 +54,29 @@ function writeSseEvent(raw: NodeJS.WritableStream, event: unknown) {
   raw.write(`data: ${JSON.stringify(parsedEvent)}\n\n`);
 }
 
-export function createGenerationRoutes(dependencies: DraftGenerationDependencies): FastifyPluginAsync {
-  return async (app) => {
-    const generationJobRegistry = new InMemoryGenerationJobRegistry();
+export interface GenerationRoutesDependencies {
+  readonly chatCompletionClient: ChatCompletionClient;
+  readonly chats: ChatSessionPort;
+  readonly clock: Clock;
+  readonly generationJobs: GenerationJobRegistry;
+  readonly prompting: PromptPlanPort;
+  readonly providers: ProviderEndpointResolver & ProviderSettingsReader;
+  readonly runtime: RuntimeEndpointSource;
+  readonly settings: GenerationSettingsSource;
+  readonly tokenCounter: TokenCounter;
+  readonly visionProbe: VisionSupportProbe;
+}
 
-    app.get('/readiness', async () => getGenerationReadiness());
+export function createGenerationRoutes(dependencies: GenerationRoutesDependencies): FastifyPluginAsync {
+  const { generationJobs } = dependencies;
+
+  return async (app) => {
+    app.get('/readiness', async () => getGenerationReadiness(dependencies));
 
     app.post('/chat-reply-preview', async (request) => {
       const command = parseRequest(ChatReplyPromptPreviewCommandSchema, request.body);
 
-      return ChatReplyPromptPreviewResponseSchema.parse(await previewChatReplyPrompt(command));
+      return ChatReplyPromptPreviewResponseSchema.parse(await previewChatReplyPrompt(command, dependencies));
     });
 
     app.post('/chat-reply', async (request) => {
@@ -63,9 +87,7 @@ export function createGenerationRoutes(dependencies: DraftGenerationDependencies
       request.raw.once('aborted', abortGeneration);
 
       try {
-        return await generateChatReply(command, {
-          signal: abortController.signal,
-        });
+        return await generateChatReply(command, dependencies, { signal: abortController.signal });
       } finally {
         request.raw.off('aborted', abortGeneration);
       }
@@ -79,9 +101,7 @@ export function createGenerationRoutes(dependencies: DraftGenerationDependencies
       request.raw.once('aborted', abortGeneration);
 
       try {
-        return await generateChatTitle(command, {
-          signal: abortController.signal,
-        });
+        return await generateChatTitle(command, dependencies, { signal: abortController.signal });
       } finally {
         request.raw.off('aborted', abortGeneration);
       }
@@ -95,9 +115,7 @@ export function createGenerationRoutes(dependencies: DraftGenerationDependencies
       request.raw.once('aborted', abortGeneration);
 
       try {
-        return await generateFirstMessage(command, {
-          signal: abortController.signal,
-        });
+        return await generateFirstMessage(command, dependencies, { signal: abortController.signal });
       } finally {
         request.raw.off('aborted', abortGeneration);
       }
@@ -189,18 +207,14 @@ export function createGenerationRoutes(dependencies: DraftGenerationDependencies
 
     app.post('/chat-reply-jobs', async (request, reply) => {
       const command = parseRequest(StartChatReplyGenerationCommandSchema, request.body);
-      const response = await startChatReplyGenerationJob(command, {
-        generationJobRegistry,
-      });
+      const response = await startChatReplyGenerationJob(command, dependencies);
 
       return reply.status(202).send(response);
     });
 
     app.post('/chat-reply-jobs/regenerate', async (request, reply) => {
       const command = parseRequest(RegenerateChatReplyCommandSchema, request.body);
-      const response = await regenerateChatReplyJob(command, {
-        generationJobRegistry,
-      });
+      const response = await regenerateChatReplyJob(command, dependencies);
 
       return reply.status(202).send(response);
     });
@@ -209,13 +223,13 @@ export function createGenerationRoutes(dependencies: DraftGenerationDependencies
       const query = parseRequest(GenerationJobsQuerySchema, request.query);
 
       return ListGenerationJobsResponseSchema.parse({
-        items: generationJobRegistry.list(query.chatId ? { chatId: query.chatId } : {}),
+        items: generationJobs.list(query.chatId ? { chatId: query.chatId } : {}),
       });
     });
 
     app.get('/jobs/:jobId', async (request) => {
       const { jobId } = parseRequest(GenerationJobRouteParamsSchema, request.params);
-      const job = generationJobRegistry.get(jobId);
+      const job = generationJobs.get(jobId);
 
       if (!job) {
         throw new GenerationJobNotFoundError(jobId);
@@ -228,7 +242,7 @@ export function createGenerationRoutes(dependencies: DraftGenerationDependencies
 
     app.post('/jobs/:jobId/cancel', async (request) => {
       const { jobId } = parseRequest(GenerationJobRouteParamsSchema, request.params);
-      const job = generationJobRegistry.cancel(jobId);
+      const job = generationJobs.cancel(jobId);
 
       if (!job) {
         throw new GenerationJobNotFoundError(jobId);
@@ -241,7 +255,7 @@ export function createGenerationRoutes(dependencies: DraftGenerationDependencies
 
     app.get('/jobs/:jobId/events', async (request, reply) => {
       const { jobId } = parseRequest(GenerationJobRouteParamsSchema, request.params);
-      const job = generationJobRegistry.get(jobId);
+      const job = generationJobs.get(jobId);
 
       if (!job) {
         throw new GenerationJobNotFoundError(jobId);
@@ -301,7 +315,7 @@ export function createGenerationRoutes(dependencies: DraftGenerationDependencies
           return;
         }
 
-        unsubscribe = generationJobRegistry.subscribe(jobId, writeEvent);
+        unsubscribe = generationJobs.subscribe(jobId, writeEvent);
         heartbeat = setInterval(() => {
           if (closed || !reply.raw.writable) {
             cleanup();

@@ -6,23 +6,27 @@ import {
 } from '@immersion/contracts/generation';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
 
-import { globalHttpFetch } from '../../../platform/outbound-http/global-http-fetch.js';
-import { appendChatMessages, ChatNotFoundError } from '../../chats/application/append-chat-messages.js';
-import { ChatTranscriptNotEmptyError } from '../../chats/application/chat-conflicts.js';
-import { getChatSession } from '../../chats/application/get-chat-session.js';
-import { loadChatPromptContext } from '../../prompting/application/load-chat-prompt-context.js';
-import { resolveChatReplyGenerationPlan } from '../../prompting/application/resolve-chat-reply-generation-plan.js';
-import { resolveGenerationProviderEndpoint } from '../../providers/application/generation-provider.js';
-import { getSettingsOverview } from '../../settings/application/get-settings-overview.js';
-import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
-import { getProviderTokenCounter } from '../infrastructure/provider-clients/shared-token-counter.js';
+import type { Clock } from '../../../platform/clock/clock.js';
+import { ChatNotFoundError, ChatTranscriptNotEmptyError } from '../../chats/index.js';
+import type { TokenCounter } from '../../prompting/index.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import { ChatNotEmptyError } from './generation-errors.js';
+import type {
+  ChatSessionPort,
+  GenerationOptions,
+  GenerationSettingsSource,
+  PromptPlanPort,
+  ProviderEndpointResolver,
+} from './generation-ports.js';
 
 export interface GenerateFirstMessageDependencies {
-  chatCompletionClient?: ChatCompletionClient;
-  now?: () => Date;
-  signal?: AbortSignal;
+  readonly chatCompletionClient: ChatCompletionClient;
+  readonly chats: Pick<ChatSessionPort, 'appendChatMessages' | 'getChatSession'>;
+  readonly clock: Clock;
+  readonly prompting: Pick<PromptPlanPort, 'loadChatPromptContext' | 'resolveChatReplyGenerationPlan'>;
+  readonly providers: ProviderEndpointResolver;
+  readonly settings: GenerationSettingsSource;
+  readonly tokenCounter: TokenCounter;
 }
 
 function buildLanguageSentence(
@@ -70,13 +74,10 @@ function buildOpeningInstruction(
 
 export async function generateFirstMessage(
   command: GenerateFirstMessageCommand,
-  dependencies: GenerateFirstMessageDependencies = {},
+  dependencies: GenerateFirstMessageDependencies,
+  options: GenerationOptions = {},
 ): Promise<GenerateFirstMessageResponse> {
-  const now = dependencies.now ?? (() => new Date());
-  // TODO: require the chat completion client from the composition root (F-35)
-  const chatCompletionClient =
-    dependencies.chatCompletionClient ?? createChatCompletionClient({ httpFetch: globalHttpFetch });
-  const session = await getChatSession(command.chatId);
+  const session = await dependencies.chats.getChatSession(command.chatId);
 
   if (!session) {
     throw new ChatNotFoundError(command.chatId);
@@ -86,39 +87,39 @@ export async function generateFirstMessage(
     throw new ChatNotEmptyError(command.chatId);
   }
 
-  const endpoint = await resolveGenerationProviderEndpoint();
-  const settings = getSettingsOverview();
-  const characterContext = await loadChatPromptContext(session);
-  const generationPlan = await resolveChatReplyGenerationPlan({
+  const endpoint = await dependencies.providers.resolveGenerationProviderEndpoint();
+  const settings = dependencies.settings.getSettingsOverview();
+  const characterContext = await dependencies.prompting.loadChatPromptContext(session);
+  const generationPlan = await dependencies.prompting.resolveChatReplyGenerationPlan({
     character: characterContext.character,
     characterScenarioContent: characterContext.characterScenarioContent,
     lorebookSections: characterContext.lorebookSections,
     providerModelName: endpoint.model,
     session,
     settings,
-    tokenCounter: getProviderTokenCounter(),
+    tokenCounter: dependencies.tokenCounter,
     trailingUserInstruction: buildOpeningInstruction(
       session,
       characterContext.character?.name ?? null,
       settings.profile.responseLanguage,
     ),
   });
-  const completion = await chatCompletionClient.completeChat({
+  const completion = await dependencies.chatCompletionClient.completeChat({
     endpoint,
     maxTokens: generationPlan.providerRequest.maxTokens,
     messages: generationPlan.providerRequest.messages,
     sampling: generationPlan.providerRequest.sampling,
-    signal: dependencies.signal,
+    signal: options.signal,
   });
   let sessionAfterFirstMessage: ChatSessionDto;
   try {
-    sessionAfterFirstMessage = await appendChatMessages(
+    sessionAfterFirstMessage = await dependencies.chats.appendChatMessages(
       command.chatId,
       [
         {
           role: 'assistant',
           content: completion.content,
-          createdAt: now().toISOString(),
+          createdAt: dependencies.clock.now().toISOString(),
         },
       ],
       { requireEmptyTranscript: true },

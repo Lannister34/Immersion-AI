@@ -7,6 +7,7 @@ import type {
   GenerationJobId,
   GenerationJobStatus,
 } from '@immersion/contracts/generation';
+import type { Clock } from '../../../platform/clock/clock.js';
 import { ChatReplyGenerationFailedError, ProviderGenerationError } from '../application/generation-errors.js';
 import {
   ActiveGenerationJobExistsError,
@@ -22,7 +23,8 @@ interface StoredGenerationJob {
 }
 
 export interface InMemoryGenerationJobRegistryOptions {
-  finishedJobTtlMs?: number;
+  readonly clock: Clock;
+  readonly finishedJobTtlMs?: number;
 }
 
 const DEFAULT_FINISHED_JOB_TTL_MS = 5 * 60 * 1000;
@@ -74,13 +76,15 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
   private readonly jobs = new Map<GenerationJobId, StoredGenerationJob>();
   private readonly subscribers = new Map<GenerationJobId, Set<GenerationJobEventSubscriber>>();
   private readonly evictionTimers = new Map<GenerationJobId, ReturnType<typeof setTimeout>>();
+  private readonly clock: Clock;
   private readonly finishedJobTtlMs: number;
 
-  constructor(options: InMemoryGenerationJobRegistryOptions = {}) {
+  constructor(options: InMemoryGenerationJobRegistryOptions) {
+    this.clock = options.clock;
     this.finishedJobTtlMs = options.finishedJobTtlMs ?? DEFAULT_FINISHED_JOB_TTL_MS;
   }
 
-  cancel(jobId: GenerationJobId) {
+  cancel(jobId: GenerationJobId): GenerationJobDto | null {
     const storedJob = this.jobs.get(jobId);
 
     if (!storedJob) {
@@ -93,7 +97,7 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
 
     storedJob.controller.abort();
     const canceledJob = this.updateJob(jobId, {
-      completedAt: new Date().toISOString(),
+      completedAt: this.timestamp(),
       error: null,
       status: 'canceled',
     });
@@ -106,14 +110,28 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
     return canceledJob;
   }
 
-  createChatReplyJob(input: CreateChatReplyGenerationJobInput) {
+  close(): void {
+    for (const [jobId, storedJob] of this.jobs) {
+      if (isActiveStatus(storedJob.dto.status)) {
+        this.cancel(jobId);
+      }
+    }
+
+    for (const timer of this.evictionTimers.values()) {
+      clearTimeout(timer);
+    }
+
+    this.evictionTimers.clear();
+  }
+
+  createChatReplyJob(input: CreateChatReplyGenerationJobInput): GenerationJobDto {
     const activeJob = this.findActiveChatReplyJob(input.chatId);
 
     if (activeJob) {
       throw new ActiveGenerationJobExistsError(input.chatId, activeJob);
     }
 
-    const now = new Date().toISOString();
+    const now = this.timestamp();
     const job: GenerationJobDto = {
       chatId: input.chatId,
       completedAt: null,
@@ -134,7 +152,7 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
     return cloneJob(job);
   }
 
-  fail(jobId: GenerationJobId, error: unknown) {
+  fail(jobId: GenerationJobId, error: unknown): GenerationJobDto | null {
     const storedJob = this.jobs.get(jobId);
 
     if (!storedJob) {
@@ -146,7 +164,7 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
     }
 
     const failedJob = this.updateJob(jobId, {
-      completedAt: new Date().toISOString(),
+      completedAt: this.timestamp(),
       error: toProblem(error),
       status: 'failed',
     });
@@ -159,13 +177,13 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
     return failedJob;
   }
 
-  get(jobId: GenerationJobId) {
+  get(jobId: GenerationJobId): GenerationJobDto | null {
     const storedJob = this.jobs.get(jobId);
 
     return storedJob ? cloneJob(storedJob.dto) : null;
   }
 
-  list(input: { chatId?: string } = {}) {
+  list(input: { chatId?: string } = {}): GenerationJobDto[] {
     return [...this.jobs.values()]
       .map((storedJob) => storedJob.dto)
       .filter((job) => !input.chatId || job.chatId === input.chatId)
@@ -173,7 +191,7 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
       .map(cloneJob);
   }
 
-  subscribe(jobId: GenerationJobId, subscriber: GenerationJobEventSubscriber) {
+  subscribe(jobId: GenerationJobId, subscriber: GenerationJobEventSubscriber): () => void {
     const subscribers = this.subscribers.get(jobId) ?? new Set<GenerationJobEventSubscriber>();
 
     subscribers.add(subscriber);
@@ -191,10 +209,14 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
   runChatReplyJob(
     jobId: GenerationJobId,
     runner: (input: ChatReplyGenerationJobRunnerInput) => Promise<ChatSessionDto>,
-  ) {
+  ): void {
     queueMicrotask(() => {
       void this.executeChatReplyJob(jobId, runner);
     });
+  }
+
+  private timestamp(): string {
+    return this.clock.now().toISOString();
   }
 
   private scheduleEviction(jobId: GenerationJobId) {
@@ -245,7 +267,7 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
     }
 
     const runningJob = this.updateJob(jobId, {
-      startedAt: new Date().toISOString(),
+      startedAt: this.timestamp(),
       status: 'running',
     });
 
@@ -272,7 +294,7 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
       }
 
       const completedJob = this.updateJob(jobId, {
-        completedAt: new Date().toISOString(),
+        completedAt: this.timestamp(),
         error: null,
         status: 'completed',
       });
@@ -294,7 +316,7 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
       }
 
       const failedJob = this.updateJob(jobId, {
-        completedAt: new Date().toISOString(),
+        completedAt: this.timestamp(),
         error: isAbortError(error) ? null : toProblem(error),
         status: isAbortError(error) ? 'canceled' : 'failed',
       });
@@ -319,7 +341,7 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
     const updatedJob: GenerationJobDto = {
       ...storedJob.dto,
       ...patch,
-      updatedAt: new Date().toISOString(),
+      updatedAt: this.timestamp(),
     };
 
     storedJob.dto = updatedJob;

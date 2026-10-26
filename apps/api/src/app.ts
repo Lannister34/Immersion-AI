@@ -49,6 +49,7 @@ export function buildApiApp(dependencies: ApiDependencies, modules: ApiModules):
   app.register(providersRoutes, { prefix: '/api/providers' });
   app.register(runtimeRoutes, { prefix: '/api/runtime' });
   app.register(modules.openAiCompat.routes, { prefix: '/v1' });
+  app.addHook('onClose', () => modules.generation.close());
 
   return app;
 }

@@ -19,21 +19,22 @@ import {
   ListGenerationJobsResponseSchema,
   StartChatReplyGenerationJobResponseSchema,
 } from '@immersion/contracts/generation';
-import { beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { appendChatMessages } from './modules/chats/index.js';
-import { getProviderVisionProbe } from './modules/providers/index.js';
+import { appendChatMessages, getChatSession } from './modules/chats/index.js';
+import type { VisionProbe } from './modules/providers/index.js';
 import { waitForGenerationJob } from './test-support/generation-jobs.js';
 import { readProviderChatRequest } from './test-support/provider-chat-request.js';
 import { openAiChatCompletion, openAiChatStream, providerFailure } from './test-support/provider-responses.js';
+import { createTestApi, type TestApi } from './test-support/test-api.js';
 import { useTestApi } from './test-support/use-test-api.js';
 
 const PROVIDER_URL = 'http://127.0.0.1:6006';
 const CHAT_COMPLETIONS_URL = `${PROVIDER_URL}/v1/chat/completions`;
-// TODO: count tokens on one port once each app owns its token counter (F-35)
-const LLAMA_TOKENIZER_PORT = 6011;
-const KOBOLD_TOKENIZER_PORT = 6012;
+const TOKENIZER_PORT = 6011;
+const TOKENIZER_URL = `http://127.0.0.1:${TOKENIZER_PORT}`;
+const LlamaTokenizeRequestSchema = z.object({ content: z.string() });
 const NO_SAMPLING_OVERRIDES: ChatSamplingOverridesDto = {
   contextTrimStrategy: null,
   maxContextLength: null,
@@ -48,13 +49,12 @@ const NO_SAMPLING_OVERRIDES: ChatSamplingOverridesDto = {
 };
 
 describe('generation routes', () => {
-  const api = useTestApi({ fixture: 'smoke' });
-  let visionSupportProbe: MockInstance<ReturnType<typeof getProviderVisionProbe>['getVisionSupport']>;
+  const visionSupportProbe = vi.fn<VisionProbe['getVisionSupport']>();
+  const api = useTestApi({ fixture: 'smoke', overrides: { visionProbe: { getVisionSupport: visionSupportProbe } } });
 
   beforeEach(async () => {
     await api().settings.useExternalProvider({ url: PROVIDER_URL });
-    // TODO: give the app its own vision probe instead of spying on the shared one (F-35)
-    visionSupportProbe = vi.spyOn(getProviderVisionProbe(), 'getVisionSupport').mockResolvedValue('unknown');
+    visionSupportProbe.mockReset().mockResolvedValue('unknown');
   });
 
   function answerWith(content: string) {
@@ -113,8 +113,8 @@ describe('generation routes', () => {
     });
   }
 
-  async function createChat() {
-    const createResponse = await api().app.inject({
+  async function createChat(testApi: TestApi = api()) {
+    const createResponse = await testApi.app.inject({
       method: 'POST',
       url: '/api/chats',
       payload: {
@@ -138,9 +138,14 @@ describe('generation routes', () => {
     return getMessagesByRole(GetChatSessionResponseSchema.parse(response.json()).messages);
   }
 
-  async function writeDetachedRuntimeState(modelPath: string, port = 6006, mmprojPath?: string | null) {
+  async function writeDetachedRuntimeState(
+    modelPath: string,
+    port = 6006,
+    mmprojPath?: string | null,
+    dataRoot = api().dataRoot,
+  ) {
     await fs.writeFile(
-      path.join(api().dataRoot, '.llm-server.json'),
+      path.join(dataRoot, '.llm-server.json'),
       JSON.stringify(
         {
           ...(mmprojPath === undefined ? {} : { mmprojPath }),
@@ -355,46 +360,61 @@ describe('generation routes', () => {
     expect(api().http.requestLines()).toEqual([]);
   });
 
-  it('reports exact token counting in preview via the llama-server tokenize endpoint', async () => {
-    const tokenizerUrl = `http://127.0.0.1:${LLAMA_TOKENIZER_PORT}`;
-    await api().settings.patch({
+  async function previewTokenizedTexts(testApi: TestApi, draftUserMessage: string) {
+    await testApi.settings.patch({
       backendMode: 'builtin',
     });
-    await writeDetachedRuntimeState(path.join(api().dataRoot, 'models', 'sandbox.gguf'), LLAMA_TOKENIZER_PORT);
-    api().http.on('POST', `${tokenizerUrl}/tokenize`, (request) => {
-      const { content } = request.json(z.object({ content: z.string() }));
+    await writeDetachedRuntimeState(
+      path.join(testApi.dataRoot, 'models', 'sandbox.gguf'),
+      TOKENIZER_PORT,
+      undefined,
+      testApi.dataRoot,
+    );
+    testApi.http.on('POST', `${TOKENIZER_URL}/tokenize`, (request) => {
+      const { content } = request.json(LlamaTokenizeRequestSchema);
 
       return Response.json({ tokens: Array.from({ length: Math.ceil(content.length / 3) }, (_, index) => index) });
     });
 
-    const chat = await createChat();
-    const response = await api().app.inject({
+    const chat = await createChat(testApi);
+    const response = await testApi.app.inject({
       method: 'POST',
       url: '/api/generation/chat-reply-preview',
       payload: {
         chatId: chat.id,
-        draftUserMessage: 'Считай токены точно через llama-server.',
+        draftUserMessage,
       },
     });
-    const payload = ChatReplyPromptPreviewResponseSchema.parse(response.json());
 
     expect(response.statusCode).toBe(200);
-    expect(payload.diagnostics.tokenCountMethod).toBe('exact');
-    expect(api().http.requestLines()).toContain(`POST ${tokenizerUrl}/tokenize`);
-    expect(
-      api()
-        .http.requestLines()
-        .filter((line) => line !== `POST ${tokenizerUrl}/tokenize`),
-    ).toEqual([]);
+    expect(ChatReplyPromptPreviewResponseSchema.parse(response.json()).diagnostics.tokenCountMethod).toBe('exact');
+    expect(testApi.http.requestLines().filter((line) => line !== `POST ${TOKENIZER_URL}/tokenize`)).toEqual([]);
+
+    return testApi.http.requests.map((request) => request.json(LlamaTokenizeRequestSchema).content);
+  }
+
+  it('reports exact token counting in preview via the llama-server tokenize endpoint', async () => {
+    const tokenizedTexts = await previewTokenizedTexts(api(), 'Считай токены точно через llama-server.');
+
+    expect(tokenizedTexts[0]).toBe('');
+    expect(tokenizedTexts.at(-1)).toContain('Считай токены точно через llama-server.');
+  });
+
+  it('token counts are cached per app', async () => {
+    const draft = 'Считай токены в каждом приложении заново.';
+    const firstAppTexts = await previewTokenizedTexts(api(), draft);
+    const secondAppTexts = await previewTokenizedTexts(await createTestApi({ fixture: 'smoke' }), draft);
+
+    expect(firstAppTexts[0]).toBe('');
+    expect(secondAppTexts).toEqual(firstAppTexts);
   });
 
   it('reports exact token counting in preview via the KoboldCpp tokencount endpoint', async () => {
-    const tokenizerUrl = `http://127.0.0.1:${KOBOLD_TOKENIZER_PORT}`;
     await api().settings.patch({
       backendMode: 'builtin',
     });
-    await writeDetachedRuntimeState(path.join(api().dataRoot, 'models', 'sandbox.gguf'), KOBOLD_TOKENIZER_PORT);
-    api().http.on('POST', `${tokenizerUrl}/api/extra/tokencount`, (request) => {
+    await writeDetachedRuntimeState(path.join(api().dataRoot, 'models', 'sandbox.gguf'), TOKENIZER_PORT);
+    api().http.on('POST', `${TOKENIZER_URL}/api/extra/tokencount`, (request) => {
       const { prompt } = request.json(z.object({ prompt: z.string() }));
 
       return Response.json({ value: Math.ceil(prompt.length / 3) });
@@ -413,11 +433,11 @@ describe('generation routes', () => {
 
     expect(response.statusCode).toBe(200);
     expect(payload.diagnostics.tokenCountMethod).toBe('exact');
-    expect(api().http.requestLines()).toContain(`POST ${tokenizerUrl}/api/extra/tokencount`);
+    expect(api().http.requestLines()).toContain(`POST ${TOKENIZER_URL}/api/extra/tokencount`);
     expect(
       api()
         .http.requestLines()
-        .filter((line) => !isTokenizerRequest(line, tokenizerUrl)),
+        .filter((line) => !isTokenizerRequest(line, TOKENIZER_URL)),
     ).toEqual([]);
   });
 
@@ -1048,6 +1068,52 @@ describe('generation routes', () => {
       method: 'POST',
       url: `/api/generation/jobs/${firstPayload.job.id}/cancel`,
     });
+  });
+
+  async function startHeldReplyJob(message: string) {
+    const provider = api().http.hold('POST', CHAT_COMPLETIONS_URL);
+    const chat = await createChat();
+    const response = await api().app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: {
+        chatId: chat.id,
+        message,
+      },
+    });
+    const { job } = StartChatReplyGenerationJobResponseSchema.parse(response.json());
+
+    return { chat, job, providerRequest: await provider.started };
+  }
+
+  it('jobs of one app are invisible to another app', async () => {
+    const { job } = await startHeldReplyJob('Only the first app runs this job.');
+    const otherApp = (await createTestApi({ fixture: 'smoke' })).app;
+
+    const otherJobResponse = await otherApp.inject({ method: 'GET', url: `/api/generation/jobs/${job.id}` });
+    const otherJobsResponse = await otherApp.inject({ method: 'GET', url: '/api/generation/jobs' });
+    const ownJobsResponse = await api().app.inject({ method: 'GET', url: '/api/generation/jobs' });
+
+    expect(otherJobResponse.statusCode).toBe(404);
+    expect(ListGenerationJobsResponseSchema.parse(otherJobsResponse.json()).items).toEqual([]);
+    expect(ListGenerationJobsResponseSchema.parse(ownJobsResponse.json()).items).toEqual([
+      expect.objectContaining({ id: job.id, status: 'running' }),
+    ]);
+  });
+
+  it('closing the app cancels active jobs', async () => {
+    const { chat, job, providerRequest } = await startHeldReplyJob('Close the app while I am generating.');
+
+    await api().app.close();
+
+    expect(api().dependencies.generationJobs.get(job.id)).toMatchObject({ error: null, status: 'canceled' });
+    expect(providerRequest.signal?.aborted).toBe(true);
+    expect(getMessagesByRole((await getChatSession(chat.id))?.messages ?? [])).toEqual([
+      {
+        role: 'user',
+        content: 'Close the app while I am generating.',
+      },
+    ]);
   });
 
   it('regenerates the last assistant reply by dropping it and producing a new one from the same user turn', async () => {

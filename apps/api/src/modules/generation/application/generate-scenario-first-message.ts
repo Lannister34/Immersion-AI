@@ -13,7 +13,7 @@ import {
   resolveDraftGenerationContext,
 } from './draft-generation-support.js';
 import { ProviderGenerationError } from './generation-errors.js';
-import type { DraftGenerationDependencies, DraftGenerationOptions } from './generation-ports.js';
+import type { DraftGenerationDependencies, GenerationOptions } from './generation-ports.js';
 import { SKIP_THINKING_SERVER_EXTENSIONS } from './skip-thinking-server-extensions.js';
 
 const SCENARIO_FIRST_MESSAGE_MAX_TOKENS = 512;
@@ -65,7 +65,7 @@ Use {{user}} and {{char}} as literal placeholders — they will be substituted a
 export async function generateScenarioFirstMessage(
   command: GenerateScenarioFirstMessageCommand,
   dependencies: DraftGenerationDependencies,
-  options: DraftGenerationOptions = {},
+  options: GenerationOptions = {},
 ): Promise<GenerateScenarioFirstMessageResponse> {
   const context = await resolveDraftGenerationContext(dependencies);
   const completion = await dependencies.chatCompletionClient.completeChat({

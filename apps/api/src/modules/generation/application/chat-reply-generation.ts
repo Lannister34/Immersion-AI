@@ -6,21 +6,11 @@ import type {
 } from '@immersion/contracts/generation';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
 import type { ReplyChannel } from '@immersion/domain/generation';
-import { globalHttpFetch } from '../../../platform/outbound-http/global-http-fetch.js';
-import { appendChatMessages } from '../../chats/application/append-chat-messages.js';
-import { readChatAttachmentDataUrl, resolveChatAttachments } from '../../chats/application/chat-attachments.js';
-import { ChatLastMessageChangedError } from '../../chats/application/chat-conflicts.js';
-import { appendAssistantMessageContinuation } from '../../chats/application/continue-last-assistant-message.js';
-import { loadChatPromptContext } from '../../prompting/application/load-chat-prompt-context.js';
-import { InvalidChatGenerationSettingsResolutionError } from '../../prompting/application/resolve-chat-generation-settings.js';
-import { resolveChatReplyGenerationPlan } from '../../prompting/application/resolve-chat-reply-generation-plan.js';
-import {
-  GenerationProviderUnavailableError,
-  resolveGenerationProviderEndpoint,
-} from '../../providers/application/generation-provider.js';
-import { getSettingsOverview } from '../../settings/application/get-settings-overview.js';
-import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
-import { getProviderTokenCounter } from '../infrastructure/provider-clients/shared-token-counter.js';
+
+import type { Clock } from '../../../platform/clock/clock.js';
+import { ChatLastMessageChangedError } from '../../chats/index.js';
+import { InvalidChatGenerationSettingsResolutionError, type TokenCounter } from '../../prompting/index.js';
+import { GenerationProviderUnavailableError } from '../../providers/index.js';
 import type { ChatCompletionClient, ChatCompletionResponse } from './chat-completion-client.js';
 import {
   ChatReplyGenerationFailedError,
@@ -28,12 +18,33 @@ import {
   NothingToContinueError,
   ProviderGenerationError,
 } from './generation-errors.js';
+import type {
+  ChatSessionPort,
+  GenerationOptions,
+  GenerationSettingsSource,
+  PromptPlanPort,
+  ProviderEndpointResolver,
+} from './generation-ports.js';
 
 export interface ChatReplyGenerationDependencies {
-  onDelta?: ((delta: string, channel: ReplyChannel) => void) | undefined;
-  chatCompletionClient?: ChatCompletionClient;
-  now?: () => Date;
-  signal?: AbortSignal;
+  readonly chatCompletionClient: ChatCompletionClient;
+  readonly chats: Pick<
+    ChatSessionPort,
+    | 'appendAssistantMessageContinuation'
+    | 'appendChatMessages'
+    | 'getChatSession'
+    | 'readChatAttachmentDataUrl'
+    | 'resolveChatAttachments'
+  >;
+  readonly clock: Clock;
+  readonly prompting: Pick<PromptPlanPort, 'loadChatPromptContext' | 'resolveChatReplyGenerationPlan'>;
+  readonly providers: ProviderEndpointResolver;
+  readonly settings: GenerationSettingsSource;
+  readonly tokenCounter: TokenCounter;
+}
+
+export interface ChatReplyGenerationOptions extends GenerationOptions {
+  readonly onDelta?: ((delta: string, channel: ReplyChannel) => void) | undefined;
 }
 
 const CONTINUE_REPLY_INSTRUCTION = [
@@ -81,20 +92,17 @@ function mapChatReplyGenerationError(error: unknown, session: ChatSessionDto): u
 async function runChatCompletionForSession(
   session: ChatSessionDto,
   dependencies: ChatReplyGenerationDependencies,
+  options: ChatReplyGenerationOptions,
   buildTrailingInstruction?: (settings: SettingsOverviewResponse) => string,
 ): Promise<ChatCompletionResponse> {
-  // TODO: require the chat completion client from the composition root (F-35)
-  const chatCompletionClient =
-    dependencies.chatCompletionClient ?? createChatCompletionClient({ httpFetch: globalHttpFetch });
-
   try {
-    throwIfAborted(dependencies.signal);
+    throwIfAborted(options.signal);
 
-    const endpoint = await resolveGenerationProviderEndpoint();
-    const settings = getSettingsOverview();
-    const characterContext = await loadChatPromptContext(session);
-    const messageImages = await loadMessageImages(session);
-    const generationPlan = await resolveChatReplyGenerationPlan({
+    const endpoint = await dependencies.providers.resolveGenerationProviderEndpoint();
+    const settings = dependencies.settings.getSettingsOverview();
+    const characterContext = await dependencies.prompting.loadChatPromptContext(session);
+    const messageImages = await loadMessageImages(session, dependencies.chats);
+    const generationPlan = await dependencies.prompting.resolveChatReplyGenerationPlan({
       character: characterContext.character,
       characterScenarioContent: characterContext.characterScenarioContent,
       lorebookSections: characterContext.lorebookSections,
@@ -102,20 +110,20 @@ async function runChatCompletionForSession(
       providerModelName: endpoint.model,
       session,
       settings,
-      tokenCounter: getProviderTokenCounter(),
+      tokenCounter: dependencies.tokenCounter,
       trailingUserInstruction: buildTrailingInstruction ? buildTrailingInstruction(settings) : null,
     });
-    const streamingDelta = settings.profile.streamingEnabled ? dependencies.onDelta : undefined;
-    const completion = await chatCompletionClient.completeChat({
+    const streamingDelta = settings.profile.streamingEnabled ? options.onDelta : undefined;
+    const completion = await dependencies.chatCompletionClient.completeChat({
       endpoint,
       maxTokens: generationPlan.providerRequest.maxTokens,
       messages: generationPlan.providerRequest.messages,
       ...(streamingDelta ? { onDelta: streamingDelta } : {}),
       sampling: generationPlan.providerRequest.sampling,
-      signal: dependencies.signal,
+      signal: options.signal,
     });
 
-    throwIfAborted(dependencies.signal);
+    throwIfAborted(options.signal);
 
     return completion;
   } catch (error) {
@@ -123,7 +131,10 @@ async function runChatCompletionForSession(
   }
 }
 
-async function loadMessageImages(session: ChatSessionDto): Promise<ReadonlyMap<string, string[]>> {
+async function loadMessageImages(
+  session: ChatSessionDto,
+  chats: Pick<ChatSessionPort, 'readChatAttachmentDataUrl'>,
+): Promise<ReadonlyMap<string, string[]>> {
   const images = new Map<string, string[]>();
 
   for (const message of session.messages) {
@@ -134,7 +145,7 @@ async function loadMessageImages(session: ChatSessionDto): Promise<ReadonlyMap<s
     const dataUrls: string[] = [];
 
     for (const attachment of message.attachments) {
-      const dataUrl = await readChatAttachmentDataUrl(session.chat.id, attachment.id);
+      const dataUrl = await chats.readChatAttachmentDataUrl(session.chat.id, attachment.id);
 
       if (dataUrl) {
         dataUrls.push(dataUrl);
@@ -151,16 +162,16 @@ async function loadMessageImages(session: ChatSessionDto): Promise<ReadonlyMap<s
 
 export async function appendUserMessageForChatReply(
   command: StartChatReplyCommand,
-  now: () => Date,
+  dependencies: Pick<ChatReplyGenerationDependencies, 'chats' | 'clock'>,
 ): Promise<ChatSessionDto> {
-  const attachments = await resolveChatAttachments(command.chatId, command.attachmentIds ?? []);
+  const attachments = await dependencies.chats.resolveChatAttachments(command.chatId, command.attachmentIds ?? []);
 
-  return appendChatMessages(command.chatId, [
+  return dependencies.chats.appendChatMessages(command.chatId, [
     {
       attachments,
       role: 'user',
       content: command.message,
-      createdAt: now().toISOString(),
+      createdAt: dependencies.clock.now().toISOString(),
     },
   ]);
 }
@@ -168,15 +179,15 @@ export async function appendUserMessageForChatReply(
 export async function completeChatReplyForSession(
   command: Pick<StartChatReplyCommand, 'chatId'>,
   sessionAfterUserMessage: ChatSessionDto,
-  dependencies: ChatReplyGenerationDependencies = {},
+  dependencies: ChatReplyGenerationDependencies,
+  options: ChatReplyGenerationOptions = {},
 ): Promise<ChatReplyGenerationResponse> {
-  const now = dependencies.now ?? (() => new Date());
-  const content = await runChatCompletionForSession(sessionAfterUserMessage, dependencies);
-  const sessionAfterGeneratedExchange = await appendChatMessages(command.chatId, [
+  const content = await runChatCompletionForSession(sessionAfterUserMessage, dependencies, options);
+  const sessionAfterGeneratedExchange = await dependencies.chats.appendChatMessages(command.chatId, [
     {
       role: 'assistant',
       content: content.content,
-      createdAt: now().toISOString(),
+      createdAt: dependencies.clock.now().toISOString(),
       reasoning: content.reasoning,
     },
   ]);
@@ -209,23 +220,24 @@ export function getContinuableAssistantMessage(chatId: string, session: ChatSess
 export async function completeChatReplyContinuationForSession(
   command: ContinueChatReplyCommand,
   session: ChatSessionDto,
-  dependencies: ChatReplyGenerationDependencies = {},
+  dependencies: ChatReplyGenerationDependencies,
+  options: ChatReplyGenerationOptions = {},
 ): Promise<ChatReplyGenerationResponse> {
-  const now = dependencies.now ?? (() => new Date());
   const lastMessage = getContinuableAssistantMessage(command.chatId, session);
   const continuationResponse = await runChatCompletionForSession(
     session,
     dependencies,
+    options,
     (settings) =>
       `${CONTINUE_REPLY_INSTRUCTION} ${buildContinuationLanguageSentence(settings.profile.responseLanguage)}`,
   );
 
   try {
-    const sessionAfterContinuation = await appendAssistantMessageContinuation(command.chatId, {
+    const sessionAfterContinuation = await dependencies.chats.appendAssistantMessageContinuation(command.chatId, {
       continuation: continuationResponse.content,
       expectedContentPrefix: lastMessage.content,
       expectedMessageIndex: session.messages.length,
-      updatedAt: now().toISOString(),
+      updatedAt: dependencies.clock.now().toISOString(),
     });
 
     return {

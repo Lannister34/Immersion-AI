@@ -6,14 +6,20 @@ import {
 } from '@immersion/contracts/generation';
 import type { ProviderSettingsSnapshot } from '@immersion/contracts/providers';
 import type { RuntimeOverviewResponse } from '@immersion/contracts/runtime';
-import {
-  normalizeGenerationProviderBaseUrl,
-  resolveGenerationProviderEndpoint,
-} from '../../providers/application/generation-provider.js';
-import { getProviderSettings } from '../../providers/application/get-provider-settings.js';
-import { findCloudProviderReadinessIssue, getProviderVisionProbe } from '../../providers/index.js';
-import { getRuntimeOverview } from '../../runtime/application/get-runtime-overview.js';
-import { getRunningRuntimeEndpoint } from '../../runtime/index.js';
+
+import { findCloudProviderReadinessIssue, normalizeGenerationProviderBaseUrl } from '../../providers/index.js';
+import type {
+  ProviderEndpointResolver,
+  ProviderSettingsReader,
+  RuntimeEndpointSource,
+  VisionSupportProbe,
+} from './generation-ports.js';
+
+export interface GenerationReadinessDependencies {
+  readonly providers: ProviderEndpointResolver & ProviderSettingsReader;
+  readonly runtime: RuntimeEndpointSource;
+  readonly visionProbe: VisionSupportProbe;
+}
 
 function toRuntimeSummary(runtime: RuntimeOverviewResponse) {
   return {
@@ -56,8 +62,11 @@ function getConfiguredExternalUrl(settings: ProviderSettingsSnapshot) {
   return typeof url === 'string' ? url.trim() : '';
 }
 
-async function getBuiltinReadiness(settings: ProviderSettingsSnapshot): Promise<GenerationReadinessResponse> {
-  const runtime = await getRuntimeOverview();
+async function getBuiltinReadiness(
+  settings: ProviderSettingsSnapshot,
+  runtimeSource: Pick<RuntimeEndpointSource, 'getRuntimeOverview'>,
+): Promise<GenerationReadinessResponse> {
+  const runtime = await runtimeSource.getRuntimeOverview();
 
   if (runtime.serverStatus.status === 'running') {
     return GenerationReadinessResponseSchema.parse({
@@ -176,14 +185,17 @@ export function resolveBuiltinVisionSupport(visionProjectorPath: string | null):
   return visionProjectorPath ? 'supported' : 'unsupported';
 }
 
-async function withVisionSupport(readiness: GenerationReadinessResponse): Promise<GenerationReadinessResponse> {
+async function withVisionSupport(
+  readiness: GenerationReadinessResponse,
+  dependencies: GenerationReadinessDependencies,
+): Promise<GenerationReadinessResponse> {
   if (readiness.status !== 'ready') {
     return readiness;
   }
 
   try {
     if (readiness.mode === 'builtin') {
-      const runtimeEndpoint = await getRunningRuntimeEndpoint();
+      const runtimeEndpoint = await dependencies.runtime.getRunningRuntimeEndpoint();
 
       return {
         ...readiness,
@@ -191,8 +203,8 @@ async function withVisionSupport(readiness: GenerationReadinessResponse): Promis
       };
     }
 
-    const endpoint = await resolveGenerationProviderEndpoint();
-    const visionSupport = await getProviderVisionProbe().getVisionSupport({
+    const endpoint = await dependencies.providers.resolveGenerationProviderEndpoint();
+    const visionSupport = await dependencies.visionProbe.getVisionSupport({
       baseUrl: endpoint.baseUrl,
       model: endpoint.model,
       provider: readiness.activeProvider,
@@ -204,9 +216,14 @@ async function withVisionSupport(readiness: GenerationReadinessResponse): Promis
   }
 }
 
-export async function getGenerationReadiness(): Promise<GenerationReadinessResponse> {
-  const settings = await getProviderSettings();
-  const readiness = settings.mode === 'builtin' ? await getBuiltinReadiness(settings) : getExternalReadiness(settings);
+export async function getGenerationReadiness(
+  dependencies: GenerationReadinessDependencies,
+): Promise<GenerationReadinessResponse> {
+  const settings = await dependencies.providers.getProviderSettings();
+  const readiness =
+    settings.mode === 'builtin'
+      ? await getBuiltinReadiness(settings, dependencies.runtime)
+      : getExternalReadiness(settings);
 
-  return withVisionSupport(readiness);
+  return withVisionSupport(readiness, dependencies);
 }
