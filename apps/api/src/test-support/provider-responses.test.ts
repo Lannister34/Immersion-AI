@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   anthropicMessage,
   anthropicMessageStream,
+  bodyHeldUntilAborted,
   eventStream,
   openAiChatCompletion,
   openAiChatStream,
@@ -67,5 +68,27 @@ describe('provider responses', () => {
     expect(await completion.json()).toEqual({
       choices: [{ finish_reason: 'length', message: { content: '{"name": "Ария", "scenario": "' } }],
     });
+  });
+
+  it('holds a body after its first chunk and errors it with the abort reason itself, as fetch does', async () => {
+    const controller = new AbortController();
+    const reason = new DOMException('Клиент ушёл.', 'AbortError');
+    const response = bodyHeldUntilAborted(controller.signal, 'application/json', '{"content":');
+    const reader = response.body?.getReader();
+
+    expect(response.headers.get('content-type')).toBe('application/json');
+    expect(new TextDecoder().decode((await reader?.read())?.value)).toBe('{"content":');
+    controller.abort(reason);
+
+    await expect(reader?.read()).rejects.toBe(reason);
+  });
+
+  it('errors a body at once when its signal has already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(bodyHeldUntilAborted(controller.signal, 'application/json', '{').text()).rejects.toBe(
+      controller.signal.reason,
+    );
   });
 });

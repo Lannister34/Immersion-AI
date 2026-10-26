@@ -4,7 +4,10 @@ import type { ServerResponse } from 'node:http';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 
 import type { Clock } from '../../../../platform/clock/clock.js';
-import { clientDisconnectSignal } from '../../../../platform/http/client-disconnect-signal.js';
+import {
+  clientDisconnectSignal,
+  handledAsClientDisconnect,
+} from '../../../../platform/http/client-disconnect-signal.js';
 import { parseRequest } from '../../../../platform/http/parse-request.js';
 import { installNotFoundHandler, installProblemHandler } from '../../../../platform/http/problem-handler.js';
 import { GenerationProviderUnavailableError } from '../../../providers/index.js';
@@ -203,13 +206,15 @@ export function createOpenAiCompatRoutes(dependencies: OpenAiCompatRoutesDepende
           throw error;
         }
 
-        request.log.error({ err: error }, 'OpenAI-compatible chat completion failed after its stream opened');
-        writeSseData(
-          reply.raw,
-          toOpenAiErrorEnvelope(openAiCompatProblems.map(error) ?? toUnexpectedOpenAiProblem(error)),
-        );
+        if (!handledAsClientDisconnect(error, reply)) {
+          request.log.error({ err: error }, 'OpenAI-compatible chat completion failed after its stream opened');
+          writeSseData(
+            reply.raw,
+            toOpenAiErrorEnvelope(openAiCompatProblems.map(error) ?? toUnexpectedOpenAiProblem(error)),
+          );
+        }
       } finally {
-        if (streamOpened) {
+        if (streamOpened && !signal.aborted) {
           reply.raw.write('data: [DONE]\n\n');
           reply.raw.end();
         }

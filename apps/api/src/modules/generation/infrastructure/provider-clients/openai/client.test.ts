@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { createDeferred } from '../../../../../test-support/deferred.js';
 import { createHttpStub } from '../../../../../test-support/http-stub.js';
 import { readProviderChatRequest } from '../../../../../test-support/provider-chat-request.js';
 import {
+  bodyHeldUntilAborted,
   eventStream,
   eventStreamResponse,
   openAiChatCompletion,
@@ -360,5 +362,29 @@ describe('OpenAiClient streaming', () => {
 
     expect(sent.signal?.aborted).toBe(true);
     await expect(completion).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it.each([
+    ['JSON reply', 'application/json', '{"choices":', false],
+    ['streamed reply', 'text/event-stream', 'data: {"choices":[{"delta":{"content":"Пе"}}]}\n\n', true],
+  ])('rethrows the caller abort itself, not a provider failure, when it cuts the %s short', async (_name, contentType, firstChunk, streamed) => {
+    const http = createHttpStub();
+    const controller = new AbortController();
+    const replyStarted = createDeferred();
+    http.on('POST', COMPLETIONS_URL, (request) => {
+      replyStarted.resolve();
+
+      return bodyHeldUntilAborted(request.signal, contentType, firstChunk);
+    });
+
+    const completion = new OpenAiClient({ httpFetch: http.fetch }).completeChat({
+      ...BASE_REQUEST,
+      ...(streamed ? { onDelta: () => undefined } : {}),
+      signal: controller.signal,
+    });
+    await replyStarted.promise;
+    controller.abort(new DOMException('Клиент ушёл.', 'AbortError'));
+
+    await expect(completion).rejects.toBe(controller.signal.reason);
   });
 });

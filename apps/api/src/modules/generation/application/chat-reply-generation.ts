@@ -53,12 +53,6 @@ const CONTINUE_REPLY_INSTRUCTION = [
   'output only the continuation text.',
 ].join(' ');
 
-function throwIfAborted(signal: AbortSignal | undefined) {
-  if (signal?.aborted) {
-    throw new DOMException('Generation was canceled.', 'AbortError');
-  }
-}
-
 function buildContinuationLanguageSentence(
   responseLanguage: SettingsOverviewResponse['profile']['responseLanguage'],
 ): string {
@@ -96,7 +90,7 @@ async function runChatCompletionForSession(
   buildTrailingInstruction?: (settings: SettingsOverviewResponse) => string,
 ): Promise<ChatCompletionResponse> {
   try {
-    throwIfAborted(options.signal);
+    options.signal?.throwIfAborted();
 
     const endpoint = await dependencies.providers.resolveGenerationProviderEndpoint();
     const settings = dependencies.settings.getSettingsOverview();
@@ -123,7 +117,7 @@ async function runChatCompletionForSession(
       signal: options.signal,
     });
 
-    throwIfAborted(options.signal);
+    options.signal?.throwIfAborted();
 
     return completion;
   } catch (error) {

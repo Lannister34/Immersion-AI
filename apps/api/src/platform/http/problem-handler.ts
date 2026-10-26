@@ -6,6 +6,7 @@ import type {
   RawServerDefault,
 } from 'fastify';
 
+import { handledAsClientDisconnect } from './client-disconnect-signal.js';
 import { type Problem, problem } from './problem.js';
 import type { ProblemTable } from './problem-table.js';
 
@@ -40,6 +41,10 @@ export function installProblemHandler<Logger extends FastifyBaseLogger>(
   const renderUnexpected = options.renderUnexpected ?? (() => UNEXPECTED_PROBLEM);
 
   app.setErrorHandler((error, request, reply) => {
+    if (handledAsClientDisconnect(error, reply)) {
+      return;
+    }
+
     const mapped = options.table.map(error);
 
     if (mapped === null) {
