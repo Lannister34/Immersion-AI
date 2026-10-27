@@ -769,7 +769,7 @@ describe('OpenAI-compatible endpoint on an injected chat completion client', () 
     expect(payload.choices[0].message.content).toBe('Ответ без сети.');
     expect(payload.created).toBe(clockStart.getTime() / 1000);
     expect(client.requests.map((request) => request.endpoint)).toEqual([
-      { apiKey: null, apiKind: 'openai-compatible', baseUrl: PROVIDER_URL, model: 'fixture-model' },
+      { apiKey: null, apiKind: 'openai-compatible', baseUrl: PROVIDER_URL, contextSize: null, model: 'fixture-model' },
     ]);
     expect(api.http.requests).toEqual([]);
   });

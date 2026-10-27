@@ -34,6 +34,7 @@ describe('createChatCompletionClient', () => {
         apiKey: 'sk-ant-test',
         apiKind: 'anthropic',
         baseUrl: 'https://api.anthropic.com/v1',
+        contextSize: null,
         model: 'claude-sonnet-4-5',
       }),
     );
@@ -42,6 +43,7 @@ describe('createChatCompletionClient', () => {
         apiKey: null,
         apiKind: 'openai-compatible',
         baseUrl: 'http://127.0.0.1:5001',
+        contextSize: null,
         model: 'local-model',
       }),
     );

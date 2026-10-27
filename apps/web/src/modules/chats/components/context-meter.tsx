@@ -14,6 +14,24 @@ function formatNumber(value: number): string {
   return value.toLocaleString('ru-RU');
 }
 
+interface RuntimeLimitBadgeProps {
+  stats: ContextStats;
+}
+
+function RuntimeLimitBadge({ stats }: RuntimeLimitBadgeProps) {
+  const requested =
+    stats.presetContextWindow > 0
+      ? `предустановка просит ${formatNumber(stats.presetContextWindow)}`
+      : 'окно не ограничено';
+  const hint = `Встроенный сервер запущен с контекстом ${formatNumber(stats.contextWindow)} токенов, а ${requested}. Промпт обрезается по окну сервера. Увеличьте контекст в «API / Сервер → Параметры» и перезапустите модель.`;
+
+  return (
+    <span className="pill pill--warn mt-4" title={hint}>
+      окно ограничено сервером
+    </span>
+  );
+}
+
 function OnlyLastMessageBadge() {
   return (
     <span className="pill pill--warn mt-4" title={ONLY_LAST_MESSAGE_HINT}>
@@ -61,7 +79,7 @@ export function ContextMeter({ stats }: ContextMeterProps) {
     ['обрезано сообщений', formatNumber(stats.trimmedMessageCount)],
   ];
   const tailRows: [string, string][] = [
-    ['окно контекста', formatNumber(stats.contextWindow)],
+    ['окно контекста', `${formatNumber(stats.contextWindow)}${stats.limitedByRuntime ? ' (сервер)' : ''}`],
     ['лимит ответа', formatNumber(stats.replyLimit)],
     ['предустановка', stats.presetName ?? '—'],
     ['подсчёт', isApproximate ? 'приблизительный' : 'точный'],
@@ -93,6 +111,7 @@ export function ContextMeter({ stats }: ContextMeterProps) {
             />
           </span>
           {stats.onlyLastMessageFits ? <OnlyLastMessageBadge /> : null}
+          {stats.limitedByRuntime ? <RuntimeLimitBadge stats={stats} /> : null}
         </span>
         <ChevronDownIcon className="chevron" size={12} />
       </button>

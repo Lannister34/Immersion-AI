@@ -1,4 +1,5 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
+import type { PromptContextWindow } from '@immersion/contracts/generation';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
 import type { PromptCharacterSnapshot } from '@immersion/domain/prompting';
 
@@ -7,6 +8,7 @@ import {
   type ChatReplyPromptBundle,
   type ChatReplyPromptMessage,
 } from './build-chat-reply-prompt.js';
+import { resolvePromptContextWindow } from './prompt-context-window.js';
 import type { GenerationSettingsSource } from './prompting-ports.js';
 import {
   type ResolvedChatGenerationSamplingSettings,
@@ -32,6 +34,7 @@ export interface ChatReplyProviderRequestPlan {
 }
 
 export interface ChatReplyGenerationPlan {
+  contextWindow: PromptContextWindow;
   effectiveSettings: ResolvedChatGenerationSettings;
   prompt: ChatReplyPromptBundle;
   providerRequest: ChatReplyProviderRequestPlan;
@@ -42,6 +45,7 @@ export interface ResolveChatReplyGenerationPlanInput {
   characterScenarioContent?: string | null;
   lorebookSections?: string[];
   messageImages?: ReadonlyMap<string, string[]>;
+  providerContextSize: number | null;
   providerModelName: string | null;
   session: ChatSessionDto;
   settings?: SettingsOverviewResponse;
@@ -55,11 +59,12 @@ export interface ResolveChatReplyGenerationPlanDependencies {
 
 function toPromptSamplerPreset(
   resolvedSettings: ResolvedChatGenerationSettings,
+  contextWindow: PromptContextWindow,
 ): ResolvedChatGenerationSettings['samplerPreset'] {
   return {
     ...resolvedSettings.samplerPreset,
     contextTrimStrategy: resolvedSettings.sampling.contextTrimStrategy,
-    maxContextLength: resolvedSettings.sampling.maxContextLength,
+    maxContextLength: contextWindow.size,
     maxTokens: resolvedSettings.sampling.maxTokens,
   };
 }
@@ -86,13 +91,17 @@ export async function resolveChatReplyGenerationPlan(
     input.providerModelName,
     input.session.generationSettings,
   );
+  const contextWindow = resolvePromptContextWindow(
+    effectiveSettings.sampling.maxContextLength,
+    input.providerContextSize,
+  );
   const prompt = await buildChatReplyPromptBundleWithTokenCounter(
     {
       character: input.character ?? null,
       characterScenarioContent: input.characterScenarioContent ?? null,
       lorebookSections: input.lorebookSections ?? [],
       ...(input.messageImages ? { messageImages: input.messageImages } : {}),
-      samplerPreset: toPromptSamplerPreset(effectiveSettings),
+      samplerPreset: toPromptSamplerPreset(effectiveSettings, contextWindow),
       session: input.session,
       settings,
       trailingUserInstruction: input.trailingUserInstruction ?? null,
@@ -101,6 +110,7 @@ export async function resolveChatReplyGenerationPlan(
   );
 
   return {
+    contextWindow,
     effectiveSettings,
     prompt,
     providerRequest: {

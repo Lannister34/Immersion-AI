@@ -19,6 +19,7 @@ import {
   ListGenerationJobsResponseSchema,
   StartChatReplyGenerationJobResponseSchema,
 } from '@immersion/contracts/generation';
+import type { RuntimeLaunchConfig } from '@immersion/contracts/runtime';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -147,12 +148,14 @@ describe('generation routes', () => {
     port = 6006,
     mmprojPath?: string | null,
     dataRoot = api().dataRoot,
+    launchConfig?: RuntimeLaunchConfig,
   ) {
     await fs.writeFile(
       path.join(dataRoot, '.llm-server.json'),
       JSON.stringify(
         {
           ...(mmprojPath === undefined ? {} : { mmprojPath }),
+          ...(launchConfig === undefined ? {} : { launchConfig }),
           model: path.basename(modelPath),
           modelPath,
           // TODO: seed a fake runtime process instead of claiming the test process as llama-server (F-41)
@@ -1514,6 +1517,63 @@ describe('generation routes', () => {
     expect(promptMessages.map((message) => message.content).join('\n')).not.toContain('OLD_CONTEXT');
     expect(promptMessages.at(-2)?.content).toBe('PARTIAL_REPLY');
     expect(promptMessages.at(-1)?.content).toContain('Continue your previous reply');
+  });
+
+  it("budgets the built-in reply against the running llama-server's context, not a larger preset window it would cut silently", async () => {
+    answerWith('Ответ в окне сервера.');
+    await api().settings.patch({ backendMode: 'builtin' });
+    await writeDetachedRuntimeState(path.join(api().dataRoot, 'models', 'sandbox.gguf'), 6006, undefined, undefined, {
+      contextSize: 74,
+      flashAttention: false,
+      gpuLayers: 0,
+      threads: 0,
+    });
+    const chat = await createChat();
+    await appendChatMessages(chat.id, [
+      { role: 'user', content: 'OLD_CONTEXT '.repeat(20), createdAt: '2026-01-01T00:00:00.000Z' },
+      { role: 'assistant', content: 'Старый ответ.', createdAt: '2026-01-01T00:00:01.000Z' },
+    ]);
+    await updateChatGenerationSettings(chat.id, {
+      additionalInstructions: null,
+      samplerPresetId: null,
+      systemPrompt: null,
+      sampling: {
+        ...NO_SAMPLING_OVERRIDES,
+        contextTrimStrategy: 'trim_start',
+        maxContextLength: 32_256,
+        maxTokens: 24,
+      },
+    });
+
+    const preview = ChatReplyPromptPreviewResponseSchema.parse(
+      (
+        await api().app.inject({
+          method: 'POST',
+          url: '/api/generation/chat-reply-preview',
+          payload: { chatId: chat.id, draftUserMessage: 'Новый вопрос.' },
+        })
+      ).json(),
+    );
+    const response = await api().app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: { chatId: chat.id, message: 'Новый вопрос.', mode: 'reply' },
+    });
+    await waitForGenerationJob(
+      api(),
+      StartChatReplyGenerationJobResponseSchema.parse(response.json()).job.id,
+      'completed',
+    );
+    const promptText = sentBody(api().http.requestLines().indexOf(`POST ${CHAT_COMPLETIONS_URL}`))
+      .messages.map((message) => message.content)
+      .join('\n');
+
+    expect(preview.provider.contextSize).toBe(74);
+    expect(preview.diagnostics.contextWindow).toEqual({ size: 74, source: 'runtime' });
+    expect(preview.effectiveSettings.sampling.maxContextLength).toBe(32_256);
+    expect(preview.diagnostics.trimmedMessageCount).toBeGreaterThan(0);
+    expect(promptText).not.toContain('OLD_CONTEXT');
+    expect(promptText).toContain('Новый вопрос.');
   });
 
   it('answers the last user message without appending a new one', async () => {

@@ -101,6 +101,7 @@ async function runChatCompletionForSession(
       characterScenarioContent: characterContext.characterScenarioContent,
       lorebookSections: characterContext.lorebookSections,
       messageImages,
+      providerContextSize: endpoint.contextSize,
       providerModelName: endpoint.model,
       session,
       settings,

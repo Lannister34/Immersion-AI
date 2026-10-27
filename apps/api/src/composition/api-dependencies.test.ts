@@ -91,7 +91,13 @@ describe('createApiDependencies', () => {
     const dependencies = createApiDependencies(parseApiConfig({}, projectRoot), { httpFetch: http.fetch });
 
     const completion = await dependencies.chatCompletionClient.completeChat({
-      endpoint: { apiKey: null, apiKind: 'openai-compatible', baseUrl: 'http://127.0.0.1:6007', model: 'm' },
+      endpoint: {
+        apiKey: null,
+        apiKind: 'openai-compatible',
+        baseUrl: 'http://127.0.0.1:6007',
+        contextSize: null,
+        model: 'm',
+      },
       maxTokens: 8,
       messages: [{ content: 'Скажи привет.', role: 'user' }],
       sampling: {

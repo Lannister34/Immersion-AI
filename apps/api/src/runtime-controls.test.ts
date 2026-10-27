@@ -90,6 +90,41 @@ describe('runtime control routes', () => {
     expect(stored.llmServerConfig).toMatchObject(command);
   });
 
+  it('merges a partial runtime config into the stored one, so the launch and directory forms never undo each other', async () => {
+    const { app, settings } = api();
+    const stored = {
+      modelsDirs: ['old-models'],
+      port: 5001,
+      gpuLayers: 99,
+      contextSize: 8192,
+      flashAttention: true,
+      threads: 8,
+    };
+    await settings.write({ userName: 'Misha', llmServerConfig: stored });
+
+    const launchSave = await app.inject({
+      method: 'PUT',
+      url: '/api/runtime/config',
+      payload: { contextSize: 32_256, gpuLayers: 40, flashAttention: false, threads: 0 },
+    });
+    const directorySave = await app.inject({
+      method: 'PUT',
+      url: '/api/runtime/config',
+      payload: { modelsDirs: ['Модели', 'Модели'] },
+    });
+
+    expect(launchSave.statusCode).toBe(200);
+    expect(directorySave.statusCode).toBe(200);
+    expect((await settings.read()).llmServerConfig).toEqual({
+      modelsDirs: ['Модели'],
+      port: 5001,
+      gpuLayers: 40,
+      contextSize: 32_256,
+      flashAttention: false,
+      threads: 0,
+    });
+  });
+
   it('dedupes updated modelsDirs, scans their models, and marks missing directories without failing the overview', async () => {
     const { app, dataRoot } = api();
     const modelsDir = path.join(dataRoot, 'gguf-models');

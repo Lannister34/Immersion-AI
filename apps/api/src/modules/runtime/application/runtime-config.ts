@@ -1,8 +1,8 @@
-import { type RuntimeConfigCommand, RuntimeConfigCommandSchema } from '@immersion/contracts/runtime';
+import { type RuntimeConfigSnapshot, RuntimeConfigSnapshotSchema } from '@immersion/contracts/runtime';
 
 import { getLlmProcessManager } from '../infrastructure/llm-process-manager.js';
 
-export function normalizeRuntimeConfig(raw: unknown): RuntimeConfigCommand {
+export function normalizeRuntimeConfig(raw: unknown): RuntimeConfigSnapshot {
   const configSource = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const manager = getLlmProcessManager();
   const engine = manager.getEngineInfo();
@@ -14,7 +14,7 @@ export function normalizeRuntimeConfig(raw: unknown): RuntimeConfigCommand {
         .filter((value) => value.length > 0)
     : [engine.defaultModelsDir];
 
-  return RuntimeConfigCommandSchema.parse({
+  return RuntimeConfigSnapshotSchema.parse({
     modelsDirs,
     port: typeof configSource.port === 'number' ? configSource.port : state.port,
     gpuLayers: typeof configSource.gpuLayers === 'number' ? configSource.gpuLayers : 0,
