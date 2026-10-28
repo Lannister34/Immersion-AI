@@ -22,7 +22,6 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { appendChatMessages, getChatSession } from './modules/chats/index.js';
 import type { ChatCompletionClient } from './modules/generation/index.js';
 import type { VisionProbe } from './modules/providers/index.js';
 import { CLIENT_DISCONNECT_LOG_MESSAGE, clientDisconnectOutcome } from './test-support/client-disconnect-outcome.js';
@@ -1112,7 +1111,7 @@ describe('generation routes', () => {
 
     expect(api().dependencies.generationJobs.get(job.id)).toMatchObject({ error: null, status: 'canceled' });
     expect(providerRequest.signal?.aborted).toBe(true);
-    expect(getMessagesByRole((await getChatSession(chat.id))?.messages ?? [])).toEqual([
+    expect(getMessagesByRole((await api().modules.chats.getChatSession(chat.id))?.messages ?? [])).toEqual([
       {
         role: 'user',
         content: 'Close the app while I am generating.',
@@ -1273,7 +1272,7 @@ describe('generation routes', () => {
   it('refuses to regenerate while a continue job is active, keeping the reply being continued', async () => {
     const provider = api().http.hold('POST', CHAT_COMPLETIONS_URL);
     const chat = await createChat();
-    await appendChatMessages(chat.id, [
+    await api().modules.chats.appendChatMessages(chat.id, [
       { role: 'user', content: 'Расскажи про обжиг керамики.', createdAt: '2026-01-01T00:00:00.000Z' },
       { role: 'assistant', content: 'Обжиг превращает глину в керамику,', createdAt: '2026-01-01T00:00:01.000Z' },
     ]);
@@ -1314,7 +1313,7 @@ describe('generation routes', () => {
   it('refuses to regenerate an assistant reply with no user turn before it, keeping the greeting', async () => {
     answerWith('Не должно вызываться.');
     const chat = await createChat();
-    await appendChatMessages(chat.id, [
+    await api().modules.chats.appendChatMessages(chat.id, [
       { role: 'assistant', content: 'Добро пожаловать на маяк.', createdAt: '2026-01-01T00:00:00.000Z' },
     ]);
 
@@ -1357,7 +1356,7 @@ describe('generation routes', () => {
   ])('refuses to regenerate with $code before deleting the reply', async ({ code, makeGenerationImpossible }) => {
     answerWith('Не должно вызываться.');
     const chat = await createChat();
-    await appendChatMessages(chat.id, [
+    await api().modules.chats.appendChatMessages(chat.id, [
       { role: 'user', content: 'Расскажи анекдот.', createdAt: '2026-01-01T00:00:00.000Z' },
       { role: 'assistant', content: 'Заходит как-то улитка в бар.', createdAt: '2026-01-01T00:00:01.000Z' },
     ]);
@@ -1383,7 +1382,7 @@ describe('generation routes', () => {
   it('regenerates every trailing assistant message in one step from the user turn before them', async () => {
     answerWith('Новый ответ.');
     const chat = await createChat();
-    await appendChatMessages(chat.id, [
+    await api().modules.chats.appendChatMessages(chat.id, [
       { role: 'user', content: 'Первый вопрос.', createdAt: '2026-01-01T00:00:00.000Z' },
       { role: 'assistant', content: 'Первый ответ.', createdAt: '2026-01-01T00:00:01.000Z' },
       { role: 'user', content: 'Второй вопрос.', createdAt: '2026-01-01T00:00:02.000Z' },
@@ -1419,7 +1418,7 @@ describe('generation routes', () => {
   it('continues the last assistant reply in place, sending it unchanged with a continue instruction in the profile language', async () => {
     answerWith('Это и делает её прочной.');
     const chat = await createChat();
-    await appendChatMessages(chat.id, [
+    await api().modules.chats.appendChatMessages(chat.id, [
       {
         role: 'user',
         content: 'Расскажи про обжиг керамики.',
@@ -1478,7 +1477,7 @@ describe('generation routes', () => {
   it('counts the continue instruction inside the context budget, trimming older messages to fit it', async () => {
     answerWith('и это делает её прочной.');
     const chat = await createChat();
-    await appendChatMessages(chat.id, [
+    await api().modules.chats.appendChatMessages(chat.id, [
       {
         role: 'user',
         content: 'OLD_CONTEXT '.repeat(10),
@@ -1519,7 +1518,7 @@ describe('generation routes', () => {
   it('answers the last user message without appending a new one', async () => {
     answerWith('Ответ на уже сохранённое сообщение.');
     const chat = await createChat();
-    await appendChatMessages(chat.id, [
+    await api().modules.chats.appendChatMessages(chat.id, [
       {
         role: 'user',
         content: 'Вопрос без ответа.',
@@ -1564,7 +1563,7 @@ describe('generation routes', () => {
     expect(emptyChatResponse.json()).toMatchObject({ code: 'nothing_to_answer' });
 
     const chat = await createChat();
-    await appendChatMessages(chat.id, [
+    await api().modules.chats.appendChatMessages(chat.id, [
       {
         role: 'assistant',
         content: 'Последним пишет персонаж.',
@@ -1603,7 +1602,7 @@ describe('generation routes', () => {
     expect(emptyChatResponse.json()).toMatchObject({ code: 'nothing_to_continue' });
 
     const chat = await createChat();
-    await appendChatMessages(chat.id, [
+    await api().modules.chats.appendChatMessages(chat.id, [
       {
         role: 'user',
         content: 'Последним пишет пользователь.',
@@ -1644,7 +1643,7 @@ describe('generation routes', () => {
 
   it('fails the continue job without touching the transcript when the user posts a message mid-generation', async () => {
     const chat = await createChat();
-    await appendChatMessages(chat.id, [
+    await api().modules.chats.appendChatMessages(chat.id, [
       {
         role: 'user',
         content: 'Расскажи про обжиг керамики.',
@@ -1658,7 +1657,7 @@ describe('generation routes', () => {
     ]);
 
     api().http.on('POST', CHAT_COMPLETIONS_URL, async () => {
-      await appendChatMessages(chat.id, [
+      await api().modules.chats.appendChatMessages(chat.id, [
         {
           role: 'user',
           content: 'Я успел написать раньше продолжения.',
@@ -1823,7 +1822,7 @@ describe('generation routes', () => {
     answerWith('Assistant reply after prompt budgeting.');
     const chat = await createChat();
 
-    await appendChatMessages(chat.id, [
+    await api().modules.chats.appendChatMessages(chat.id, [
       {
         content: 'OLD_CONTEXT '.repeat(80),
         createdAt: '2026-01-01T00:00:00.000Z',

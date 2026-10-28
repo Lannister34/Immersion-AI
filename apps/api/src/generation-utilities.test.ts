@@ -5,7 +5,6 @@ import { CreateChatResponseSchema, GetChatSessionResponseSchema } from '@immersi
 import { GenerateChatTitleResponseSchema, GenerateFirstMessageResponseSchema } from '@immersion/contracts/generation';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { appendChatMessages } from './modules/chats/index.js';
 import { openSocketRequest } from './test-support/open-socket-request.js';
 import { readProviderChatRequest } from './test-support/provider-chat-request.js';
 import { openAiChatCompletion, providerFailure } from './test-support/provider-responses.js';
@@ -38,7 +37,7 @@ describe('generation utility routes', () => {
   }
 
   async function seedChatMessages(chatId: string) {
-    await appendChatMessages(chatId, [
+    await api().modules.chats.appendChatMessages(chatId, [
       {
         role: 'user',
         content: 'Расскажи про обжиг керамики.',
@@ -350,7 +349,7 @@ describe('generation utility routes', () => {
       const chat = await createChat();
 
       api().http.on('POST', CHAT_COMPLETIONS_URL, async () => {
-        await appendChatMessages(chat.id, [
+        await api().modules.chats.appendChatMessages(chat.id, [
           {
             role: 'user',
             content: 'Я успел написать первым.',

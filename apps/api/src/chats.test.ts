@@ -14,9 +14,11 @@ import {
 import { CHAT_IMPORT_MAX_BYTES } from '@immersion/contracts/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { FileChatRepository } from './modules/chats/index.js';
 import { snapshotDataRoot } from './test-support/data-root-snapshot.js';
 import { readStoredChatFile } from './test-support/stored-chat-file.js';
 import type { StoredUserSettingsFixture } from './test-support/stored-user-settings-fixture-schema.js';
+import { createTestApi } from './test-support/test-api.js';
 import { useTestApi } from './test-support/use-test-api.js';
 
 const testUserSettings: StoredUserSettingsFixture = {
@@ -1207,6 +1209,44 @@ describe('chat routes', () => {
     expect(response.body.trim().split('\n')).toHaveLength(2);
     expect(response.body).toContain('chat_metadata');
     expect(response.body).toContain('"mes":"one"');
+  });
+
+  it('exports a chat through the repository', async () => {
+    const storedBody = '{"chat_metadata":{"title":"Из репозитория"}}\n';
+    class ElsewhereStoredChats extends FileChatRepository {
+      override async readChatExport(chatId: string) {
+        return chatId === 'stored-elsewhere' ? { body: storedBody, title: 'Из репозитория' } : null;
+      }
+    }
+    const { app } = await createTestApi({ overrides: { chatRepository: new ElsewhereStoredChats() } });
+
+    const response = await app.inject({ method: 'GET', url: '/api/chats/stored-elsewhere/export' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toBe(storedBody);
+    expect(response.headers['content-disposition']).toContain(
+      `filename*=UTF-8''${encodeURIComponent('Из_репозитория.jsonl')}`,
+    );
+  });
+
+  it('stamps a created and a renamed chat from the app clock', async () => {
+    const testApi = await createTestApi({ clock: { start: new Date('2026-10-20T08:00:00.000Z'), stepMs: 0 } });
+    const created = await testApi.app.inject({ method: 'POST', url: '/api/chats', payload: { title: 'Часы' } });
+    const { chat } = CreateChatResponseSchema.parse(created.json());
+    testApi.clock.advance(60_000);
+
+    const renamed = await testApi.app.inject({
+      method: 'PATCH',
+      url: `/api/chats/${chat.id}/title`,
+      payload: { title: 'Часы на башне' },
+    });
+
+    expect(chat).toMatchObject({ createdAt: '2026-10-20T08:00:00.000Z', updatedAt: '2026-10-20T08:00:00.000Z' });
+    expect(UpdateChatTitleResponseSchema.parse(renamed.json()).chat).toMatchObject({
+      createdAt: '2026-10-20T08:00:00.000Z',
+      title: 'Часы на башне',
+      updatedAt: '2026-10-20T08:01:00.000Z',
+    });
   });
 
   it('returns 404 when exporting a missing chat', async () => {

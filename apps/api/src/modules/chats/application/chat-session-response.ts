@@ -7,7 +7,7 @@ import {
 
 import { toChatMessageAttachmentDto } from './chat-attachments.js';
 import type { ChatGenerationSettingsRecord, ChatSessionRecord, ChatSummaryRecord } from './chat-records.js';
-import { getDefaultUserName } from './default-user-name.js';
+import type { ProfileUserNameSource } from './chats-ports.js';
 
 function buildCharacterAvatarUrl(characterId: string | null): string | null {
   if (!characterId) return null;
@@ -51,7 +51,10 @@ function toChatGenerationSettingsDto(settings: ChatGenerationSettingsRecord): Ch
   };
 }
 
-export function toChatSessionResponse(session: ChatSessionRecord): GetChatSessionResponse {
+export function toChatSessionResponse(
+  session: ChatSessionRecord,
+  profile: ProfileUserNameSource,
+): GetChatSessionResponse {
   const summaryDto = toChatSummaryDto(session.chat);
   return GetChatSessionResponseSchema.parse({
     characterAvatarUrl: summaryDto.characterAvatarUrl,
@@ -66,6 +69,6 @@ export function toChatSessionResponse(session: ChatSessionRecord): GetChatSessio
       ...message,
       attachments: message.attachments.map((attachment) => toChatMessageAttachmentDto(session.chat.id, attachment)),
     })),
-    userName: session.userName ?? getDefaultUserName(),
+    userName: session.userName ?? profile.getProfileUserName(),
   });
 }

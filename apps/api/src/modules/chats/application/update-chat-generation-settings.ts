@@ -5,11 +5,13 @@ import {
 } from '@immersion/contracts/chats';
 import { type ReplyBudgetSettings, replyLimitExceedsContext } from '@immersion/domain/prompting';
 
-import { getSettingsOverview, ReplyLimitExceedsContextError } from '../../settings/index.js';
-import { FileChatRepository } from '../infrastructure/file-chat-repository.js';
+import type { Clock } from '../../../platform/clock/clock.js';
+import { ReplyLimitExceedsContextError } from '../../settings/index.js';
 import { ChatNotFoundError } from './append-chat-messages.js';
 import type { ChatGenerationSettingsRecord } from './chat-records.js';
+import type { ChatRepository } from './chat-repository.js';
 import { toChatSessionResponse } from './chat-session-response.js';
+import type { ProfileUserNameSource, SamplerPresetReader } from './chats-ports.js';
 
 export class InvalidChatGenerationSettingsError extends Error {
   constructor(message: string) {
@@ -18,13 +20,15 @@ export class InvalidChatGenerationSettingsError extends Error {
   }
 }
 
-function findChatSamplerPreset(presetId: string | null): ReplyBudgetSettings | null {
+function findChatSamplerPreset(
+  presetId: string | null,
+  samplerPresets: SamplerPresetReader,
+): ReplyBudgetSettings | null {
   if (!presetId) {
     return null;
   }
 
-  const settings = getSettingsOverview();
-  const preset = settings.sampler.presets.find((entry) => entry.id === presetId);
+  const preset = samplerPresets.findSamplerPreset(presetId);
 
   if (!preset) {
     throw new InvalidChatGenerationSettingsError(`Sampler preset not found: ${presetId}`);
@@ -81,17 +85,31 @@ function toChatGenerationSettingsRecord(command: UpdateChatGenerationSettingsCom
   };
 }
 
+export interface UpdateChatGenerationSettingsInput {
+  chatId: string;
+  settings: UpdateChatGenerationSettingsCommand;
+}
+
+export interface UpdateChatGenerationSettingsDependencies {
+  readonly chatRepository: Pick<ChatRepository, 'updateGenericChatGenerationSettings'>;
+  readonly clock: Clock;
+  readonly profile: ProfileUserNameSource;
+  readonly samplerPresets: SamplerPresetReader;
+}
+
 export async function updateChatGenerationSettings(
-  chatId: string,
-  command: UpdateChatGenerationSettingsCommand,
+  { chatId, settings: command }: UpdateChatGenerationSettingsInput,
+  { chatRepository, clock, profile, samplerPresets }: UpdateChatGenerationSettingsDependencies,
 ): Promise<UpdateChatGenerationSettingsResponse> {
-  const impossibleBudget = impossibleReplyBudget(command.sampling, findChatSamplerPreset(command.samplerPresetId));
+  const impossibleBudget = impossibleReplyBudget(
+    command.sampling,
+    findChatSamplerPreset(command.samplerPresetId, samplerPresets),
+  );
   const nextSettings = toChatGenerationSettingsRecord(command);
-  const chatRepository = new FileChatRepository();
   const session = await chatRepository.updateGenericChatGenerationSettings(
     chatId,
     nextSettings,
-    new Date().toISOString(),
+    clock.now().toISOString(),
     {
       assertWritable: (current) => {
         if (impossibleBudget && !keepsReplyBudgetFields(current, nextSettings)) {
@@ -105,5 +123,5 @@ export async function updateChatGenerationSettings(
     throw new ChatNotFoundError(chatId);
   }
 
-  return UpdateChatGenerationSettingsResponseSchema.parse(toChatSessionResponse(session));
+  return UpdateChatGenerationSettingsResponseSchema.parse(toChatSessionResponse(session, profile));
 }

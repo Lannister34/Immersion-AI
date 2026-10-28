@@ -32,11 +32,15 @@ import {
 } from '../application/chat-records.js';
 import type {
   AppendContinuationToLastAssistantMessageInput,
+  AppendGenericChatMessagesOptions,
+  ChatExportRecord,
   ChatRepository,
   ForkGenericChatInput,
+  GenericChatBindingsUpdate,
   ListGenericChatsOptions,
   TruncateGenericChatMessagesOptions,
   UpdateGenericChatGenerationSettingsOptions,
+  UpdateGenericChatTitleOptions,
 } from '../application/chat-repository.js';
 import { joinContinuationContent } from '../application/continuation-content.js';
 import { deriveLastMessagePreview } from '../application/last-message-preview.js';
@@ -130,25 +134,7 @@ function resolveChatAttachmentPath(chatId: string, attachmentId: string) {
   return resolveContainedFilePath(resolveChatAttachmentsDirectory(chatId), attachmentId);
 }
 
-export async function writeChatAttachmentFile(chatId: string, attachmentId: string, bytes: Buffer): Promise<void> {
-  const directory = resolveChatAttachmentsDirectory(chatId);
-  await fs.mkdir(directory, { recursive: true });
-  await writeFileAtomically(resolveChatAttachmentPath(chatId, attachmentId), bytes);
-}
-
-export async function readChatAttachmentFile(chatId: string, attachmentId: string): Promise<Buffer | null> {
-  try {
-    return await fs.readFile(resolveChatAttachmentPath(chatId, attachmentId));
-  } catch (error) {
-    const candidate = error as NodeJS.ErrnoException;
-    if (candidate.code === 'ENOENT') {
-      return null;
-    }
-    throw error;
-  }
-}
-
-export async function deleteChatAttachmentFiles(chatId: string): Promise<void> {
+async function deleteChatAttachmentFiles(chatId: string): Promise<void> {
   await fs.rm(resolveChatAttachmentsDirectory(chatId), { force: true, recursive: true });
 }
 
@@ -586,8 +572,8 @@ export class FileChatRepository implements ChatRepository {
   async appendGenericChatMessages(
     chatId: string,
     messages: AppendChatMessageInput[],
-    options?: { requireEmptyTranscript?: boolean },
-  ) {
+    options?: AppendGenericChatMessagesOptions,
+  ): Promise<ChatSessionRecord | null> {
     return chatWriteQueue.run(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 
@@ -624,7 +610,10 @@ export class FileChatRepository implements ChatRepository {
     });
   }
 
-  async appendContinuationToLastAssistantMessage(chatId: string, input: AppendContinuationToLastAssistantMessageInput) {
+  async appendContinuationToLastAssistantMessage(
+    chatId: string,
+    input: AppendContinuationToLastAssistantMessageInput,
+  ): Promise<ChatSessionRecord | null> {
     return chatWriteQueue.run(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 
@@ -778,8 +767,37 @@ export class FileChatRepository implements ChatRepository {
     };
   }
 
-  async getGenericChatSession(chatId: string) {
+  async getGenericChatSession(chatId: string): Promise<ChatSessionRecord | null> {
     return readChatFile(chatId);
+  }
+
+  async readChatExport(chatId: string): Promise<ChatExportRecord | null> {
+    return chatWriteQueue.run(chatId, async () => {
+      const session = await readChatFile(chatId);
+
+      if (!session) {
+        return null;
+      }
+
+      return { body: await fs.readFile(resolveChatFilePath(chatId), 'utf8'), title: session.chat.title };
+    });
+  }
+
+  async writeChatAttachment(chatId: string, attachmentId: string, bytes: Buffer): Promise<void> {
+    await fs.mkdir(resolveChatAttachmentsDirectory(chatId), { recursive: true });
+    await writeFileAtomically(resolveChatAttachmentPath(chatId, attachmentId), bytes);
+  }
+
+  async readChatAttachment(chatId: string, attachmentId: string): Promise<Buffer | null> {
+    try {
+      return await fs.readFile(resolveChatAttachmentPath(chatId, attachmentId));
+    } catch (error) {
+      const candidate = error as NodeJS.ErrnoException;
+      if (candidate.code === 'ENOENT') {
+        return null;
+      }
+      throw error;
+    }
   }
 
   async listChatFileStats(): Promise<ChatFileStatRecord[]> {
@@ -907,7 +925,11 @@ export class FileChatRepository implements ChatRepository {
     });
   }
 
-  async updateGenericChatLorebooks(chatId: string, lorebookIds: string[], updatedAt: string) {
+  async updateGenericChatLorebooks(
+    chatId: string,
+    lorebookIds: string[],
+    updatedAt: string,
+  ): Promise<ChatSessionRecord | null> {
     return chatWriteQueue.run(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 
@@ -942,8 +964,8 @@ export class FileChatRepository implements ChatRepository {
     chatId: string,
     title: string,
     updatedAt: string,
-    options?: { expectedCurrentTitle?: string },
-  ) {
+    options?: UpdateGenericChatTitleOptions,
+  ): Promise<ChatSessionRecord | null> {
     return chatWriteQueue.run(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 
@@ -984,14 +1006,9 @@ export class FileChatRepository implements ChatRepository {
 
   async updateGenericChatBindings(
     chatId: string,
-    bindings: {
-      characterId?: string | null;
-      characterName?: string | null;
-      scenarioId?: string | null;
-      scenarioName?: string | null;
-    },
+    bindings: GenericChatBindingsUpdate,
     updatedAt: string,
-  ) {
+  ): Promise<ChatSessionRecord | null> {
     return chatWriteQueue.run(chatId, async () => {
       const currentSession = await readChatFile(chatId);
       if (!currentSession) {
@@ -1051,7 +1068,12 @@ export class FileChatRepository implements ChatRepository {
     });
   }
 
-  async updateGenericChatMessage(chatId: string, messageIndex: number, content: string, updatedAt: string) {
+  async updateGenericChatMessage(
+    chatId: string,
+    messageIndex: number,
+    content: string,
+    updatedAt: string,
+  ): Promise<ChatSessionRecord | null> {
     return chatWriteQueue.run(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 
@@ -1098,7 +1120,11 @@ export class FileChatRepository implements ChatRepository {
     });
   }
 
-  async deleteGenericChatMessage(chatId: string, messageIndex: number, updatedAt: string) {
+  async deleteGenericChatMessage(
+    chatId: string,
+    messageIndex: number,
+    updatedAt: string,
+  ): Promise<ChatSessionRecord | null> {
     return chatWriteQueue.run(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 
@@ -1138,7 +1164,7 @@ export class FileChatRepository implements ChatRepository {
     fromIndex: number,
     updatedAt: string,
     options: TruncateGenericChatMessagesOptions = {},
-  ) {
+  ): Promise<ChatSessionRecord | null> {
     return chatWriteQueue.run(chatId, async () => {
       const currentSession = await readChatFile(chatId);
 

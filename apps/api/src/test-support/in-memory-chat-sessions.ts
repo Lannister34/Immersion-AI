@@ -1,20 +1,28 @@
-import type { ChatMessageDto, ChatSessionDto } from '@immersion/contracts/chats';
+import type { ChatMessageDto, ChatSessionDto, ChatSummaryDto } from '@immersion/contracts/chats';
 
 import type {
   AssistantMessageContinuation,
   ChatAttachmentReference,
   ChatMessageAppend,
   ChatSessionPort,
+  ChatTitleUpdate,
 } from '../modules/generation/index.js';
+import type { Clock } from '../platform/clock/clock.js';
+import { createManualClock } from './manual-clock.js';
 
-type ChatReplySessionPort = Pick<
+type InMemoryChatSessionPort = Pick<
   ChatSessionPort,
   | 'appendAssistantMessageContinuation'
   | 'appendChatMessages'
   | 'getChatSession'
   | 'readChatAttachmentDataUrl'
   | 'resolveChatAttachments'
+  | 'updateChatTitle'
 >;
+
+export interface InMemoryChatSessionsOptions {
+  readonly clock?: Clock;
+}
 
 const NO_SAMPLING_OVERRIDES: ChatSessionDto['generationSettings']['sampling'] = {
   contextTrimStrategy: null,
@@ -29,8 +37,13 @@ const NO_SAMPLING_OVERRIDES: ChatSessionDto['generationSettings']['sampling'] = 
   topP: null,
 };
 
-export class InMemoryChatSessions implements ChatReplySessionPort {
+export class InMemoryChatSessions implements InMemoryChatSessionPort {
+  readonly #clock: Clock;
   readonly #sessions = new Map<string, ChatSessionDto>();
+
+  constructor({ clock = createManualClock() }: InMemoryChatSessionsOptions = {}) {
+    this.#clock = clock;
+  }
 
   create(chatId: string, createdAt: string): ChatSessionDto {
     const session: ChatSessionDto = {
@@ -112,6 +125,19 @@ export class InMemoryChatSessions implements ChatReplySessionPort {
     session.chat.updatedAt = input.updatedAt;
 
     return this.#summarize(session);
+  }
+
+  async updateChatTitle({ chatId, expectedCurrentTitle, title }: ChatTitleUpdate): Promise<ChatSummaryDto> {
+    const session = this.#require(chatId);
+
+    if (expectedCurrentTitle !== undefined && session.chat.title !== expectedCurrentTitle) {
+      throw new Error(`The title of chat ${chatId} changed.`);
+    }
+
+    session.chat.title = title;
+    session.chat.updatedAt = this.#clock.now().toISOString();
+
+    return structuredClone(session.chat);
   }
 
   readChatAttachmentDataUrl(): Promise<string | null> {

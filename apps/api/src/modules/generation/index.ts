@@ -14,6 +14,7 @@ export type {
   ChatAttachmentReference,
   ChatMessageAppend,
   ChatSessionPort,
+  ChatTitleUpdate,
 } from './application/generation-ports.js';
 export {
   createGenerationModule,

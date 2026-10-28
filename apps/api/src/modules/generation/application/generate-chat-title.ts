@@ -5,7 +5,6 @@ import {
   GenerateChatTitleResponseSchema,
 } from '@immersion/contracts/generation';
 
-import type { Clock } from '../../../platform/clock/clock.js';
 import { ChatNotFoundError } from '../../chats/index.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import { ChatTranscriptEmptyError, ProviderGenerationError } from './generation-errors.js';
@@ -21,7 +20,6 @@ import { SKIP_THINKING_SERVER_EXTENSIONS } from './skip-thinking-server-extensio
 export interface GenerateChatTitleDependencies {
   readonly chatCompletionClient: ChatCompletionClient;
   readonly chats: Pick<ChatSessionPort, 'getChatSession' | 'updateChatTitle'>;
-  readonly clock: Clock;
   readonly prompting: Pick<PromptPlanPort, 'resolveChatGenerationSettings'>;
   readonly providers: ProviderEndpointResolver;
   readonly settings: GenerationSettingsSource;
@@ -123,7 +121,6 @@ export async function generateChatTitle(
   const chat = await dependencies.chats.updateChatTitle({
     chatId: command.chatId,
     expectedCurrentTitle: session.chat.title,
-    now: () => dependencies.clock.now(),
     title,
   });
 

@@ -52,13 +52,11 @@ export interface ChatMessagesTruncation {
   chatId: string;
   expectedRemovedMessages?: ReadonlyArray<Pick<ChatMessageDto, 'content' | 'role'>>;
   fromIndex: number;
-  now: () => Date;
 }
 
 export interface ChatTitleUpdate {
   chatId: string;
   expectedCurrentTitle?: string;
-  now: () => Date;
   title: string;
 }
 

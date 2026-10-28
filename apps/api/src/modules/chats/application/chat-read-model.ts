@@ -18,6 +18,7 @@ export interface ChatSummaryWithSearchText {
   summary: ChatSummaryRecord;
 }
 
+// TODO: feed the chat index from the app's chat repository instead of these instances (F-38)
 export async function listChatFileStats(): Promise<ChatFileStatRecord[]> {
   return new FileChatRepository().listChatFileStats();
 }

@@ -1,21 +1,26 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 
-import { FileChatRepository } from '../infrastructure/file-chat-repository.js';
+import type { Clock } from '../../../platform/clock/clock.js';
 import { ChatMessageNotFoundError, ChatNotFoundError } from './append-chat-messages.js';
+import type { ChatRepository } from './chat-repository.js';
 import { toChatSessionResponse } from './chat-session-response.js';
+import type { ProfileUserNameSource } from './chats-ports.js';
 
-interface DeleteChatMessageInput {
+export interface DeleteChatMessageCommand {
   chatId: string;
   messageIndex: number;
-  now: () => Date;
 }
 
-export async function deleteChatMessage({
-  chatId,
-  messageIndex,
-  now,
-}: DeleteChatMessageInput): Promise<ChatSessionDto> {
-  const chatRepository = new FileChatRepository();
+export interface DeleteChatMessageDependencies {
+  readonly chatRepository: Pick<ChatRepository, 'deleteGenericChatMessage' | 'getGenericChatSession'>;
+  readonly clock: Clock;
+  readonly profile: ProfileUserNameSource;
+}
+
+export async function deleteChatMessage(
+  { chatId, messageIndex }: DeleteChatMessageCommand,
+  { chatRepository, clock, profile }: DeleteChatMessageDependencies,
+): Promise<ChatSessionDto> {
   const existing = await chatRepository.getGenericChatSession(chatId);
 
   if (!existing) {
@@ -26,11 +31,11 @@ export async function deleteChatMessage({
     throw new ChatMessageNotFoundError(chatId, messageIndex);
   }
 
-  const session = await chatRepository.deleteGenericChatMessage(chatId, messageIndex, now().toISOString());
+  const session = await chatRepository.deleteGenericChatMessage(chatId, messageIndex, clock.now().toISOString());
 
   if (!session) {
     throw new ChatMessageNotFoundError(chatId, messageIndex);
   }
 
-  return toChatSessionResponse(session);
+  return toChatSessionResponse(session, profile);
 }

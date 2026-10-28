@@ -3,10 +3,12 @@ import crypto from 'node:crypto';
 import { type ImportChatCommand, type ImportChatResponse, ImportChatResponseSchema } from '@immersion/contracts/chats';
 import { CHAT_IMPORT_MAX_BYTES, CHAT_IMPORT_MAX_MEGABYTES } from '@immersion/contracts/common';
 
-import { FileChatRepository, parseChatTranscriptLeniently } from '../infrastructure/file-chat-repository.js';
+import type { Clock } from '../../../platform/clock/clock.js';
+import { parseChatTranscriptLeniently } from '../infrastructure/file-chat-repository.js';
 import { createDefaultChatGenerationSettings } from './chat-records.js';
+import type { ChatRepository } from './chat-repository.js';
 import { toChatSummaryDto } from './chat-session-response.js';
-import { getDefaultUserName } from './default-user-name.js';
+import type { ProfileUserNameSource } from './chats-ports.js';
 
 const DEFAULT_IMPORTED_CHAT_TITLE = 'Импортированный чат';
 
@@ -24,20 +26,28 @@ export class ChatFileTooLargeError extends Error {
   }
 }
 
-export async function importChat(command: ImportChatCommand): Promise<ImportChatResponse> {
+export interface ImportChatDependencies {
+  readonly chatRepository: Pick<ChatRepository, 'createGenericChat'>;
+  readonly clock: Clock;
+  readonly profile: ProfileUserNameSource;
+}
+
+export async function importChat(
+  command: ImportChatCommand,
+  { chatRepository, clock, profile }: ImportChatDependencies,
+): Promise<ImportChatResponse> {
   const decoded = Buffer.from(command.contentBase64, 'base64');
   if (decoded.length > CHAT_IMPORT_MAX_BYTES) {
     throw new ChatFileTooLargeError();
   }
 
-  const importedAt = new Date().toISOString();
+  const importedAt = clock.now().toISOString();
   const transcript = parseChatTranscriptLeniently(decoded.toString('utf8'), 'imported chat file', importedAt);
 
   if (transcript.messages.length === 0) {
     throw new InvalidChatFileError();
   }
 
-  const chatRepository = new FileChatRepository();
   const summary = await chatRepository.createGenericChat({
     characterName: transcript.header?.characterName ?? null,
     createdAt: transcript.header?.createdAt ?? importedAt,
@@ -47,7 +57,7 @@ export async function importChat(command: ImportChatCommand): Promise<ImportChat
     scenarioName: transcript.header?.scenarioName ?? null,
     seedMessages: transcript.messages,
     title: command.title?.trim() || transcript.header?.title || DEFAULT_IMPORTED_CHAT_TITLE,
-    userName: transcript.header?.userName ?? getDefaultUserName(),
+    userName: transcript.header?.userName ?? profile.getProfileUserName(),
   });
 
   return ImportChatResponseSchema.parse({

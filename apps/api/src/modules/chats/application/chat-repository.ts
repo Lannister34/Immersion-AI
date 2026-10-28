@@ -20,6 +20,10 @@ export interface ListGenericChatsOptions {
   searchText?: string;
 }
 
+export interface AppendGenericChatMessagesOptions {
+  requireEmptyTranscript?: boolean;
+}
+
 export interface AppendContinuationToLastAssistantMessageInput {
   continuation: string;
   expectedContentPrefix: string;
@@ -35,24 +39,52 @@ export interface UpdateGenericChatGenerationSettingsOptions {
   assertWritable?: (current: ChatGenerationSettingsRecord) => void;
 }
 
+export interface UpdateGenericChatTitleOptions {
+  expectedCurrentTitle?: string;
+}
+
+export interface ChatExportRecord {
+  body: string;
+  title: string;
+}
+
+export interface GenericChatBindingsUpdate {
+  characterId?: string | null;
+  characterName?: string | null;
+  scenarioId?: string | null;
+  scenarioName?: string | null;
+}
+
 export interface ChatRepository {
   appendContinuationToLastAssistantMessage(
     chatId: string,
     input: AppendContinuationToLastAssistantMessageInput,
   ): Promise<ChatSessionRecord | null>;
-  appendGenericChatMessages(chatId: string, messages: AppendChatMessageInput[]): Promise<ChatSessionRecord | null>;
+  appendGenericChatMessages(
+    chatId: string,
+    messages: AppendChatMessageInput[],
+    options?: AppendGenericChatMessagesOptions,
+  ): Promise<ChatSessionRecord | null>;
   createGenericChat(input: CreateGenericChatInput): Promise<ChatSummaryRecord>;
   deleteGenericChat(chatId: string): Promise<boolean>;
+  deleteGenericChatMessage(chatId: string, messageIndex: number, updatedAt: string): Promise<ChatSessionRecord | null>;
   forkGenericChat(input: ForkGenericChatInput): Promise<ChatSummaryRecord | null>;
   getGenericChatSession(chatId: string): Promise<ChatSessionRecord | null>;
   listChatFileStats(): Promise<ChatFileStatRecord[]>;
   listGenericChats(options?: ListGenericChatsOptions): Promise<ChatSummaryRecord[]>;
+  readChatAttachment(chatId: string, attachmentId: string): Promise<Buffer | null>;
+  readChatExport(chatId: string): Promise<ChatExportRecord | null>;
   readChatSummaryWithSearchText(chatId: string): Promise<ChatSummaryWithSearchText | null>;
   truncateGenericChatMessagesFromIndex(
     chatId: string,
     fromIndex: number,
     updatedAt: string,
     options?: TruncateGenericChatMessagesOptions,
+  ): Promise<ChatSessionRecord | null>;
+  updateGenericChatBindings(
+    chatId: string,
+    bindings: GenericChatBindingsUpdate,
+    updatedAt: string,
   ): Promise<ChatSessionRecord | null>;
   updateGenericChatGenerationSettings(
     chatId: string,
@@ -71,15 +103,11 @@ export interface ChatRepository {
     content: string,
     updatedAt: string,
   ): Promise<ChatSessionRecord | null>;
-  updateGenericChatTitle(chatId: string, title: string, updatedAt: string): Promise<ChatSessionRecord | null>;
-  updateGenericChatBindings(
+  updateGenericChatTitle(
     chatId: string,
-    bindings: {
-      characterId?: string | null;
-      characterName?: string | null;
-      scenarioId?: string | null;
-      scenarioName?: string | null;
-    },
+    title: string,
     updatedAt: string,
+    options?: UpdateGenericChatTitleOptions,
   ): Promise<ChatSessionRecord | null>;
+  writeChatAttachment(chatId: string, attachmentId: string, bytes: Buffer): Promise<void>;
 }

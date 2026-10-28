@@ -1,32 +1,37 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
-import { getCharacter } from '../../characters/index.js';
-import { getScenario } from '../../scenarios/index.js';
-import { FileChatRepository } from '../infrastructure/file-chat-repository.js';
+
+import type { Clock } from '../../../platform/clock/clock.js';
 import { ChatNotFoundError } from './append-chat-messages.js';
+import type { ChatRepository, GenericChatBindingsUpdate } from './chat-repository.js';
 import { toChatSessionResponse } from './chat-session-response.js';
+import type { ChatCharacterReader, ChatScenarioReader, ProfileUserNameSource } from './chats-ports.js';
 
 export interface UpdateChatBindingsInput {
   chatId: string;
   characterId?: string | null | undefined;
   scenarioId?: string | null | undefined;
-  now?: () => Date;
 }
 
-export async function updateChatBindings(input: UpdateChatBindingsInput): Promise<ChatSessionDto> {
-  const now = input.now ?? (() => new Date());
-  const updates: {
-    characterId?: string | null;
-    characterName?: string | null;
-    scenarioId?: string | null;
-    scenarioName?: string | null;
-  } = {};
+export interface UpdateChatBindingsDependencies {
+  readonly characters: ChatCharacterReader;
+  readonly chatRepository: Pick<ChatRepository, 'updateGenericChatBindings'>;
+  readonly clock: Clock;
+  readonly profile: ProfileUserNameSource;
+  readonly scenarios: ChatScenarioReader;
+}
+
+export async function updateChatBindings(
+  input: UpdateChatBindingsInput,
+  { characters, chatRepository, clock, profile, scenarios }: UpdateChatBindingsDependencies,
+): Promise<ChatSessionDto> {
+  const updates: GenericChatBindingsUpdate = {};
 
   if (input.characterId !== undefined) {
     if (input.characterId === null || input.characterId === '') {
       updates.characterId = null;
       updates.characterName = null;
     } else {
-      const character = await getCharacter(input.characterId);
+      const character = await characters.getCharacter(input.characterId);
       updates.characterId = character.id;
       updates.characterName = character.name;
     }
@@ -37,16 +42,15 @@ export async function updateChatBindings(input: UpdateChatBindingsInput): Promis
       updates.scenarioId = null;
       updates.scenarioName = null;
     } else {
-      const scenario = await getScenario(input.scenarioId);
+      const scenario = await scenarios.getScenario(input.scenarioId);
       updates.scenarioId = scenario.id;
       updates.scenarioName = scenario.name;
     }
   }
 
-  const repository = new FileChatRepository();
-  const session = await repository.updateGenericChatBindings(input.chatId, updates, now().toISOString());
+  const session = await chatRepository.updateGenericChatBindings(input.chatId, updates, clock.now().toISOString());
   if (!session) {
     throw new ChatNotFoundError(input.chatId);
   }
-  return toChatSessionResponse(session);
+  return toChatSessionResponse(session, profile);
 }
