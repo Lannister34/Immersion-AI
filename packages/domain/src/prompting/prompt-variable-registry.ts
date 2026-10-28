@@ -1,5 +1,6 @@
 export const promptVariableKeys = [
   'character.description',
+  'character.exampleDialogue',
   'character.name',
   'character.personality',
   'scenario.content',
@@ -14,6 +15,7 @@ const promptVariableKeySet = new Set<string>(promptVariableKeys);
 export const promptVariableAliases = {
   char: 'character.name',
   description: 'character.description',
+  mesExample: 'character.exampleDialogue',
   personality: 'character.personality',
   scenario: 'scenario.content',
   user: 'user.name',

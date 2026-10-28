@@ -202,3 +202,32 @@ describe('renderPromptTemplate cycles', () => {
     expect(result.diagnostics.cyclicVariables).toEqual(['user.name']);
   });
 });
+
+describe('renderPromptTemplate example dialogue variable', () => {
+  const exampleDialogue = '<START>\n{{user}}: Привет.\n{{char}}: Здравствуй, {{user}}.';
+
+  it('renders {{mesExample}} and {{character.exampleDialogue}} with the macros inside the value expanded', () => {
+    const result = renderPromptTemplate('{{mesExample}}|{{character.exampleDialogue}}', {
+      'character.exampleDialogue': exampleDialogue,
+      'character.name': 'Эмбер',
+      'user.name': 'Миша',
+    });
+    const rendered = '<START>\nМиша: Привет.\nЭмбер: Здравствуй, Миша.';
+
+    expect(result.output).toBe(`${rendered}|${rendered}`);
+    expect(result.diagnostics.unresolvedVariables).toEqual([]);
+  });
+
+  it('drops a {{#if mesExample}} block when the card has no example dialogue', () => {
+    const template = 'A{{#if mesExample}}\nExamples: {{mesExample}}{{/if}}';
+
+    expect(renderPromptTemplate(template, { 'character.exampleDialogue': '' }).output).toBe('A');
+    expect(renderPromptTemplate(template, {}).output).toBe('A');
+  });
+
+  it('resolves the mesExample alias to character.exampleDialogue', () => {
+    expect(isPromptVariableAlias('mesExample')).toBe(true);
+    expect(resolvePromptVariableKey('mesExample')).toBe('character.exampleDialogue');
+    expect(resolvePromptVariableKey('character.exampleDialogue')).toBe('character.exampleDialogue');
+  });
+});

@@ -38,6 +38,7 @@ describe('prompt variable values', () => {
 
     expect(buildPromptVariableValues(snapshot)).toEqual({
       'character.description': 'Private detective.',
+      'character.exampleDialogue': '<START>\n{{char}}: Quiet.',
       'character.name': 'Morgan',
       'character.personality': 'Reserved',
       'scenario.content': '{{user}} arrives for a late-night interrogation with {{char}}.',
