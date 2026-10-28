@@ -404,3 +404,102 @@ describe('buildChatReplyPrompt', () => {
     expect(content).toContain('latest message stays');
   });
 });
+
+describe('buildChatReplyPromptBundle character data', () => {
+  const cardCharacter: PromptCharacterSnapshot = {
+    description: 'Дракон-книжник, наставник {{user}}.',
+    mesExample: '<START>\n{{user}}: Что читаешь?\n{{char}}: Летопись Виндхолла, {{user}}.',
+    name: 'Эмбер',
+    personality: '{{char}} добродушен и любопытен.',
+    systemPrompt: null,
+  };
+  const cardScenario = '{{user}} и {{char}} учатся в одном университете.';
+  const renderedCard = {
+    description: 'Дракон-книжник, наставник Tester.',
+    exampleDialogue: '<START>\nTester: Что читаешь?\nЭмбер: Летопись Виндхолла, Tester.',
+    personality: 'Эмбер добродушен и любопытен.',
+    scenario: 'Tester и Эмбер учатся в одном университете.',
+  };
+  const userMessage: ChatSessionDto['messages'][number] = {
+    attachments: [],
+    content: 'Привет.',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    id: 'm1',
+    reasoning: null,
+    role: 'user',
+  };
+
+  function occurrences(haystack: string, needle: string): number {
+    return haystack.split(needle).length - 1;
+  }
+
+  function systemContentFor(systemPromptTemplate: string, character: PromptCharacterSnapshot = cardCharacter) {
+    const bundle = buildChatReplyPromptBundle({
+      character,
+      characterScenarioContent: cardScenario,
+      samplerPreset: defaultSamplerPreset,
+      session: buildSession([userMessage]),
+      settings: { ...settings, profile: { ...settings.profile, systemPromptTemplate } },
+    });
+    const systemMessage = bundle.messages.find((message) => message.role === 'system');
+
+    return { bundle, content: systemMessage?.content ?? '' };
+  }
+
+  it('sends each card field exactly once when the settings template references the card fields', () => {
+    const { content } = systemContentFor(
+      'Ты {{char}}.\n{{description}}\n{{personality}}\n{{scenario}}\n{{mesExample}}',
+    );
+
+    expect(occurrences(content, renderedCard.description)).toBe(1);
+    expect(occurrences(content, renderedCard.personality)).toBe(1);
+    expect(occurrences(content, renderedCard.scenario)).toBe(1);
+    expect(occurrences(content, renderedCard.exampleDialogue)).toBe(1);
+    expect(occurrences(content, 'Летопись Виндхолла')).toBe(1);
+  });
+
+  it('sends each card field exactly once through the default character template', () => {
+    const { bundle, content } = systemContentFor('');
+
+    expect(bundle.diagnostics.promptSource.kind).toBe('default-template');
+    expect(occurrences(content, renderedCard.description)).toBe(1);
+    expect(occurrences(content, renderedCard.personality)).toBe(1);
+    expect(occurrences(content, renderedCard.scenario)).toBe(1);
+    expect(occurrences(content, renderedCard.exampleDialogue)).toBe(1);
+  });
+
+  it('never sends {{user}} or {{char}} from card fields unrendered', () => {
+    for (const template of ['', '{{description}} {{personality}} {{scenario}} {{mesExample}}']) {
+      const { content } = systemContentFor(template);
+
+      expect(content).not.toMatch(/\{\{\s*(?:user|char)\s*\}\}/u);
+    }
+  });
+
+  it('carries the example dialogue only through a template that references it', () => {
+    const { content } = systemContentFor('Пиши как {{char}} и не говори за {{user}}.');
+
+    expect(content).toBe('Пиши как Эмбер и не говори за Tester.');
+    expect(content).not.toContain('Что читаешь?');
+    expect(content).not.toContain('Example dialogue');
+  });
+
+  it('leaves no empty example dialogue section in the default template for a card without examples', () => {
+    const { content } = systemContentFor('', { ...cardCharacter, mesExample: null });
+
+    expect(content).not.toContain('Example dialogue');
+    expect(content).not.toMatch(/\n{3,}/u);
+    expect(content).toContain(renderedCard.scenario);
+  });
+
+  it('keeps a template-looking {{unknown}} in a Cyrillic card field as written, once, and reports it', () => {
+    const { bundle, content } = systemContentFor('{{description}}', {
+      ...cardCharacter,
+      description: 'Ёжик в тумане {{unknown}} — «ёлка», {{char}}.',
+    });
+
+    expect(content).toBe('Ёжик в тумане {{unknown}} — «ёлка», Эмбер.');
+    expect(occurrences(content, '{{unknown}}')).toBe(1);
+    expect(bundle.diagnostics.renderer.unresolvedVariables).toEqual(['unknown']);
+  });
+});

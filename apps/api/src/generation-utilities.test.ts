@@ -227,6 +227,7 @@ describe('generation utility routes', () => {
 
   describe('POST /api/generation/first-message', () => {
     it('generates and appends the character opening message for an empty character chat with the model-bound preset in the profile language', async () => {
+      await api().settings.patch({ systemPromptTemplate: '' });
       const charactersDir = path.join(api().dataRoot, 'characters');
       await fs.mkdir(charactersDir, { recursive: true });
       await fs.writeFile(

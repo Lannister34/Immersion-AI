@@ -54,6 +54,7 @@ describe('assemble base prompt', () => {
       },
       variableValues: {
         'character.description': 'Private detective.',
+        'character.exampleDialogue': null,
         'character.name': 'Morgan',
         'character.personality': 'Reserved',
         'scenario.content': null,

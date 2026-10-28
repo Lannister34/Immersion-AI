@@ -649,6 +649,7 @@ describe('generation routes', () => {
   });
 
   it('previews the prompt with character description, personality, per-card scenario and seeded first message for a character chat', async () => {
+    await api().settings.patch({ systemPromptTemplate: '' });
     const charactersDir = path.join(api().dataRoot, 'characters');
     await fs.mkdir(charactersDir, { recursive: true });
     await fs.writeFile(
@@ -682,9 +683,9 @@ describe('generation routes', () => {
     expect(preview.diagnostics.systemPromptIncluded).toBe(true);
     expect(systemMessage).toBeDefined();
     expect(systemMessage?.content).toContain('Ария');
-    expect(systemMessage?.content).toContain('Молодая скульпторша из Петербурга.');
-    expect(systemMessage?.content).toContain('Тихая, но острая на язык.');
-    expect(systemMessage?.content).toContain('В мастерской вечером, в стенах пахнет глиной.');
+    expect(systemMessage?.content.split('Молодая скульпторша из Петербурга.')).toHaveLength(2);
+    expect(systemMessage?.content.split('Тихая, но острая на язык.')).toHaveLength(2);
+    expect(systemMessage?.content.split('В мастерской вечером, в стенах пахнет глиной.')).toHaveLength(2);
     expect(
       preview.request.messages.some(
         (m) => m.role === 'assistant' && m.content.includes('Привет, ты впервые в студии?'),
@@ -692,7 +693,56 @@ describe('generation routes', () => {
     ).toBe(true);
   });
 
+  it('previews a system prompt that carries each card field once with its macros rendered', async () => {
+    await api().settings.patch({
+      systemPromptTemplate: 'Пиши как {{char}}.\n{{description}}\n{{personality}}\n{{scenario}}\n{{mesExample}}',
+    });
+    const charactersDir = path.join(api().dataRoot, 'characters');
+    await fs.mkdir(charactersDir, { recursive: true });
+    await fs.writeFile(
+      path.join(charactersDir, 'Lena.json'),
+      JSON.stringify({
+        name: 'Лена',
+        description: 'Однокурсница {{user}}.',
+        personality: '{{char}} язвительна.',
+        scenario: '{{user}} и {{char}} учатся в одном университете.',
+        example_dialogue: '<START>\n{{user}}: Привет.\n{{char}}: Опять опоздал, {{user}}?',
+      }),
+      'utf8',
+    );
+    const createChatResponse = await api().app.inject({
+      method: 'POST',
+      url: '/api/chats',
+      payload: { characterId: 'Lena.json' },
+    });
+    const chat = CreateChatResponseSchema.parse(createChatResponse.json()).chat;
+
+    const previewResponse = await api().app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-preview',
+      payload: { chatId: chat.id, draftUserMessage: 'Привет.' },
+    });
+    const preview = ChatReplyPromptPreviewResponseSchema.parse(previewResponse.json());
+    const systemContent = preview.request.messages.find((message) => message.role === 'system')?.content ?? '';
+
+    expect(previewResponse.statusCode).toBe(200);
+    expect(systemContent).toBe(
+      [
+        'Пиши как Лена.',
+        'Однокурсница Тестер.',
+        'Лена язвительна.',
+        'Тестер и Лена учатся в одном университете.',
+        '<START>',
+        'Тестер: Привет.',
+        'Лена: Опять опоздал, Тестер?',
+        '',
+        'Answer in Russian unless the user explicitly asks for another language.',
+      ].join('\n'),
+    );
+  });
+
   it('injects scenario content into the prompt for a scenario-bound chat', async () => {
+    await api().settings.patch({ systemPromptTemplate: '' });
     const scenariosDir = path.join(api().dataRoot, 'scenarios');
     await fs.mkdir(scenariosDir, { recursive: true });
     await fs.writeFile(

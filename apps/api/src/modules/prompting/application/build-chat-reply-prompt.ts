@@ -58,39 +58,13 @@ const CHARACTER_SYSTEM_PROMPT_TEMPLATE = [
   '{{character.personality}}',
   '{{scenario.content}}',
   '{{user.persona}}',
+  '{{#if character.exampleDialogue}}Example dialogue:\n{{character.exampleDialogue}}{{/if}}',
   'Stay fully in character as {{character.name}}. Reply in first person, in the same language as the user, and never refer to yourself as an AI or assistant.',
 ].join('\n\n');
 const EMPTY_SYSTEM_PROMPT_TEMPLATE = '';
 
 function isContextualChat(session: ChatSessionDto) {
   return session.characterName !== null || session.chat.characterName !== null;
-}
-
-function buildCharacterContextSection(
-  character: PromptCharacterSnapshot | null,
-  scenarioContent: string | null,
-): string | null {
-  if (!character) return null;
-
-  const lines: string[] = [`You are ${character.name}.`];
-  const description = character.description?.trim();
-  if (description) {
-    lines.push(`Description:\n${description}`);
-  }
-  const personality = character.personality?.trim();
-  if (personality) {
-    lines.push(`Personality:\n${personality}`);
-  }
-  const scenario = scenarioContent?.trim();
-  if (scenario) {
-    lines.push(`Scenario:\n${scenario}`);
-  }
-  const example = character.mesExample?.trim();
-  if (example) {
-    lines.push(`Example dialogue:\n${example}`);
-  }
-
-  return lines.join('\n\n');
 }
 
 function toPromptTranscriptRole(role: ChatSessionDto['messages'][number]['role']): PromptTranscriptRole {
@@ -322,7 +296,6 @@ function buildUntrimmedChatReplyPrompt(input: BuildChatReplyPromptInput): Untrim
   const languageInstruction = shouldUseContextualPromptSettings
     ? getLanguageInstruction(input.settings.profile.responseLanguage)
     : null;
-  const characterContext = buildCharacterContextSection(character, input.characterScenarioContent ?? null);
   const lorebookContext = (input.lorebookSections ?? [])
     .map((section) => section.trim())
     .filter((section) => section.length > 0)
@@ -332,7 +305,6 @@ function buildUntrimmedChatReplyPrompt(input: BuildChatReplyPromptInput): Untrim
     isManualSystemPrompt
       ? [basePrompt.prompt]
       : [
-          characterContext,
           lorebookContext.length > 0 ? `World context:\n${lorebookContext}` : null,
           basePrompt.prompt,
           languageInstruction,

@@ -20,6 +20,7 @@ function resolvePromptUserPersona(snapshot: PromptInputSnapshot): string | null 
 export function buildPromptVariableValues(snapshot: PromptInputSnapshot): PromptVariableValues {
   return Object.freeze({
     'character.description': snapshot.character?.description ?? null,
+    'character.exampleDialogue': snapshot.character?.mesExample ?? null,
     'character.name': snapshot.character?.name ?? null,
     'character.personality': snapshot.character?.personality ?? null,
     'scenario.content': snapshot.scenario?.content ?? null,
