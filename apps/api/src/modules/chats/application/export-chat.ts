@@ -1,15 +1,13 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-
-import { readDataRoot } from '../../../config/read-api-config.js';
-import { FileChatRepository } from '../infrastructure/file-chat-repository.js';
 import { ChatNotFoundError } from './append-chat-messages.js';
-
-const GENERIC_CHAT_DIRECTORY = '_no_character_';
+import type { ChatRepository } from './chat-repository.js';
 
 export interface ChatExportPayload {
   body: string;
   fileName: string;
+}
+
+export interface ExportChatDependencies {
+  readonly chatRepository: Pick<ChatRepository, 'readChatExport'>;
 }
 
 function sanitizeForFileName(input: string): string {
@@ -21,20 +19,20 @@ function sanitizeForFileName(input: string): string {
   return collapsed.length > 80 ? collapsed.slice(0, 80) : collapsed;
 }
 
-export async function exportChat(chatId: string): Promise<ChatExportPayload> {
-  const chatRepository = new FileChatRepository();
-  const session = await chatRepository.getGenericChatSession(chatId);
+export async function exportChat(
+  { chatId }: { chatId: string },
+  { chatRepository }: ExportChatDependencies,
+): Promise<ChatExportPayload> {
+  const exported = await chatRepository.readChatExport(chatId);
 
-  if (!session) {
+  if (!exported) {
     throw new ChatNotFoundError(chatId);
   }
 
-  const filePath = path.join(readDataRoot(), 'chats', GENERIC_CHAT_DIRECTORY, `${chatId}.jsonl`);
-  const body = await fs.readFile(filePath, 'utf8');
-  const baseName = sanitizeForFileName(session.chat.title) || `chat-${chatId.slice(0, 8)}`;
+  const baseName = sanitizeForFileName(exported.title) || `chat-${chatId.slice(0, 8)}`;
 
   return {
-    body,
+    body: exported.body,
     fileName: `${baseName}.jsonl`,
   };
 }

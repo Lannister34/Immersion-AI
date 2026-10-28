@@ -1,25 +1,30 @@
 import type { ChatSummaryDto } from '@immersion/contracts/chats';
 
-import { FileChatRepository } from '../infrastructure/file-chat-repository.js';
+import type { Clock } from '../../../platform/clock/clock.js';
 import { ChatNotFoundError } from './append-chat-messages.js';
+import type { ChatRepository, UpdateGenericChatTitleOptions } from './chat-repository.js';
 import { toChatSummaryDto } from './chat-session-response.js';
 
-export interface UpdateChatTitleInput {
+export interface UpdateChatTitleInput extends UpdateGenericChatTitleOptions {
   chatId: string;
   title: string;
-  expectedCurrentTitle?: string;
-  now?: () => Date;
 }
 
-export async function updateChatTitle(input: UpdateChatTitleInput): Promise<ChatSummaryDto> {
-  const now = input.now ?? (() => new Date());
-  const repository = new FileChatRepository();
-  const session = await repository.updateGenericChatTitle(input.chatId, input.title, now().toISOString(), {
-    ...(input.expectedCurrentTitle !== undefined ? { expectedCurrentTitle: input.expectedCurrentTitle } : {}),
+export interface UpdateChatTitleDependencies {
+  readonly chatRepository: Pick<ChatRepository, 'updateGenericChatTitle'>;
+  readonly clock: Clock;
+}
+
+export async function updateChatTitle(
+  { chatId, expectedCurrentTitle, title }: UpdateChatTitleInput,
+  { chatRepository, clock }: UpdateChatTitleDependencies,
+): Promise<ChatSummaryDto> {
+  const session = await chatRepository.updateGenericChatTitle(chatId, title, clock.now().toISOString(), {
+    ...(expectedCurrentTitle !== undefined ? { expectedCurrentTitle } : {}),
   });
 
   if (!session) {
-    throw new ChatNotFoundError(input.chatId);
+    throw new ChatNotFoundError(chatId);
   }
 
   return toChatSummaryDto(session.chat);

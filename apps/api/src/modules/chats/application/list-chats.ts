@@ -1,19 +1,20 @@
 import { type ChatListResponse, ChatListResponseSchema } from '@immersion/contracts/chats';
 
-import { listIndexedChatSummaries } from '../../indexing/index.js';
-import type { ChatSummaryRecord } from './chat-records.js';
 import { toChatSummaryDto } from './chat-session-response.js';
+import type { ChatListIndexPort } from './chats-ports.js';
 
 export interface ListChatsInput {
   searchText?: string;
 }
 
-export interface ChatListIndexPort {
-  listChatSummaries(options: { searchText?: string }): Promise<ChatSummaryRecord[]>;
+export interface ListChatsDependencies {
+  readonly chatIndex: ChatListIndexPort;
 }
 
-export async function listChats(input: ListChatsInput = {}, index?: ChatListIndexPort): Promise<ChatListResponse> {
-  const chatIndex = index ?? { listChatSummaries: listIndexedChatSummaries };
+export async function listChats(
+  input: ListChatsInput,
+  { chatIndex }: ListChatsDependencies,
+): Promise<ChatListResponse> {
   const summaries = await chatIndex.listChatSummaries(input.searchText ? { searchText: input.searchText } : {});
 
   return ChatListResponseSchema.parse({

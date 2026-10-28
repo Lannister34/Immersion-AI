@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { parseApiConfig } from '../config/api-config.js';
+import { FileChatRepository } from '../modules/chats/index.js';
 import { InMemoryGenerationJobRegistry } from '../modules/generation/index.js';
 import { heuristicTokenCounter } from '../modules/prompting/index.js';
 import type { VisionProbe } from '../modules/providers/index.js';
@@ -26,11 +27,13 @@ describe('createApiDependencies', () => {
     const httpFetch = vi.fn<HttpFetch>();
     const { logger } = createCapturingLogger();
     const chatCompletionClient = new FakeChatCompletionClient();
+    const chatRepository = new FileChatRepository();
     const generationJobs = new InMemoryGenerationJobRegistry({ clock });
     const visionProbe: VisionProbe = { getVisionSupport: () => Promise.resolve('supported') };
 
     const dependencies = createApiDependencies(parseApiConfig({}, projectRoot), {
       chatCompletionClient,
+      chatRepository,
       clock,
       generationJobs,
       httpFetch,
@@ -43,16 +46,19 @@ describe('createApiDependencies', () => {
     expect(dependencies.httpFetch).toBe(httpFetch);
     expect(dependencies.logger).toBe(logger);
     expect(dependencies.chatCompletionClient).toBe(chatCompletionClient);
+    expect(dependencies.chatRepository).toBe(chatRepository);
     expect(dependencies.generationJobs).toBe(generationJobs);
     expect(dependencies.tokenCounter).toBe(heuristicTokenCounter);
     expect(dependencies.visionProbe).toBe(visionProbe);
   });
 
-  it('builds a job registry, token counter and vision probe of its own for every app', () => {
+  it('builds a chat repository, job registry, token counter and vision probe of its own for every app', () => {
     const config = parseApiConfig({}, projectRoot);
     const first = createApiDependencies(config);
     const second = createApiDependencies(config);
 
+    expect(first.chatRepository).toBeInstanceOf(FileChatRepository);
+    expect(second.chatRepository).not.toBe(first.chatRepository);
     expect(second.generationJobs).not.toBe(first.generationJobs);
     expect(second.tokenCounter).not.toBe(first.tokenCounter);
     expect(second.visionProbe).not.toBe(first.visionProbe);

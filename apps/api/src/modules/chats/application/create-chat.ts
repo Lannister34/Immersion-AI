@@ -2,18 +2,27 @@ import crypto from 'node:crypto';
 
 import { type CreateChatCommand, type CreateChatResponse, CreateChatResponseSchema } from '@immersion/contracts/chats';
 
-import { getCharacter } from '../../characters/index.js';
-import { getScenario } from '../../scenarios/index.js';
-import { FileChatRepository } from '../infrastructure/file-chat-repository.js';
+import type { Clock } from '../../../platform/clock/clock.js';
 import { renderChatGreeting } from './chat-greeting.js';
 import type { AppendChatMessageInput } from './chat-records.js';
+import type { ChatRepository } from './chat-repository.js';
 import { toChatSummaryDto } from './chat-session-response.js';
-import { getDefaultUserName } from './default-user-name.js';
+import type { ChatCharacterReader, ChatScenarioReader, ProfileUserNameSource } from './chats-ports.js';
 
-export async function createChat(command: CreateChatCommand): Promise<CreateChatResponse> {
-  const chatRepository = new FileChatRepository();
-  const createdAt = new Date().toISOString();
-  const userName = getDefaultUserName();
+export interface CreateChatDependencies {
+  readonly characters: ChatCharacterReader;
+  readonly chatRepository: Pick<ChatRepository, 'createGenericChat'>;
+  readonly clock: Clock;
+  readonly profile: ProfileUserNameSource;
+  readonly scenarios: ChatScenarioReader;
+}
+
+export async function createChat(
+  command: CreateChatCommand,
+  { characters, chatRepository, clock, profile, scenarios }: CreateChatDependencies,
+): Promise<CreateChatResponse> {
+  const createdAt = clock.now().toISOString();
+  const userName = profile.getProfileUserName();
 
   let characterId: string | null = null;
   let characterName: string | null = null;
@@ -25,7 +34,7 @@ export async function createChat(command: CreateChatCommand): Promise<CreateChat
   const seedMessages: AppendChatMessageInput[] = [];
 
   if (command.scenarioId) {
-    const scenario = await getScenario(command.scenarioId);
+    const scenario = await scenarios.getScenario(command.scenarioId);
     scenarioId = scenario.id;
     scenarioName = scenario.name;
     scenarioContent = scenario.content;
@@ -38,7 +47,7 @@ export async function createChat(command: CreateChatCommand): Promise<CreateChat
   }
 
   if (command.characterId) {
-    const character = await getCharacter(command.characterId);
+    const character = await characters.getCharacter(command.characterId);
     characterId = character.id;
     characterName = character.name;
     if (!command.title?.trim() && !command.scenarioId) {

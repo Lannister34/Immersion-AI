@@ -490,6 +490,27 @@ describe('FileChatRepository', () => {
     expect(directoryEntries.filter((entry) => entry.endsWith('.tmp'))).toEqual([]);
   });
 
+  it('exports the transcript only after the write queued before the export has landed', async () => {
+    const repository = new FileChatRepository();
+    await repository.createGenericChat({
+      createdAt: '2026-01-01T00:00:00.000Z',
+      id: 'export-chat',
+      title: 'Экспорт',
+      userName: 'Tester',
+    });
+
+    const appended = repository.appendGenericChatMessages('export-chat', [
+      { content: 'Последнее слово.', createdAt: '2026-01-01T00:00:01.000Z', role: 'user' },
+    ]);
+    const exported = await repository.readChatExport('export-chat');
+    await appended;
+
+    expect(exported?.title).toBe('Экспорт');
+    expect(exported?.body).toContain('Последнее слово.');
+    expect(exported?.body).toBe(await fs.readFile(resolveChatFilePath('export-chat'), 'utf8'));
+    await expect(repository.readChatExport('never-existed')).resolves.toBeNull();
+  });
+
   describe('listChatFileStats', () => {
     async function createChats(repository: FileChatRepository, chatIds: string[]) {
       for (const chatId of chatIds) {

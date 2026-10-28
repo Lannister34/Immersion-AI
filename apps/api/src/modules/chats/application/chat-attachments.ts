@@ -8,14 +8,9 @@ import {
 } from '@immersion/contracts/chats';
 import { IMAGE_UPLOAD_MAX_BYTES, IMAGE_UPLOAD_MAX_MEGABYTES } from '@immersion/contracts/common';
 
-import {
-  deleteChatAttachmentFiles,
-  FileChatRepository,
-  readChatAttachmentFile,
-  writeChatAttachmentFile,
-} from '../infrastructure/file-chat-repository.js';
 import { ChatNotFoundError } from './append-chat-messages.js';
 import type { ChatAttachmentMimeTypeRecord, ChatMessageAttachmentRecord } from './chat-records.js';
+import type { ChatRepository } from './chat-repository.js';
 
 const EXTENSION_BY_MIME_TYPE: Record<ChatAttachmentMimeTypeRecord, string> = {
   'image/jpeg': '.jpg',
@@ -48,12 +43,15 @@ export function chatAttachmentUrl(chatId: string, attachmentId: string): string 
   return `/api/chats/${encodeURIComponent(chatId)}/attachments/${encodeURIComponent(attachmentId)}`;
 }
 
-export function toChatMessageAttachmentDto(chatId: string, attachment: ChatMessageAttachmentRecord) {
+export function toChatMessageAttachmentDto(
+  chatId: string,
+  attachment: ChatMessageAttachmentRecord,
+): ChatMessageAttachmentDto {
   return {
     id: attachment.id,
     mimeType: attachment.mimeType,
     url: chatAttachmentUrl(chatId, attachment.id),
-  } satisfies ChatMessageAttachmentDto;
+  };
 }
 
 function detectImageMimeType(bytes: Buffer): ChatAttachmentMimeTypeRecord | null {
@@ -72,12 +70,32 @@ function detectImageMimeType(bytes: Buffer): ChatAttachmentMimeTypeRecord | null
   return null;
 }
 
-export async function uploadChatAttachment(
-  chatId: string,
-  command: UploadChatAttachmentCommand,
-): Promise<UploadChatAttachmentResponse> {
-  const chatRepository = new FileChatRepository();
+export interface ChatAttachmentReaderDependencies {
+  readonly chatRepository: Pick<ChatRepository, 'readChatAttachment'>;
+}
 
+export interface UploadChatAttachmentDependencies {
+  readonly chatRepository: Pick<ChatRepository, 'getGenericChatSession' | 'writeChatAttachment'>;
+}
+
+export interface UploadChatAttachmentInput extends UploadChatAttachmentCommand {
+  chatId: string;
+}
+
+export interface ChatAttachmentsResolution {
+  attachmentIds: readonly string[];
+  chatId: string;
+}
+
+export interface ChatAttachmentQuery {
+  attachmentId: string;
+  chatId: string;
+}
+
+export async function uploadChatAttachment(
+  { chatId, ...command }: UploadChatAttachmentInput,
+  { chatRepository }: UploadChatAttachmentDependencies,
+): Promise<UploadChatAttachmentResponse> {
   if (!(await chatRepository.getGenericChatSession(chatId))) {
     throw new ChatNotFoundError(chatId);
   }
@@ -99,7 +117,7 @@ export async function uploadChatAttachment(
   }
 
   const attachmentId = `${randomUUID()}${EXTENSION_BY_MIME_TYPE[mimeType]}`;
-  await writeChatAttachmentFile(chatId, attachmentId, bytes);
+  await chatRepository.writeChatAttachment(chatId, attachmentId, bytes);
 
   return UploadChatAttachmentResponseSchema.parse({
     attachment: toChatMessageAttachmentDto(chatId, { id: attachmentId, mimeType }),
@@ -117,8 +135,11 @@ function mimeTypeOfAttachmentId(attachmentId: string): ChatAttachmentMimeTypeRec
   return dotIndex === -1 ? null : (MIME_TYPE_BY_EXTENSION[attachmentId.slice(dotIndex).toLowerCase()] ?? null);
 }
 
-export async function getChatAttachment(chatId: string, attachmentId: string): Promise<ChatAttachmentPayload> {
-  const bytes = await readChatAttachmentFile(chatId, attachmentId);
+export async function getChatAttachment(
+  { attachmentId, chatId }: ChatAttachmentQuery,
+  { chatRepository }: ChatAttachmentReaderDependencies,
+): Promise<ChatAttachmentPayload> {
+  const bytes = await chatRepository.readChatAttachment(chatId, attachmentId);
 
   if (!bytes) {
     throw new ChatAttachmentNotFoundError(attachmentId);
@@ -134,14 +155,14 @@ export async function getChatAttachment(chatId: string, attachmentId: string): P
 }
 
 export async function resolveChatAttachments(
-  chatId: string,
-  attachmentIds: readonly string[],
+  { attachmentIds, chatId }: ChatAttachmentsResolution,
+  { chatRepository }: ChatAttachmentReaderDependencies,
 ): Promise<ChatMessageAttachmentRecord[]> {
   const attachments: ChatMessageAttachmentRecord[] = [];
 
   for (const attachmentId of attachmentIds) {
     const mimeType = mimeTypeOfAttachmentId(attachmentId);
-    const bytes = mimeType ? await readChatAttachmentFile(chatId, attachmentId) : null;
+    const bytes = mimeType ? await chatRepository.readChatAttachment(chatId, attachmentId) : null;
 
     if (!mimeType || !bytes) {
       throw new ChatAttachmentNotFoundError(attachmentId);
@@ -153,8 +174,11 @@ export async function resolveChatAttachments(
   return attachments;
 }
 
-export async function readChatAttachmentDataUrl(chatId: string, attachmentId: string): Promise<string | null> {
-  const bytes = await readChatAttachmentFile(chatId, attachmentId);
+export async function readChatAttachmentDataUrl(
+  { attachmentId, chatId }: ChatAttachmentQuery,
+  { chatRepository }: ChatAttachmentReaderDependencies,
+): Promise<string | null> {
+  const bytes = await chatRepository.readChatAttachment(chatId, attachmentId);
 
   if (!bytes) {
     return null;
@@ -163,8 +187,4 @@ export async function readChatAttachmentDataUrl(chatId: string, attachmentId: st
   const mimeType = detectImageMimeType(bytes) ?? mimeTypeOfAttachmentId(attachmentId);
 
   return mimeType ? `data:${mimeType};base64,${bytes.toString('base64')}` : null;
-}
-
-export async function deleteChatAttachments(chatId: string): Promise<void> {
-  await deleteChatAttachmentFiles(chatId);
 }

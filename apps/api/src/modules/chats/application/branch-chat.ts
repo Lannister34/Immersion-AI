@@ -2,15 +2,20 @@ import { randomUUID } from 'node:crypto';
 
 import type { ChatSummaryDto } from '@immersion/contracts/chats';
 
-import { FileChatRepository } from '../infrastructure/file-chat-repository.js';
+import type { Clock } from '../../../platform/clock/clock.js';
 import { ChatMessageNotFoundError, ChatNotFoundError } from './append-chat-messages.js';
+import type { ChatRepository } from './chat-repository.js';
 import { toChatSummaryDto } from './chat-session-response.js';
 
-interface BranchChatInput {
-  now: () => Date;
+export interface BranchChatCommand {
   sourceChatId: string;
   throughIndex: number;
   title?: string;
+}
+
+export interface BranchChatDependencies {
+  readonly chatRepository: Pick<ChatRepository, 'forkGenericChat' | 'getGenericChatSession'>;
+  readonly clock: Clock;
 }
 
 const BRANCH_TITLE_SUFFIX = ' (ветка)';
@@ -31,8 +36,10 @@ function deriveBranchTitle(sourceTitle: string, requestedTitle?: string) {
   return `${baseTitle}${BRANCH_TITLE_SUFFIX}`;
 }
 
-export async function branchChat({ now, sourceChatId, throughIndex, title }: BranchChatInput): Promise<ChatSummaryDto> {
-  const chatRepository = new FileChatRepository();
+export async function branchChat(
+  { sourceChatId, throughIndex, title }: BranchChatCommand,
+  { chatRepository, clock }: BranchChatDependencies,
+): Promise<ChatSummaryDto> {
   const sourceSession = await chatRepository.getGenericChatSession(sourceChatId);
 
   if (!sourceSession) {
@@ -44,7 +51,7 @@ export async function branchChat({ now, sourceChatId, throughIndex, title }: Bra
   }
 
   const summary = await chatRepository.forkGenericChat({
-    createdAt: now().toISOString(),
+    createdAt: clock.now().toISOString(),
     newChatId: randomUUID(),
     sourceChatId,
     throughIndex,

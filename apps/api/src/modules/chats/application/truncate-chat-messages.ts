@@ -1,23 +1,26 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 
-import { FileChatRepository } from '../infrastructure/file-chat-repository.js';
+import type { Clock } from '../../../platform/clock/clock.js';
 import { ChatMessageNotFoundError, ChatNotFoundError } from './append-chat-messages.js';
-import type { TruncateGenericChatMessagesOptions } from './chat-repository.js';
+import type { ChatRepository, TruncateGenericChatMessagesOptions } from './chat-repository.js';
 import { toChatSessionResponse } from './chat-session-response.js';
+import type { ProfileUserNameSource } from './chats-ports.js';
 
-interface TruncateChatMessagesInput extends TruncateGenericChatMessagesOptions {
+export interface TruncateChatMessagesCommand extends TruncateGenericChatMessagesOptions {
   chatId: string;
   fromIndex: number;
-  now: () => Date;
 }
 
-export async function truncateChatMessages({
-  chatId,
-  fromIndex,
-  now,
-  ...options
-}: TruncateChatMessagesInput): Promise<ChatSessionDto> {
-  const chatRepository = new FileChatRepository();
+export interface TruncateChatMessagesDependencies {
+  readonly chatRepository: Pick<ChatRepository, 'getGenericChatSession' | 'truncateGenericChatMessagesFromIndex'>;
+  readonly clock: Clock;
+  readonly profile: ProfileUserNameSource;
+}
+
+export async function truncateChatMessages(
+  { chatId, fromIndex, ...options }: TruncateChatMessagesCommand,
+  { chatRepository, clock, profile }: TruncateChatMessagesDependencies,
+): Promise<ChatSessionDto> {
   const existing = await chatRepository.getGenericChatSession(chatId);
 
   if (!existing) {
@@ -31,7 +34,7 @@ export async function truncateChatMessages({
   const session = await chatRepository.truncateGenericChatMessagesFromIndex(
     chatId,
     fromIndex,
-    now().toISOString(),
+    clock.now().toISOString(),
     options,
   );
 
@@ -39,5 +42,5 @@ export async function truncateChatMessages({
     throw new ChatMessageNotFoundError(chatId, fromIndex);
   }
 
-  return toChatSessionResponse(session);
+  return toChatSessionResponse(session, profile);
 }

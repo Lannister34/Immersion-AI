@@ -6,9 +6,8 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { z } from 'zod';
 
 import { createHttpStub, type HttpStub } from '../../../test-support/http-stub.js';
-import { createManualClock } from '../../../test-support/manual-clock.js';
+import { InMemoryChatSessions } from '../../../test-support/in-memory-chat-sessions.js';
 import { openAiChatCompletion } from '../../../test-support/provider-responses.js';
-import { appendChatMessages, createChat, getChatSession, updateChatTitle } from '../../chats/index.js';
 import { resolveChatGenerationSettings } from '../../prompting/index.js';
 import { resolveGenerationProviderEndpoint } from '../../providers/index.js';
 import { getSettingsOverview } from '../../settings/index.js';
@@ -71,18 +70,18 @@ const DRAFT_USE_CASES: ReadonlyArray<readonly [string, DraftUseCase]> = [
 ];
 
 async function generateTitleForSeededChat(chatCompletionClient: ChatCompletionClient): Promise<unknown> {
-  const { chat } = await createChat({ title: 'Чат о керамике' });
-  await appendChatMessages(chat.id, [
+  const chats = new InMemoryChatSessions();
+  chats.create('chat-ceramics', '2026-01-01T00:00:00.000Z');
+  await chats.appendChatMessages('chat-ceramics', [
     { content: 'Расскажи про обжиг керамики.', createdAt: '2026-01-01T00:00:00.000Z', role: 'user' },
     { content: 'Обжиг превращает глину в керамику.', createdAt: '2026-01-01T00:00:01.000Z', role: 'assistant' },
   ]);
 
   return generateChatTitle(
-    { chatId: chat.id },
+    { chatId: 'chat-ceramics' },
     {
       ...onSettingsFile(chatCompletionClient),
-      chats: { getChatSession, updateChatTitle },
-      clock: createManualClock(),
+      chats,
       prompting: { resolveChatGenerationSettings },
     },
   );

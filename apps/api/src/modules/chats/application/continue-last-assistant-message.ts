@@ -1,20 +1,28 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 
-import { FileChatRepository } from '../infrastructure/file-chat-repository.js';
 import { ChatNotFoundError } from './append-chat-messages.js';
-import type { AppendContinuationToLastAssistantMessageInput } from './chat-repository.js';
+import type { AppendContinuationToLastAssistantMessageInput, ChatRepository } from './chat-repository.js';
 import { toChatSessionResponse } from './chat-session-response.js';
+import type { ProfileUserNameSource } from './chats-ports.js';
+
+export interface AppendAssistantMessageContinuationCommand extends AppendContinuationToLastAssistantMessageInput {
+  chatId: string;
+}
+
+export interface AppendAssistantMessageContinuationDependencies {
+  readonly chatRepository: Pick<ChatRepository, 'appendContinuationToLastAssistantMessage'>;
+  readonly profile: ProfileUserNameSource;
+}
 
 export async function appendAssistantMessageContinuation(
-  chatId: string,
-  input: AppendContinuationToLastAssistantMessageInput,
+  { chatId, ...input }: AppendAssistantMessageContinuationCommand,
+  dependencies: AppendAssistantMessageContinuationDependencies,
 ): Promise<ChatSessionDto> {
-  const chatRepository = new FileChatRepository();
-  const session = await chatRepository.appendContinuationToLastAssistantMessage(chatId, input);
+  const session = await dependencies.chatRepository.appendContinuationToLastAssistantMessage(chatId, input);
 
   if (!session) {
     throw new ChatNotFoundError(chatId);
   }
 
-  return toChatSessionResponse(session);
+  return toChatSessionResponse(session, dependencies.profile);
 }

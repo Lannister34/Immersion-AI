@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { InMemoryChatSessions } from './in-memory-chat-sessions.js';
+import { createManualClock } from './manual-clock.js';
 
 const CREATED_AT = '2026-04-01T11:00:00.000Z';
 
@@ -78,6 +79,25 @@ describe('InMemoryChatSessions', () => {
         updatedAt: '2026-04-01T11:00:06.000Z',
       }),
     ).rejects.toThrow('The last message of chat chat-3 changed.');
+  });
+
+  it('renames a chat only while its title is still the one the caller read, stamped by its clock', async () => {
+    const chats = new InMemoryChatSessions({
+      clock: createManualClock({ start: new Date('2026-04-01T12:00:00.000Z') }),
+    });
+    chats.create('chat-4', CREATED_AT);
+
+    const renamed = await chats.updateChatTitle({
+      chatId: 'chat-4',
+      expectedCurrentTitle: 'Чат в памяти',
+      title: 'Сказка о репке',
+    });
+
+    expect(renamed).toMatchObject({ title: 'Сказка о репке', updatedAt: '2026-04-01T12:00:00.000Z' });
+    expect((await chats.getChatSession('chat-4'))?.chat).toEqual(renamed);
+    await expect(
+      chats.updateChatTitle({ chatId: 'chat-4', expectedCurrentTitle: 'Чат в памяти', title: 'Другое' }),
+    ).rejects.toThrow('The title of chat chat-4 changed.');
   });
 
   it('knows no chat it did not create', async () => {

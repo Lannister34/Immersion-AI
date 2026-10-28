@@ -61,7 +61,6 @@ export async function regenerateChatReplyJob(
       chatId: command.chatId,
       expectedRemovedMessages: regeneration.droppedMessages,
       fromIndex: regeneration.firstDroppedMessageIndex,
-      now: () => dependencies.clock.now(),
     });
   } catch (error) {
     dependencies.generationJobs.fail(job.id, error);

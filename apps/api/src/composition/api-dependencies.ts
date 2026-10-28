@@ -1,4 +1,5 @@
 import type { ApiConfig } from '../config/api-config.js';
+import { type ChatRepository, FileChatRepository } from '../modules/chats/index.js';
 import {
   type ChatCompletionClient,
   createChatCompletionClient,
@@ -22,6 +23,7 @@ export interface ApiDependencies {
   readonly clock: Clock;
   readonly httpFetch: HttpFetch;
   readonly chatCompletionClient: ChatCompletionClient;
+  readonly chatRepository: ChatRepository;
   readonly generationJobs: GenerationJobRegistry;
   readonly tokenCounter: TokenCounter;
   readonly visionProbe: VisionProbe;
@@ -40,6 +42,8 @@ export function createApiDependencies(config: ApiConfig, overrides: ApiDependenc
     clock,
     httpFetch,
     chatCompletionClient: overrides.chatCompletionClient ?? createChatCompletionClient({ httpFetch }),
+    // TODO: hand the repository the configured data root and a write queue of its own (F-38)
+    chatRepository: overrides.chatRepository ?? new FileChatRepository(),
     generationJobs: overrides.generationJobs ?? new InMemoryGenerationJobRegistry({ clock }),
     tokenCounter:
       overrides.tokenCounter ??
