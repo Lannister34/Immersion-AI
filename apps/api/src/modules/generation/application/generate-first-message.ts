@@ -94,6 +94,7 @@ export async function generateFirstMessage(
     character: characterContext.character,
     characterScenarioContent: characterContext.characterScenarioContent,
     lorebookSections: characterContext.lorebookSections,
+    providerContextSize: endpoint.contextSize,
     providerModelName: endpoint.model,
     session,
     settings,

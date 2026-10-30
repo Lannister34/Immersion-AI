@@ -4,7 +4,7 @@ import type {
   UpdateProviderSettingsCommand,
 } from '@immersion/contracts/providers';
 import type { RuntimeOverviewResponse, RuntimeStartCommand } from '@immersion/contracts/runtime';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useState } from 'react';
 
 import { Topbar } from '../../app/layout/topbar';
@@ -17,9 +17,11 @@ import { saveProviderSettings } from './api/save-provider-settings';
 import { startRuntime } from './api/start-runtime';
 import { stopRuntime } from './api/stop-runtime';
 import { ExternalProviderForm } from './components/external-provider-form';
+import { LaunchParamsCard } from './components/launch-params-card';
 import { ModelDirsCard } from './model-dirs-card';
 import { providerSettingsQueryKey, providerSettingsQueryOptions } from './queries/provider-settings-query';
 import { runtimeOverviewQueryKey, runtimeOverviewQueryOptions } from './queries/runtime-overview-query';
+import { startRuntimeMutationKey } from './queries/start-runtime-mutation-key';
 import { ServerLogsCard } from './server-logs-card';
 
 function toProviderCommand(snapshot: ProviderSettingsSnapshot, mode: ProviderMode): UpdateProviderSettingsCommand {
@@ -96,6 +98,7 @@ export function ServerControlScreen() {
 
   const startRuntimeMutation = useMutation({
     mutationFn: startRuntime,
+    mutationKey: startRuntimeMutationKey,
     onSuccess: (overview: RuntimeOverviewResponse) => {
       queryClient.setQueryData(runtimeOverviewQueryKey, overview);
     },
@@ -108,6 +111,7 @@ export function ServerControlScreen() {
     },
   });
 
+  const isRuntimeStarting = useIsMutating({ mutationKey: startRuntimeMutationKey }) > 0;
   const [modeChangeError, setModeChangeError] = useState<string | null>(null);
 
   const snapshot = providerSettingsQuery.data;
@@ -146,6 +150,10 @@ export function ServerControlScreen() {
     return model.name.toLowerCase().includes(search.trim().toLowerCase());
   });
   const activeModelName = overview?.serverStatus.model ?? null;
+  const isProcessUp = status === 'running' || status === 'starting';
+  const displayedLaunch = isProcessUp
+    ? (overview?.serverStatus.launchConfig ?? null)
+    : (overview?.serverConfig ?? null);
   const vision = describeVisionSupport(generationReadinessQuery.data?.visionSupport);
 
   let runtimeSubtitle = 'Загружаем настройки…';
@@ -237,8 +245,8 @@ export function ServerControlScreen() {
                   <div className="row gap-16 muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
                     <span>port {overview.serverConfig.port}</span>
                     {overview.serverStatus.pid ? <span>pid {overview.serverStatus.pid}</span> : null}
-                    <span>ctx {overview.serverConfig.contextSize.toLocaleString('ru-RU')}</span>
-                    <span>GPU {overview.serverConfig.gpuLayers}</span>
+                    <span>ctx {displayedLaunch ? displayedLaunch.contextSize.toLocaleString('ru-RU') : '—'}</span>
+                    <span>GPU {displayedLaunch ? displayedLaunch.gpuLayers : '—'}</span>
                   </div>
                 </div>
                 <div className="row gap-8">
@@ -264,7 +272,10 @@ export function ServerControlScreen() {
               </section>
 
               {paramsOpen ? (
-                <ModelDirsCard dirsStatus={overview.modelsDirsStatus} serverConfig={overview.serverConfig} />
+                <>
+                  <LaunchParamsCard overview={overview} />
+                  <ModelDirsCard dirsStatus={overview.modelsDirsStatus} serverConfig={overview.serverConfig} />
+                </>
               ) : null}
 
               <section className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -359,7 +370,7 @@ export function ServerControlScreen() {
                               {isActive && status !== 'error' ? null : (
                                 <button
                                   className="btn btn--xs btn--ghost-bordered"
-                                  disabled={startRuntimeMutation.isPending}
+                                  disabled={isRuntimeStarting}
                                   onClick={() =>
                                     handleRuntimeStart({
                                       contextSize: overview.serverConfig.contextSize,

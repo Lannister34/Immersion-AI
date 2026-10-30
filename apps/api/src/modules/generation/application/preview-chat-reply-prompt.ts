@@ -83,18 +83,26 @@ function withDraftUserMessage(session: ChatSessionDto, draftUserMessage: string 
   };
 }
 
-async function resolvePreviewModelName(dependencies: GenerationReadinessDependencies): Promise<string | null> {
+interface PreviewProvider {
+  contextSize: number | null;
+  model: string | null;
+}
+
+async function resolvePreviewProvider(dependencies: GenerationReadinessDependencies): Promise<PreviewProvider> {
   const providerSettings = await dependencies.providers.getProviderSettings();
 
   if (providerSettings.mode === 'builtin') {
-    const overview = await dependencies.runtime.getRuntimeOverview();
+    const { serverStatus } = await dependencies.runtime.getRuntimeOverview();
 
-    return overview.serverStatus.model?.trim() || null;
+    return {
+      contextSize: serverStatus.status === 'running' ? (serverStatus.launchConfig?.contextSize ?? null) : null,
+      model: serverStatus.model?.trim() || null,
+    };
   }
 
   const config = providerSettings.providerConfigs[providerSettings.activeProvider];
 
-  return config?.model?.trim() || DEFAULT_OPENAI_COMPATIBLE_MODEL;
+  return { contextSize: null, model: config?.model?.trim() || DEFAULT_OPENAI_COMPATIBLE_MODEL };
 }
 
 export async function previewChatReplyPrompt(
@@ -107,9 +115,9 @@ export async function previewChatReplyPrompt(
     throw new ChatNotFoundError(command.chatId);
   }
 
-  const [readiness, providerModelName] = await Promise.all([
+  const [readiness, provider] = await Promise.all([
     getGenerationReadiness(dependencies),
-    resolvePreviewModelName(dependencies),
+    resolvePreviewProvider(dependencies),
   ]);
   const sessionWithOverrides = withMessageOverrides(session, command.messageOverrides);
   const sessionForPlan = withDraftUserMessage(sessionWithOverrides, command.draftUserMessage);
@@ -118,7 +126,8 @@ export async function previewChatReplyPrompt(
     character: characterContext.character,
     characterScenarioContent: characterContext.characterScenarioContent,
     lorebookSections: characterContext.lorebookSections,
-    providerModelName,
+    providerContextSize: provider.contextSize,
+    providerModelName: provider.model,
     session: sessionForPlan,
     settings: dependencies.settings.getSettingsOverview(),
     tokenCounter: dependencies.tokenCounter,
@@ -131,6 +140,7 @@ export async function previewChatReplyPrompt(
     chatId: command.chatId,
     diagnostics: {
       budgetStatus: generationPlan.prompt.diagnostics.budgetStatus,
+      contextWindow: generationPlan.contextWindow,
       messageCount: generationPlan.providerRequest.messages.length,
       promptSource: {
         kind: generationPlan.prompt.diagnostics.promptSource.kind,
@@ -154,7 +164,8 @@ export async function previewChatReplyPrompt(
       sampling: generationPlan.effectiveSettings.sampling,
     },
     provider: {
-      model: providerModelName,
+      contextSize: provider.contextSize,
+      model: provider.model,
       readiness,
     },
     request: {

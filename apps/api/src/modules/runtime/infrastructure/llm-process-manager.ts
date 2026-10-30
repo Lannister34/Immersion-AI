@@ -2,7 +2,13 @@ import { type ChildProcess, execSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { RuntimeConfigCommand, RuntimeEngineInfo, RuntimeStatusSnapshot } from '@immersion/contracts/runtime';
+import {
+  type RuntimeConfigSnapshot,
+  type RuntimeEngineInfo,
+  type RuntimeLaunchConfig,
+  RuntimeLaunchConfigSchema,
+  type RuntimeStatusSnapshot,
+} from '@immersion/contracts/runtime';
 
 import { findProjectRoot } from '../../../config/find-project-root.js';
 import { readDataRoot } from '../../../config/read-api-config.js';
@@ -43,7 +49,7 @@ function readLogFileTail(): string[] {
 
 type RuntimeLifecycleStatus = RuntimeStatusSnapshot['status'];
 
-export interface LlmStartConfig extends Omit<RuntimeConfigCommand, 'modelsDirs'> {
+export interface LlmStartConfig extends Omit<RuntimeConfigSnapshot, 'modelsDirs'> {
   mmprojPath?: string | undefined;
   modelPath: string;
 }
@@ -54,6 +60,7 @@ interface PidFileData {
   model: string;
   modelPath: string;
   mmprojPath?: string | null;
+  launchConfig?: unknown;
 }
 
 interface RuntimeBinaryLocation {
@@ -128,6 +135,39 @@ function readPidFile(): PidFileData | null {
   } catch {
     return null;
   }
+}
+
+let malformedLaunchConfigPid: number | null = null;
+
+function readPidFileLaunchConfig(data: PidFileData): RuntimeLaunchConfig | null {
+  if (data.launchConfig === undefined) {
+    return null;
+  }
+
+  const parsed = RuntimeLaunchConfigSchema.safeParse(data.launchConfig);
+
+  if (parsed.success) {
+    return parsed.data;
+  }
+
+  if (malformedLaunchConfigPid !== data.pid) {
+    malformedLaunchConfigPid = data.pid;
+    getSharedApiLogger().warn(
+      { issues: parsed.error.issues, pid: data.pid },
+      'llm-process: PID file holds a malformed launchConfig; reporting it as unknown',
+    );
+  }
+
+  return null;
+}
+
+function toLaunchConfig(config: LlmStartConfig): RuntimeLaunchConfig {
+  return {
+    contextSize: config.contextSize,
+    flashAttention: config.flashAttention,
+    gpuLayers: config.gpuLayers,
+    threads: config.threads,
+  };
 }
 
 function removePidFile() {
@@ -206,6 +246,7 @@ export class LlmProcessManager {
     error: null,
     port: 5001,
     pid: null,
+    launchConfig: null,
   };
 
   getEngineInfo(): RuntimeEngineInfo {
@@ -237,6 +278,7 @@ export class LlmProcessManager {
         error: null,
         port: this.state.port,
         pid: null,
+        launchConfig: null,
       };
     }
 
@@ -251,6 +293,7 @@ export class LlmProcessManager {
       error: null,
       port: detachedState.port,
       pid: detachedState.pid,
+      launchConfig: readPidFileLaunchConfig(detachedState),
     };
   }
 
@@ -290,6 +333,7 @@ export class LlmProcessManager {
       error: null,
       port: config.port,
       pid: null,
+      launchConfig: toLaunchConfig(config),
     });
 
     const args = [
@@ -335,6 +379,7 @@ export class LlmProcessManager {
         model: this.state.model ?? path.basename(config.modelPath),
         modelPath: config.modelPath,
         mmprojPath: config.mmprojPath ?? null,
+        launchConfig: toLaunchConfig(config),
       });
     }
 
@@ -369,6 +414,7 @@ export class LlmProcessManager {
           modelPath: null,
           error: null,
           pid: null,
+          launchConfig: null,
         });
       } else if (this.state.status !== 'idle') {
         this.setStateStatus('error', {
@@ -409,6 +455,7 @@ export class LlmProcessManager {
       error: null,
       port: pidFile.port,
       pid: pidFile.pid,
+      launchConfig: readPidFileLaunchConfig(pidFile),
     });
 
     if (await isLlamaServerHealthy(pidFile.port, 3000)) {
@@ -547,6 +594,7 @@ export class LlmProcessManager {
       modelPath: null,
       error: null,
       pid: null,
+      launchConfig: null,
     });
     removePidFile();
   }

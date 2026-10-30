@@ -8,7 +8,6 @@
   "apps/api/src/modules/providers/application/get-provider-settings.ts": "explicit-return-type:1",
   "apps/api/src/modules/providers/application/provider-settings-repository.ts": "explicit-return-type:2",
   "apps/api/src/modules/runtime/application/get-runtime-overview.ts": "explicit-return-type:1",
-  "apps/api/src/modules/runtime/application/runtime-config-repository.ts": "explicit-return-type:2",
   "apps/api/src/modules/runtime/application/stop-runtime.ts": "explicit-return-type:1",
   "apps/api/src/modules/runtime/infrastructure/llm-process-manager.ts": "explicit-return-type:6",
   "apps/api/src/platform/storage/atomic-file.ts": "explicit-return-type:2",

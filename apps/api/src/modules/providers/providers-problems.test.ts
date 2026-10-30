@@ -10,6 +10,7 @@ describe('providers problems', () => {
     await api().settings.write({ backendMode: 'builtin' });
     vi.spyOn(runtimeEndpointAdapter, 'getRunningEndpoint').mockResolvedValue({
       baseUrl: 'ftp://127.0.0.1:5001',
+      contextSize: null,
       model: null,
       visionProjectorPath: null,
     });

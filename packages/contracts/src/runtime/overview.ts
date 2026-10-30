@@ -8,15 +8,6 @@ export const RuntimeEngineInfoSchema = z.object({
   defaultModelsDir: z.string(),
 });
 
-export const RuntimeStatusSnapshotSchema = z.object({
-  status: RuntimeServerStatusSchema,
-  model: z.string().nullable(),
-  modelPath: z.string().nullable(),
-  error: z.string().nullable(),
-  port: z.number().int().nonnegative(),
-  pid: z.number().int().positive().nullable(),
-});
-
 export const RuntimeConfigSnapshotSchema = z.object({
   modelsDirs: z.array(z.string().trim().min(1)),
   port: z.number().int().nonnegative(),
@@ -24,6 +15,23 @@ export const RuntimeConfigSnapshotSchema = z.object({
   contextSize: z.number().int().positive(),
   flashAttention: z.boolean(),
   threads: z.number().int().nonnegative(),
+});
+
+export const RuntimeLaunchConfigSchema = RuntimeConfigSnapshotSchema.pick({
+  contextSize: true,
+  flashAttention: true,
+  gpuLayers: true,
+  threads: true,
+});
+
+export const RuntimeStatusSnapshotSchema = z.object({
+  status: RuntimeServerStatusSchema,
+  model: z.string().nullable(),
+  modelPath: z.string().nullable(),
+  error: z.string().nullable(),
+  port: z.number().int().nonnegative(),
+  pid: z.number().int().positive().nullable(),
+  launchConfig: RuntimeLaunchConfigSchema.nullable(),
 });
 
 export const RuntimeModelSummarySchema = z.object({
@@ -51,6 +59,7 @@ export type RuntimeServerStatus = z.infer<typeof RuntimeServerStatusSchema>;
 export type RuntimeEngineInfo = z.infer<typeof RuntimeEngineInfoSchema>;
 export type RuntimeStatusSnapshot = z.infer<typeof RuntimeStatusSnapshotSchema>;
 export type RuntimeConfigSnapshot = z.infer<typeof RuntimeConfigSnapshotSchema>;
+export type RuntimeLaunchConfig = z.infer<typeof RuntimeLaunchConfigSchema>;
 export type RuntimeModelSummary = z.infer<typeof RuntimeModelSummarySchema>;
 export type RuntimeModelsDirStatus = z.infer<typeof RuntimeModelsDirStatusSchema>;
 export type RuntimeOverviewResponse = z.infer<typeof RuntimeOverviewResponseSchema>;

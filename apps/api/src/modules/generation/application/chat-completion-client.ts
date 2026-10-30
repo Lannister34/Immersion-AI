@@ -7,6 +7,7 @@ export interface ChatCompletionEndpoint {
   apiKey: string | null;
   apiKind: ProviderApiKind;
   baseUrl: string;
+  contextSize: number | null;
   model: string;
 }
 

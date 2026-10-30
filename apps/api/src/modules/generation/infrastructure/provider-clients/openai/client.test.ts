@@ -17,7 +17,13 @@ import { OpenAiClient } from './client.js';
 const COMPLETIONS_URL = 'http://127.0.0.1:5001/v1/chat/completions';
 
 const BASE_REQUEST: Omit<ChatCompletionRequest, 'onDelta'> = {
-  endpoint: { apiKey: null, apiKind: 'openai-compatible', baseUrl: 'http://127.0.0.1:5001', model: 'test-model' },
+  endpoint: {
+    apiKey: null,
+    apiKind: 'openai-compatible',
+    baseUrl: 'http://127.0.0.1:5001',
+    contextSize: null,
+    model: 'test-model',
+  },
   maxTokens: 128,
   messages: [{ content: 'Привет.', role: 'user' }],
   sampling: {
