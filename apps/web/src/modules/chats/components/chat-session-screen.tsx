@@ -48,11 +48,6 @@ export interface ChatSessionScreenProps {
   chatId: string;
 }
 
-interface ChatEditState {
-  chatId: string;
-  target: MessageEditTarget;
-}
-
 function formatTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) {
@@ -75,10 +70,7 @@ const ignoreErrorShownByGenerationState = (): void => undefined;
 
 export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const [draftMessage, setDraftMessage] = useState('');
-  const [editState, setEditState] = useState<ChatEditState | null>(null);
-  if (editState !== null && editState.chatId !== chatId) {
-    setEditState(null);
-  }
+  const [editing, setEditing] = useState<MessageEditTarget | null>(null);
   const attachmentsDraft = useChatAttachments(chatId);
   const debouncedDraftMessage = useDebouncedValue(draftMessage, 400);
   const panelTab = useUiShellStore((state) => state.chatRightPanelTab);
@@ -213,7 +205,6 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const isStreaming = Boolean(chatReplyGeneration.activeJob);
   const vision = describeVisionSupport(generationReadinessQuery.data?.visionSupport);
   const showReasoning = settingsOverviewQuery.data?.profile.thinkingEnabled ?? true;
-  const editing = editState?.chatId === chatId ? editState.target : null;
   const messageActions = deriveMessageActions({
     blockReason,
     editing,
@@ -306,7 +297,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
           onDelete={async () => {
             await deleteMessageMutation.mutateAsync({ messageIndex });
           }}
-          onEndEdit={() => setEditState(null)}
+          onEndEdit={() => setEditing(null)}
           onRegenerate={async () => {
             await chatReplyGeneration.regenerate().catch(ignoreErrorShownByGenerationState);
           }}
@@ -316,7 +307,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
               messageIndex,
             });
           }}
-          onStartEdit={() => setEditState({ chatId, target: { baseContent: message.content, messageIndex } })}
+          onStartEdit={() => setEditing({ baseContent: message.content, messageIndex })}
           text={message.content}
           time={formatTime(message.createdAt)}
           who={message.role === 'user' ? session.userName : characterDisplay}
@@ -498,7 +489,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                   <span className="muted" style={{ marginRight: 'auto' }}>
                     Сообщение изменилось, правка не сохранена
                   </span>
-                  <button className="btn btn--xs btn--ghost-bordered" onClick={() => setEditState(null)} type="button">
+                  <button className="btn btn--xs btn--ghost-bordered" onClick={() => setEditing(null)} type="button">
                     Закрыть
                   </button>
                 </div>

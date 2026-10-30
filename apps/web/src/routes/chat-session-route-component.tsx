@@ -7,5 +7,5 @@ const chatSessionRouteApi = getRouteApi('/chat/$chatId');
 export function ChatSessionRouteComponent() {
   const { chatId } = chatSessionRouteApi.useParams();
 
-  return <ChatSessionScreen chatId={chatId} />;
+  return <ChatSessionScreen chatId={chatId} key={chatId} />;
 }
