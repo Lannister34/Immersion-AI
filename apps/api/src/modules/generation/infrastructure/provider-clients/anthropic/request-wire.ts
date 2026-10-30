@@ -11,6 +11,12 @@ export interface AnthropicMessage {
   role: AnthropicRole;
 }
 
+export interface AnthropicSampling {
+  temperature?: number;
+  top_k?: number;
+  top_p?: number;
+}
+
 export interface AnthropicPayload {
   conversation: AnthropicMessage[];
   system: string;

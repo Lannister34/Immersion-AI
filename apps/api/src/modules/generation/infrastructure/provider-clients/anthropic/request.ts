@@ -2,6 +2,7 @@ import { buildAnthropicAuthHeaders } from '../../../../providers/index.js';
 import type { ChatCompletionRequest } from '../../../application/chat-completion-client.js';
 import { parseAnthropicImageSource } from './parse-image-source.js';
 import type { AnthropicImageSource, AnthropicMessage, AnthropicPayload } from './request-wire.js';
+import { buildAnthropicSamplingPayload, resolveAnthropicSamplingSupport } from './sampling-policy.js';
 
 function buildMessageContent(message: ChatCompletionRequest['messages'][number]): AnthropicMessage['content'] {
   const images = (message.images ?? [])
@@ -49,13 +50,6 @@ export function buildAnthropicPayload(messages: ChatCompletionRequest['messages'
   return { conversation, system };
 }
 
-function buildSamplingPayload(sampling: ChatCompletionRequest['sampling']) {
-  return {
-    temperature: Math.min(Math.max(sampling.temperature, 0), 1),
-    ...(sampling.topK > 0 ? { top_k: Math.round(sampling.topK) } : {}),
-  };
-}
-
 export function buildAnthropicHeaders(apiKey: string | null) {
   return {
     ...buildAnthropicAuthHeaders(apiKey),
@@ -73,6 +67,6 @@ export function buildAnthropicBody(request: ChatCompletionRequest) {
     max_tokens: request.maxTokens,
     stream: Boolean(request.onDelta),
     ...(system ? { system } : {}),
-    ...buildSamplingPayload(request.sampling),
+    ...buildAnthropicSamplingPayload(request.sampling, resolveAnthropicSamplingSupport(request.endpoint.model)),
   };
 }

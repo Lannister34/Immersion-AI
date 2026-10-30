@@ -124,6 +124,22 @@ describe('AnthropicClient', () => {
     expect(body).not.toHaveProperty('top_p');
   });
 
+  it('sends no sampling parameters to a Claude model that rejects them all, such as Opus 5', async () => {
+    const http = createHttpStub();
+    http.on('POST', MESSAGES_URL, () => anthropicMessage('Ага.'));
+
+    await new AnthropicClient({ httpFetch: http.fetch }).completeChat({
+      ...BASE_REQUEST,
+      endpoint: { ...BASE_REQUEST.endpoint, model: 'claude-opus-5' },
+    });
+    const body = readProviderChatRequest(http);
+
+    expect(body.model).toBe('claude-opus-5');
+    expect(body).not.toHaveProperty('temperature');
+    expect(body).not.toHaveProperty('top_p');
+    expect(body).not.toHaveProperty('top_k');
+  });
+
   it('keeps thinking blocks out of the reply', async () => {
     const http = createHttpStub();
     http.on('POST', MESSAGES_URL, () =>
