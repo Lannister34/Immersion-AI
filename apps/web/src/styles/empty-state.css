@@ -1,0 +1,20 @@
+.empty {
+  display: grid;
+  place-items: center;
+  padding: 40px 20px;
+  color: var(--muted);
+  text-align: center;
+  gap: 10px;
+}
+
+.empty h2 {
+  color: var(--text);
+  font-size: var(--fz-lg);
+  margin: 0;
+}
+
+.empty p {
+  margin: 0;
+  font-size: var(--fz-sm);
+  max-width: 420px;
+}

@@ -1,0 +1,18 @@
+.section-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  color: var(--muted-dim);
+  font-size: var(--fz-2xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.divider {
+  height: 1px;
+  background: var(--hairline);
+  margin: 8px 0;
+}

@@ -1,0 +1,30 @@
+.disclosure {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  transition: border-color 120ms ease-out;
+}
+
+.disclosure:hover {
+  background: var(--surface);
+}
+
+.disclosure[data-overridden="true"] {
+  border-color: oklch(0.72 0.18 295 / 0.55);
+}
+
+.disclosure .chevron {
+  color: var(--muted);
+  transition: transform 0.15s;
+  flex: none;
+}
+
+.disclosure[data-open="true"] .chevron {
+  transform: rotate(90deg);
+}

@@ -1,0 +1,25 @@
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: var(--fz-xs);
+  color: var(--text-1);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.filter-chip[data-active="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}

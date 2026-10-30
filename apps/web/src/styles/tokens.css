@@ -1,0 +1,52 @@
+:root {
+  color-scheme: dark;
+
+  --bg: oklch(0.155 0.004 270);
+  --bg-2: oklch(0.185 0.004 270);
+  --surface: oklch(0.215 0.005 270);
+  --surface-2: oklch(0.245 0.006 270);
+  --surface-3: oklch(0.285 0.007 270);
+  --hairline: oklch(0.3 0.006 270 / 0.7);
+  --hairline-strong: oklch(0.38 0.008 270);
+
+  --text: oklch(0.96 0.005 270);
+  --text-1: oklch(0.86 0.008 270);
+  --muted: oklch(0.66 0.01 270);
+  --muted-dim: oklch(0.5 0.01 270);
+  --muted-faint: oklch(0.38 0.008 270);
+
+  --accent: oklch(0.72 0.18 295);
+  --accent-2: oklch(0.66 0.2 295);
+  --accent-soft: oklch(0.72 0.18 295 / 0.16);
+  --accent-fg: oklch(0.99 0 0);
+
+  --ok: oklch(0.78 0.16 155);
+  --ok-soft: oklch(0.78 0.16 155 / 0.18);
+  --warn: oklch(0.82 0.16 75);
+  --warn-soft: oklch(0.82 0.16 75 / 0.18);
+  --danger: oklch(0.7 0.2 25);
+  --danger-soft: oklch(0.7 0.2 25 / 0.18);
+  --info: oklch(0.78 0.13 230);
+
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+
+  --shadow-1: 0 1px 0 0 oklch(1 0 0 / 0.04) inset, 0 1px 2px oklch(0 0 0 / 0.4);
+  --shadow-2: 0 12px 40px oklch(0 0 0 / 0.55), 0 1px 0 0 oklch(1 0 0 / 0.04) inset;
+
+  --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --fz-2xs: 10px;
+  --fz-xs: 11px;
+  --fz-sm: 12px;
+  --fz-md: 13px;
+  --fz-lg: 14px;
+  --fz-xl: 15px;
+  --fz-2xl: 17px;
+  --fz-3xl: 21px;
+  --fz-4xl: 26px;
+}

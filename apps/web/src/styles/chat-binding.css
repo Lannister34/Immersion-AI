@@ -1,0 +1,23 @@
+.rp-binding {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.rp-binding:last-child {
+  border-bottom: 0;
+}
+
+.rp-binding__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--muted);
+  flex: none;
+}

@@ -1,0 +1,23 @@
+.frame {
+  display: grid;
+  grid-template-columns: 224px minmax(0, 1fr);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fz-md);
+  line-height: 1.45;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.frame--with-right {
+  grid-template-columns: 224px minmax(0, 1fr) 320px;
+}
+
+.frame--with-right-rail {
+  grid-template-columns: 224px minmax(0, 1fr) 56px;
+}
+
+.frame--collapsed {
+  grid-template-columns: 56px minmax(0, 1fr);
+}

@@ -1,0 +1,26 @@
+.tbl {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--fz-sm);
+}
+
+.tbl th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: var(--fz-xs);
+  letter-spacing: 0.02em;
+}
+
+.tbl td {
+  padding: 10px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-1);
+}
+
+.tbl tr:hover td {
+  background: var(--surface);
+}

@@ -1,0 +1,32 @@
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  width: 30px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  border: 1px solid var(--hairline);
+  position: relative;
+  flex: none;
+  cursor: pointer;
+}
+
+.toggle::after {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--muted);
+  margin: 0 2px;
+  transition: 0.15s;
+}
+
+.toggle[data-on="true"] {
+  background: var(--accent);
+  border-color: transparent;
+}
+
+.toggle[data-on="true"]::after {
+  background: white;
+  margin-left: 14px;
+}
