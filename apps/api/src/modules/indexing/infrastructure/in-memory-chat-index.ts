@@ -1,24 +1,13 @@
-import { createSerialQueue } from '../../../platform/concurrency/serial-queue.js';
-import { getSharedApiLogger } from '../../../platform/logging/shared-api-logger.js';
-import type {
-  ChatFileStatRecord,
-  ChatSearchTextRecord,
-  ChatSummaryRecord,
-  ChatSummaryWithSearchText,
-} from '../../chats/index.js';
+import type { SerialQueue } from '../../../platform/concurrency/serial-queue.js';
+import type { LogPort } from '../../../platform/logging/log-port.js';
+import type { ChatSearchTextRecord, ChatSummaryRecord } from '../../chats/index.js';
+import type { CharacterChatStatsRecord, ChatIndex, ChatIndexQueryOptions } from '../application/chat-index.js';
+import type { ChatIndexSource } from '../application/chat-index-source.js';
 
-export interface ChatIndexSourcePort {
-  listChatFileStats(): Promise<ChatFileStatRecord[]>;
-  readChatSummaryWithSearchText(chatId: string): Promise<ChatSummaryWithSearchText | null>;
-}
-
-export interface ChatIndexQueryOptions {
-  searchText?: string;
-}
-
-export interface CharacterChatStatsRecord {
-  chatCount: number;
-  lastChatAt: string | null;
+export interface InMemoryChatIndexDependencies {
+  readonly source: ChatIndexSource;
+  readonly logger: LogPort;
+  readonly refreshQueue: SerialQueue;
 }
 
 interface ChatIndexSlot {
@@ -41,11 +30,17 @@ function matchesNeedle(searchText: ChatSearchTextRecord, needle: string): boolea
   return searchText.messageTextsLower.some((text) => text.includes(needle));
 }
 
-export class InMemoryChatIndex {
+export class InMemoryChatIndex implements ChatIndex {
   private readonly slots = new Map<string, ChatIndexSlot>();
-  private readonly refreshQueue = createSerialQueue();
+  private readonly source: ChatIndexSource;
+  private readonly logger: LogPort;
+  private readonly refreshQueue: SerialQueue;
 
-  constructor(private readonly source: ChatIndexSourcePort) {}
+  constructor({ source, logger, refreshQueue }: InMemoryChatIndexDependencies) {
+    this.source = source;
+    this.logger = logger;
+    this.refreshQueue = refreshQueue;
+  }
 
   async listChatSummaries(options: ChatIndexQueryOptions = {}): Promise<ChatSummaryRecord[]> {
     await this.refresh();
@@ -119,7 +114,7 @@ export class InMemoryChatIndex {
             fileSize: stat.fileSize,
           });
         } catch (error) {
-          getSharedApiLogger().warn(
+          this.logger.warn(
             { chatId: stat.chatId, err: error },
             'Chat index: failed to parse chat file; excluding it from the listing',
           );

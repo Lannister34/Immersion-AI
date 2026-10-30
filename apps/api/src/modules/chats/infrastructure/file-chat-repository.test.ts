@@ -1,12 +1,13 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 
-import { getSharedApiLogger } from '../../../platform/logging/shared-api-logger.js';
+import { createKeyedSerialQueue } from '../../../platform/concurrency/keyed-serial-queue.js';
+import { type CapturingLogger, createCapturingLogger } from '../../../test-support/capturing-logger.js';
 import { failFileStatOf } from '../../../test-support/failing-file-stat.js';
 import { readStoredChatFile } from '../../../test-support/stored-chat-file.js';
-import { useTemporaryDataRoot } from '../../../test-support/use-temporary-data-root.js';
+import { createTemporaryProject } from '../../../test-support/temporary-project.js';
 import { ChatTranscriptChangedError } from '../application/chat-conflicts.js';
 import type { ChatMessageRecord } from '../application/chat-records.js';
 import { FileChatRepository } from './file-chat-repository.js';
@@ -53,17 +54,29 @@ const TRUNCATE_GUARD_CASES: readonly TruncateGuardCase[] = [
 ];
 
 describe('FileChatRepository', () => {
-  const dataRoot = useTemporaryDataRoot();
+  let chatsDirectory = '';
+  let logs: CapturingLogger;
+
+  beforeEach(async () => {
+    const project = await createTemporaryProject('empty');
+    onTestFinished(() => project.remove());
+    chatsDirectory = path.join(project.dataRoot, 'чаты без персонажа');
+    logs = createCapturingLogger();
+  });
+
+  function createRepository(): FileChatRepository {
+    return new FileChatRepository({ chatsDirectory, logger: logs.logger, writeQueue: createKeyedSerialQueue() });
+  }
 
   function resolveChatFilePath(chatId: string) {
-    return path.join(dataRoot(), 'chats', '_no_character_', `${chatId}.jsonl`);
+    return path.join(chatsDirectory, `${chatId}.jsonl`);
   }
 
   it(
     'serializes concurrent appends and leaves a coherent JSONL chat file',
     async () => {
       const chatId = 'concurrent-chat';
-      const repository = new FileChatRepository();
+      const repository = createRepository();
       const expectedMessages = Array.from({ length: 24 }, (_, index) => ({
         content: `message-${index.toString().padStart(2, '0')}`,
         createdAt: `2026-01-01T00:00:${index.toString().padStart(2, '0')}.000Z`,
@@ -115,7 +128,7 @@ describe('FileChatRepository', () => {
 
   it('rewrites a single message content and preserves siblings and ordering', async () => {
     const chatId = 'edit-chat';
-    const repository = new FileChatRepository();
+    const repository = createRepository();
 
     await repository.createGenericChat({
       id: chatId,
@@ -153,7 +166,7 @@ describe('FileChatRepository', () => {
 
   it('returns null when editing a non-existent message index', async () => {
     const chatId = 'missing-edit-chat';
-    const repository = new FileChatRepository();
+    const repository = createRepository();
 
     await repository.createGenericChat({
       id: chatId,
@@ -178,7 +191,7 @@ describe('FileChatRepository', () => {
 
   it('truncates messages from a given index and bumps the header timestamp', async () => {
     const chatId = 'truncate-chat';
-    const repository = new FileChatRepository();
+    const repository = createRepository();
 
     await repository.createGenericChat({
       id: chatId,
@@ -213,7 +226,7 @@ describe('FileChatRepository', () => {
 
   it('returns null when truncating with an out-of-range index', async () => {
     const chatId = 'missing-truncate-chat';
-    const repository = new FileChatRepository();
+    const repository = createRepository();
 
     await repository.createGenericChat({
       id: chatId,
@@ -241,7 +254,7 @@ describe('FileChatRepository', () => {
     messagesOnDisk,
   }) => {
     const chatId = 'guarded-truncate-chat';
-    const repository = new FileChatRepository();
+    const repository = createRepository();
 
     await repository.createGenericChat({
       id: chatId,
@@ -266,7 +279,7 @@ describe('FileChatRepository', () => {
 
   it('truncates when the messages to remove are exactly the expected ones', async () => {
     const chatId = 'matching-truncate-chat';
-    const repository = new FileChatRepository();
+    const repository = createRepository();
 
     await repository.createGenericChat({
       id: chatId,
@@ -298,7 +311,7 @@ describe('FileChatRepository', () => {
   it('forks a chat with messages up to the chosen index without touching the source', async () => {
     const sourceChatId = 'source-chat';
     const newChatId = 'forked-chat';
-    const repository = new FileChatRepository();
+    const repository = createRepository();
 
     await repository.createGenericChat({
       id: sourceChatId,
@@ -346,7 +359,7 @@ describe('FileChatRepository', () => {
 
   it('returns null when forking with an out-of-range index', async () => {
     const sourceChatId = 'fork-missing-source';
-    const repository = new FileChatRepository();
+    const repository = createRepository();
 
     await repository.createGenericChat({
       id: sourceChatId,
@@ -378,12 +391,12 @@ describe('FileChatRepository', () => {
       }),
     ).resolves.toBeNull();
 
-    const directoryEntries = await fs.readdir(path.join(dataRoot(), 'chats', '_no_character_'));
+    const directoryEntries = await fs.readdir(chatsDirectory);
     expect(directoryEntries).toEqual([`${sourceChatId}.jsonl`]);
   });
 
   it('returns null when forking from a non-existent source chat', async () => {
-    const repository = new FileChatRepository();
+    const repository = createRepository();
 
     await expect(
       repository.forkGenericChat({
@@ -398,7 +411,7 @@ describe('FileChatRepository', () => {
 
   it('deletes a chat file and reports true', async () => {
     const chatId = 'delete-me';
-    const repository = new FileChatRepository();
+    const repository = createRepository();
 
     await repository.createGenericChat({
       id: chatId,
@@ -420,13 +433,13 @@ describe('FileChatRepository', () => {
   });
 
   it('returns false when deleting a chat that does not exist', async () => {
-    const repository = new FileChatRepository();
+    const repository = createRepository();
     await expect(repository.deleteGenericChat('never-existed')).resolves.toBe(false);
   });
 
   it('updates generation settings without dropping existing messages', async () => {
     const chatId = 'settings-chat';
-    const repository = new FileChatRepository();
+    const repository = createRepository();
 
     await repository.createGenericChat({
       id: chatId,
@@ -491,7 +504,7 @@ describe('FileChatRepository', () => {
   });
 
   it('exports the transcript only after the write queued before the export has landed', async () => {
-    const repository = new FileChatRepository();
+    const repository = createRepository();
     await repository.createGenericChat({
       createdAt: '2026-01-01T00:00:00.000Z',
       id: 'export-chat',
@@ -524,27 +537,25 @@ describe('FileChatRepository', () => {
     }
 
     it('leaves out a chat file deleted after the directory listing without logging it', async () => {
-      const repository = new FileChatRepository();
+      const repository = createRepository();
       await createChats(repository, ['kept', 'gone']);
       failFileStatOf('gone.jsonl', 'ENOENT');
-      const warn = vi.spyOn(getSharedApiLogger(), 'warn').mockImplementation(() => undefined);
 
       const stats = await repository.listChatFileStats();
 
       expect(stats.map((stat) => stat.chatId)).toEqual(['kept']);
-      expect(warn).not.toHaveBeenCalled();
+      expect(logs.lines.filter((line) => line.level === 'warn')).toEqual([]);
     });
 
     it('leaves out a chat file whose metadata cannot be read and logs why instead of hiding the error', async () => {
-      const repository = new FileChatRepository();
+      const repository = createRepository();
       await createChats(repository, ['kept', 'locked']);
       failFileStatOf('locked.jsonl', 'EPERM');
-      const warn = vi.spyOn(getSharedApiLogger(), 'warn').mockImplementation(() => undefined);
 
       const stats = await repository.listChatFileStats();
 
       expect(stats.map((stat) => stat.chatId)).toEqual(['kept']);
-      expect(warn).toHaveBeenCalledWith(expect.objectContaining({ chatId: 'locked' }), expect.any(String));
+      expect(logs.lines).toContainEqual(expect.objectContaining({ chatId: 'locked', level: 'warn' }));
     });
   });
 });

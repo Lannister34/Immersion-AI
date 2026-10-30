@@ -12,72 +12,78 @@ import { deleteCharacterAvatar } from '../../application/delete-character-avatar
 import { getCharacter } from '../../application/get-character.js';
 import { getCharacterAvatar } from '../../application/get-character-avatar.js';
 import { importCharacterCard } from '../../application/import-character-card.js';
-import { listCharacters } from '../../application/list-characters.js';
+import { type CharacterChatStatsPort, listCharacters } from '../../application/list-characters.js';
 import { createCharacter, updateCharacter } from '../../application/save-character.js';
 import { uploadCharacterAvatar } from '../../application/upload-character-avatar.js';
 import { CharacterRouteParamsSchema } from './request-schemas.js';
 
-export const charactersRoutes: FastifyPluginAsync = async (app) => {
-  app.get('/', async () => listCharacters());
+export interface CharactersRoutesDependencies {
+  readonly chatStats: CharacterChatStatsPort;
+}
 
-  app.post('/', async (request, reply) => {
-    const command = parseRequest(SaveCharacterCommandSchema, request.body);
-    const character = await createCharacter(command);
+export function createCharactersRoutes(dependencies: CharactersRoutesDependencies): FastifyPluginAsync {
+  return async (app) => {
+    app.get('/', async () => listCharacters(dependencies));
 
-    return reply.status(201).send(CharacterDetailResponseSchema.parse({ character }));
-  });
+    app.post('/', async (request, reply) => {
+      const command = parseRequest(SaveCharacterCommandSchema, request.body);
+      const character = await createCharacter(command);
 
-  app.post('/import', async (request, reply) => {
-    const command = parseRequest(ImportCharacterCardCommandSchema, request.body);
-    const character = await importCharacterCard(command);
+      return reply.status(201).send(CharacterDetailResponseSchema.parse({ character }));
+    });
 
-    return reply.status(201).send(CharacterDetailResponseSchema.parse({ character }));
-  });
+    app.post('/import', async (request, reply) => {
+      const command = parseRequest(ImportCharacterCardCommandSchema, request.body);
+      const character = await importCharacterCard(command);
 
-  app.get('/:characterId', async (request) => {
-    const { characterId } = parseRequest(CharacterRouteParamsSchema, request.params);
-    const character = await getCharacter(characterId);
+      return reply.status(201).send(CharacterDetailResponseSchema.parse({ character }));
+    });
 
-    return CharacterDetailResponseSchema.parse({ character });
-  });
+    app.get('/:characterId', async (request) => {
+      const { characterId } = parseRequest(CharacterRouteParamsSchema, request.params);
+      const character = await getCharacter(characterId);
 
-  app.put('/:characterId', async (request) => {
-    const { characterId } = parseRequest(CharacterRouteParamsSchema, request.params);
-    const command = parseRequest(SaveCharacterCommandSchema, request.body);
-    const character = await updateCharacter(characterId, command);
+      return CharacterDetailResponseSchema.parse({ character });
+    });
 
-    return CharacterDetailResponseSchema.parse({ character });
-  });
+    app.put('/:characterId', async (request) => {
+      const { characterId } = parseRequest(CharacterRouteParamsSchema, request.params);
+      const command = parseRequest(SaveCharacterCommandSchema, request.body);
+      const character = await updateCharacter(characterId, command);
 
-  app.delete('/:characterId', async (request, reply) => {
-    const { characterId } = parseRequest(CharacterRouteParamsSchema, request.params);
-    await deleteCharacter(characterId);
+      return CharacterDetailResponseSchema.parse({ character });
+    });
 
-    return reply.status(204).send();
-  });
+    app.delete('/:characterId', async (request, reply) => {
+      const { characterId } = parseRequest(CharacterRouteParamsSchema, request.params);
+      await deleteCharacter(characterId);
 
-  app.put('/:characterId/avatar', async (request) => {
-    const { characterId } = parseRequest(CharacterRouteParamsSchema, request.params);
-    const command = parseRequest(UploadCharacterAvatarCommandSchema, request.body);
-    const character = await uploadCharacterAvatar(characterId, command);
+      return reply.status(204).send();
+    });
 
-    return CharacterDetailResponseSchema.parse({ character });
-  });
+    app.put('/:characterId/avatar', async (request) => {
+      const { characterId } = parseRequest(CharacterRouteParamsSchema, request.params);
+      const command = parseRequest(UploadCharacterAvatarCommandSchema, request.body);
+      const character = await uploadCharacterAvatar(characterId, command);
 
-  app.delete('/:characterId/avatar', async (request, reply) => {
-    const { characterId } = parseRequest(CharacterRouteParamsSchema, request.params);
-    await deleteCharacterAvatar(characterId);
+      return CharacterDetailResponseSchema.parse({ character });
+    });
 
-    return reply.status(204).send();
-  });
+    app.delete('/:characterId/avatar', async (request, reply) => {
+      const { characterId } = parseRequest(CharacterRouteParamsSchema, request.params);
+      await deleteCharacterAvatar(characterId);
 
-  app.get('/:characterId/avatar', async (request, reply) => {
-    const { characterId } = parseRequest(CharacterRouteParamsSchema, request.params);
-    const payload = await getCharacterAvatar(characterId);
+      return reply.status(204).send();
+    });
 
-    reply.header('Content-Type', payload.contentType);
-    reply.header('Cache-Control', 'private, max-age=300');
+    app.get('/:characterId/avatar', async (request, reply) => {
+      const { characterId } = parseRequest(CharacterRouteParamsSchema, request.params);
+      const payload = await getCharacterAvatar(characterId);
 
-    return reply.send(payload.body);
-  });
-};
+      reply.header('Content-Type', payload.contentType);
+      reply.header('Cache-Control', 'private, max-age=300');
+
+      return reply.send(payload.body);
+    });
+  };
+}

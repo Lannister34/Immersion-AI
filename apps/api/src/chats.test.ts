@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 
 import {
@@ -15,6 +16,8 @@ import { CHAT_IMPORT_MAX_BYTES } from '@immersion/contracts/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FileChatRepository } from './modules/chats/index.js';
+import { createKeyedSerialQueue } from './platform/concurrency/keyed-serial-queue.js';
+import { createCapturingLogger } from './test-support/capturing-logger.js';
 import { snapshotDataRoot } from './test-support/data-root-snapshot.js';
 import { readStoredChatFile } from './test-support/stored-chat-file.js';
 import type { StoredUserSettingsFixture } from './test-support/stored-user-settings-fixture-schema.js';
@@ -1218,7 +1221,12 @@ describe('chat routes', () => {
         return chatId === 'stored-elsewhere' ? { body: storedBody, title: 'Из репозитория' } : null;
       }
     }
-    const { app } = await createTestApi({ overrides: { chatRepository: new ElsewhereStoredChats() } });
+    const chatRepository = new ElsewhereStoredChats({
+      chatsDirectory: path.join(os.tmpdir(), 'immersion-chats-never-read'),
+      logger: createCapturingLogger().logger,
+      writeQueue: createKeyedSerialQueue(),
+    });
+    const { app } = await createTestApi({ overrides: { chatRepository } });
 
     const response = await app.inject({ method: 'GET', url: '/api/chats/stored-elsewhere/export' });
 

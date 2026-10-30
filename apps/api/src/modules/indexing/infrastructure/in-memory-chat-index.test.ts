@@ -1,12 +1,15 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 
-import { useTemporaryDataRoot } from '../../../test-support/use-temporary-data-root.js';
-import { listChatFileStats, readChatSummaryWithSearchText } from '../../chats/index.js';
-import { FileChatRepository } from '../../chats/infrastructure/file-chat-repository.js';
-import { type ChatIndexSourcePort, InMemoryChatIndex } from './in-memory-chat-index.js';
+import { createKeyedSerialQueue } from '../../../platform/concurrency/keyed-serial-queue.js';
+import { createSerialQueue } from '../../../platform/concurrency/serial-queue.js';
+import { type CapturingLogger, createCapturingLogger } from '../../../test-support/capturing-logger.js';
+import { createTemporaryProject } from '../../../test-support/temporary-project.js';
+import { FileChatRepository } from '../../chats/index.js';
+import type { ChatIndexSource } from '../application/chat-index-source.js';
+import { InMemoryChatIndex } from './in-memory-chat-index.js';
 
 interface ChatFileInput {
   characterId?: string;
@@ -18,10 +21,24 @@ interface ChatFileInput {
 }
 
 describe('InMemoryChatIndex', () => {
-  const dataRoot = useTemporaryDataRoot('smoke');
+  let chatsDirectory = '';
+  let logs: CapturingLogger;
+  let repository: FileChatRepository;
+
+  beforeEach(async () => {
+    const project = await createTemporaryProject('empty');
+    onTestFinished(() => project.remove());
+    chatsDirectory = path.join(project.dataRoot, 'чаты без персонажа');
+    logs = createCapturingLogger();
+    repository = new FileChatRepository({ chatsDirectory, logger: logs.logger, writeQueue: createKeyedSerialQueue() });
+  });
+
+  function createIndex(source: ChatIndexSource): InMemoryChatIndex {
+    return new InMemoryChatIndex({ source, logger: logs.logger, refreshQueue: createSerialQueue() });
+  }
 
   function resolveChatFilePath(chatId: string) {
-    return path.join(dataRoot(), 'chats', '_no_character_', `${chatId}.jsonl`);
+    return path.join(chatsDirectory, `${chatId}.jsonl`);
   }
 
   async function writeRawChatFile(chatId: string, lines: string[]) {
@@ -49,11 +66,11 @@ describe('InMemoryChatIndex', () => {
 
   function createCountingSource() {
     const parsedChatIds: string[] = [];
-    const source: ChatIndexSourcePort = {
-      listChatFileStats,
+    const source: ChatIndexSource = {
+      listChatFileStats: () => repository.listChatFileStats(),
       readChatSummaryWithSearchText: async (chatId) => {
         parsedChatIds.push(chatId);
-        return readChatSummaryWithSearchText(chatId);
+        return repository.readChatSummaryWithSearchText(chatId);
       },
     };
 
@@ -75,7 +92,7 @@ describe('InMemoryChatIndex', () => {
     });
 
     const { parsedChatIds, source } = createCountingSource();
-    const index = new InMemoryChatIndex(source);
+    const index = createIndex(source);
 
     const firstListing = await index.listChatSummaries();
     expect(firstListing.map((summary) => summary.id)).toEqual(['beta', 'alpha']);
@@ -101,7 +118,7 @@ describe('InMemoryChatIndex', () => {
     });
 
     const { parsedChatIds, source } = createCountingSource();
-    const index = new InMemoryChatIndex(source);
+    const index = createIndex(source);
     await index.listChatSummaries();
     expect(parsedChatIds).toHaveLength(2);
 
@@ -136,7 +153,7 @@ describe('InMemoryChatIndex', () => {
       updatedAt: '2026-01-02T00:00:01.000Z',
     });
 
-    const index = new InMemoryChatIndex(createCountingSource().source);
+    const index = createIndex(createCountingSource().source);
     expect((await index.listChatSummaries()).map((summary) => summary.id)).toEqual(['removed', 'kept']);
 
     await fs.unlink(resolveChatFilePath('removed'));
@@ -152,14 +169,14 @@ describe('InMemoryChatIndex', () => {
       updatedAt: '2026-01-01T00:00:01.000Z',
     });
     const missedOnce = new Set<string>();
-    const index = new InMemoryChatIndex({
-      listChatFileStats,
+    const index = createIndex({
+      listChatFileStats: () => repository.listChatFileStats(),
       readChatSummaryWithSearchText: async (chatId) => {
         if (!missedOnce.has(chatId)) {
           missedOnce.add(chatId);
           return null;
         }
-        return readChatSummaryWithSearchText(chatId);
+        return repository.readChatSummaryWithSearchText(chatId);
       },
     });
 
@@ -182,7 +199,7 @@ describe('InMemoryChatIndex', () => {
     });
 
     const { parsedChatIds, source } = createCountingSource();
-    const index = new InMemoryChatIndex(source);
+    const index = createIndex(source);
 
     const listings = await Promise.all([index.listChatSummaries(), index.listChatSummaries()]);
 
@@ -209,7 +226,7 @@ describe('InMemoryChatIndex', () => {
       updatedAt: '2026-01-02T00:00:01.000Z',
     });
 
-    const index = new InMemoryChatIndex(createCountingSource().source);
+    const index = createIndex(createCountingSource().source);
 
     const byTitle = await index.listChatSummaries({ searchText: 'ОСЕНЬ' });
     expect(byTitle.map((summary) => summary.id)).toEqual(['with-aria']);
@@ -256,7 +273,7 @@ describe('InMemoryChatIndex', () => {
       updatedAt: '2026-01-04T00:00:01.000Z',
     });
 
-    const index = new InMemoryChatIndex(createCountingSource().source);
+    const index = createIndex(createCountingSource().source);
     const stats = await index.getCharacterChatStats();
 
     expect(stats.get('Aria.json')).toEqual({ chatCount: 2, lastChatAt: '2026-01-03T00:00:01.000Z' });
@@ -274,10 +291,11 @@ describe('InMemoryChatIndex', () => {
     await writeRawChatFile('broken', [JSON.stringify({ user_name: 'Тестер', character_name: '' }), 'not-json']);
 
     const { parsedChatIds, source } = createCountingSource();
-    const index = new InMemoryChatIndex(source);
+    const index = createIndex(source);
 
     expect((await index.listChatSummaries()).map((summary) => summary.id)).toEqual(['healthy']);
     expect(parsedChatIds).toHaveLength(2);
+    expect(logs.lines).toContainEqual(expect.objectContaining({ chatId: 'broken', level: 'warn' }));
 
     expect((await index.listChatSummaries()).map((summary) => summary.id)).toEqual(['healthy']);
     expect(parsedChatIds).toHaveLength(2);
@@ -315,8 +333,7 @@ describe('InMemoryChatIndex', () => {
       JSON.stringify({ is_user: false, mes: 'Ответ модели', send_date: '2026-01-03T00:00:02.000Z' }),
     ]);
 
-    const repository = new FileChatRepository();
-    const index = new InMemoryChatIndex(createCountingSource().source);
+    const index = createIndex(createCountingSource().source);
 
     expect(await index.listChatSummaries()).toEqual(await repository.listGenericChats());
     expect(await index.listChatSummaries({ searchText: 'печь' })).toEqual(

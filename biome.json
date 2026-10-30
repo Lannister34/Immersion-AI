@@ -140,6 +140,26 @@
       }
     },
     {
+      "includes": ["apps/api/src/modules/chats/**", "apps/api/src/modules/characters/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/indexing/**", "**/indexing"],
+                    "message": "chats and characters read the chat index through the ports they declare, which the composition root wires to the app's index, so neither imports indexing (ADR-0004, decision 9)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["apps/api/src/platform/net/loopback-address.ts"],
       "linter": {
         "rules": {

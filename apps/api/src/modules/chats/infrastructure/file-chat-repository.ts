@@ -3,10 +3,9 @@ import path from 'node:path';
 
 import { ChatGenerationSettingsDtoSchema } from '@immersion/contracts/chats';
 
-import { readDataRoot } from '../../../config/read-api-config.js';
-import { createKeyedSerialQueue } from '../../../platform/concurrency/keyed-serial-queue.js';
+import type { KeyedSerialQueue } from '../../../platform/concurrency/keyed-serial-queue.js';
 import { isErrnoCode } from '../../../platform/errno-code.js';
-import { getSharedApiLogger } from '../../../platform/logging/shared-api-logger.js';
+import type { LogPort } from '../../../platform/logging/log-port.js';
 import { writeFileAtomically } from '../../../platform/storage/atomic-file.js';
 import { resolveContainedFilePath } from '../../../platform/storage/contained-path.js';
 import {
@@ -45,8 +44,6 @@ import type {
 import { joinContinuationContent } from '../application/continuation-content.js';
 import { deriveLastMessagePreview } from '../application/last-message-preview.js';
 
-const GENERIC_CHAT_DIRECTORY = '_no_character_';
-const chatWriteQueue = createKeyedSerialQueue<string>();
 const DEFAULT_CHAT_TITLE_PREFIX = 'Новый чат';
 
 interface StoredChatMetadata {
@@ -116,26 +113,6 @@ function getNullableNumber(value: unknown) {
   }
 
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function resolveChatsDirectory() {
-  return path.join(readDataRoot(), 'chats', GENERIC_CHAT_DIRECTORY);
-}
-
-function resolveChatFilePath(chatId: string) {
-  return path.join(resolveChatsDirectory(), `${chatId}.jsonl`);
-}
-
-function resolveChatAttachmentsDirectory(chatId: string) {
-  return path.join(resolveChatsDirectory(), `${chatId}.files`);
-}
-
-function resolveChatAttachmentPath(chatId: string, attachmentId: string) {
-  return resolveContainedFilePath(resolveChatAttachmentsDirectory(chatId), attachmentId);
-}
-
-async function deleteChatAttachmentFiles(chatId: string): Promise<void> {
-  await fs.rm(resolveChatAttachmentsDirectory(chatId), { force: true, recursive: true });
 }
 
 function parseJsonRecord(line: string, filePath: string, lineNumber: number) {
@@ -490,8 +467,7 @@ export function parseChatTranscriptLeniently(
   return { header, messages, skippedLines };
 }
 
-async function readChatFile(chatId: string): Promise<ChatSessionRecord | null> {
-  const filePath = resolveChatFilePath(chatId);
+async function readChatFile(filePath: string, chatId: string): Promise<ChatSessionRecord | null> {
   let rawContent: string;
   let stats: Awaited<ReturnType<typeof fs.stat>>;
 
@@ -568,14 +544,30 @@ async function readChatFile(chatId: string): Promise<ChatSessionRecord | null> {
   };
 }
 
+export interface FileChatRepositoryDependencies {
+  readonly chatsDirectory: string;
+  readonly logger: LogPort;
+  readonly writeQueue: KeyedSerialQueue<string>;
+}
+
 export class FileChatRepository implements ChatRepository {
+  private readonly chatsDirectory: string;
+  private readonly logger: LogPort;
+  private readonly writeQueue: KeyedSerialQueue<string>;
+
+  constructor({ chatsDirectory, logger, writeQueue }: FileChatRepositoryDependencies) {
+    this.chatsDirectory = chatsDirectory;
+    this.logger = logger;
+    this.writeQueue = writeQueue;
+  }
+
   async appendGenericChatMessages(
     chatId: string,
     messages: AppendChatMessageInput[],
     options?: AppendGenericChatMessagesOptions,
   ): Promise<ChatSessionRecord | null> {
-    return chatWriteQueue.run(chatId, async () => {
-      const currentSession = await readChatFile(chatId);
+    return this.writeQueue.run(chatId, async () => {
+      const currentSession = await this.readChat(chatId);
 
       if (!currentSession) {
         return null;
@@ -589,7 +581,7 @@ export class FileChatRepository implements ChatRepository {
         return currentSession;
       }
 
-      const filePath = resolveChatFilePath(chatId);
+      const filePath = this.chatFilePath(chatId);
       const rawContent = await fs.readFile(filePath, 'utf8');
       const lines = rawContent
         .split(/\r?\n/u)
@@ -606,7 +598,7 @@ export class FileChatRepository implements ChatRepository {
 
       await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
 
-      return readChatFile(chatId);
+      return this.readChat(chatId);
     });
   }
 
@@ -614,8 +606,8 @@ export class FileChatRepository implements ChatRepository {
     chatId: string,
     input: AppendContinuationToLastAssistantMessageInput,
   ): Promise<ChatSessionRecord | null> {
-    return chatWriteQueue.run(chatId, async () => {
-      const currentSession = await readChatFile(chatId);
+    return this.writeQueue.run(chatId, async () => {
+      const currentSession = await this.readChat(chatId);
 
       if (!currentSession) {
         return null;
@@ -632,7 +624,7 @@ export class FileChatRepository implements ChatRepository {
         throw new ChatLastMessageChangedError(chatId);
       }
 
-      const filePath = resolveChatFilePath(chatId);
+      const filePath = this.chatFilePath(chatId);
       const rawContent = await fs.readFile(filePath, 'utf8');
       const lines = rawContent
         .split(/\r?\n/u)
@@ -659,13 +651,13 @@ export class FileChatRepository implements ChatRepository {
 
       await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
 
-      return readChatFile(chatId);
+      return this.readChat(chatId);
     });
   }
 
   async forkGenericChat(input: ForkGenericChatInput): Promise<ChatSummaryRecord | null> {
-    return chatWriteQueue.run(input.sourceChatId, async () => {
-      const sourceSession = await readChatFile(input.sourceChatId);
+    return this.writeQueue.run(input.sourceChatId, async () => {
+      const sourceSession = await this.readChat(input.sourceChatId);
       if (!sourceSession) {
         return null;
       }
@@ -673,7 +665,7 @@ export class FileChatRepository implements ChatRepository {
         return null;
       }
 
-      const sourceFilePath = resolveChatFilePath(input.sourceChatId);
+      const sourceFilePath = this.chatFilePath(input.sourceChatId);
       const rawContent = await fs.readFile(sourceFilePath, 'utf8');
       const lines = rawContent
         .split(/\r?\n/u)
@@ -697,22 +689,22 @@ export class FileChatRepository implements ChatRepository {
         user_name: sourceSession.userName ?? '',
       };
       const nextLines = [JSON.stringify(newHeader), ...keptMessageLines];
-      const newFilePath = resolveChatFilePath(input.newChatId);
+      const newFilePath = this.chatFilePath(input.newChatId);
 
-      await fs.mkdir(resolveChatsDirectory(), { recursive: true });
+      await fs.mkdir(this.chatsDirectory, { recursive: true });
       await writeFileAtomically(newFilePath, `${nextLines.join('\n')}\n`);
 
-      const newSession = await readChatFile(input.newChatId);
+      const newSession = await this.readChat(input.newChatId);
       return newSession?.chat ?? null;
     });
   }
 
   async deleteGenericChat(chatId: string): Promise<boolean> {
-    return chatWriteQueue.run(chatId, async () => {
-      const filePath = resolveChatFilePath(chatId);
+    return this.writeQueue.run(chatId, async () => {
+      const filePath = this.chatFilePath(chatId);
       try {
         await fs.unlink(filePath);
-        await deleteChatAttachmentFiles(chatId);
+        await fs.rm(this.chatAttachmentsDirectory(chatId), { force: true, recursive: true });
         return true;
       } catch (error) {
         const candidate = error as NodeJS.ErrnoException;
@@ -742,13 +734,13 @@ export class FileChatRepository implements ChatRepository {
       lorebook_ids: input.lorebookIds ?? [],
     };
 
-    await fs.mkdir(resolveChatsDirectory(), { recursive: true });
+    await fs.mkdir(this.chatsDirectory, { recursive: true });
     const seedMessages = input.seedMessages ?? [];
     const lines = [
       JSON.stringify(header),
       ...seedMessages.map((message) => JSON.stringify(createStoredChatLine(message))),
     ];
-    await fs.writeFile(resolveChatFilePath(input.id), `${lines.join('\n')}\n`, 'utf8');
+    await fs.writeFile(this.chatFilePath(input.id), `${lines.join('\n')}\n`, 'utf8');
 
     const lastSeed = seedMessages.at(-1);
 
@@ -768,29 +760,29 @@ export class FileChatRepository implements ChatRepository {
   }
 
   async getGenericChatSession(chatId: string): Promise<ChatSessionRecord | null> {
-    return readChatFile(chatId);
+    return this.readChat(chatId);
   }
 
   async readChatExport(chatId: string): Promise<ChatExportRecord | null> {
-    return chatWriteQueue.run(chatId, async () => {
-      const session = await readChatFile(chatId);
+    return this.writeQueue.run(chatId, async () => {
+      const session = await this.readChat(chatId);
 
       if (!session) {
         return null;
       }
 
-      return { body: await fs.readFile(resolveChatFilePath(chatId), 'utf8'), title: session.chat.title };
+      return { body: await fs.readFile(this.chatFilePath(chatId), 'utf8'), title: session.chat.title };
     });
   }
 
   async writeChatAttachment(chatId: string, attachmentId: string, bytes: Buffer): Promise<void> {
-    await fs.mkdir(resolveChatAttachmentsDirectory(chatId), { recursive: true });
-    await writeFileAtomically(resolveChatAttachmentPath(chatId, attachmentId), bytes);
+    await fs.mkdir(this.chatAttachmentsDirectory(chatId), { recursive: true });
+    await writeFileAtomically(this.chatAttachmentPath(chatId, attachmentId), bytes);
   }
 
   async readChatAttachment(chatId: string, attachmentId: string): Promise<Buffer | null> {
     try {
-      return await fs.readFile(resolveChatAttachmentPath(chatId, attachmentId));
+      return await fs.readFile(this.chatAttachmentPath(chatId, attachmentId));
     } catch (error) {
       const candidate = error as NodeJS.ErrnoException;
       if (candidate.code === 'ENOENT') {
@@ -804,7 +796,7 @@ export class FileChatRepository implements ChatRepository {
     let entries: string[];
 
     try {
-      entries = await fs.readdir(resolveChatsDirectory());
+      entries = await fs.readdir(this.chatsDirectory);
     } catch (error) {
       const candidate = error as NodeJS.ErrnoException;
       if (candidate.code === 'ENOENT') {
@@ -820,7 +812,7 @@ export class FileChatRepository implements ChatRepository {
         .map(async (entry) => {
           const chatId = path.parse(entry).name;
           try {
-            const fileStats = await fs.stat(path.join(resolveChatsDirectory(), entry));
+            const fileStats = await fs.stat(path.join(this.chatsDirectory, entry));
             if (!fileStats.isFile()) {
               return null;
             }
@@ -832,7 +824,7 @@ export class FileChatRepository implements ChatRepository {
             } satisfies ChatFileStatRecord;
           } catch (error) {
             if (!isErrnoCode(error, 'ENOENT')) {
-              getSharedApiLogger().warn(
+              this.logger.warn(
                 { chatId, err: error },
                 'Chat list: failed to read chat file metadata; excluding it from the listing',
               );
@@ -846,7 +838,7 @@ export class FileChatRepository implements ChatRepository {
   }
 
   async readChatSummaryWithSearchText(chatId: string): Promise<ChatSummaryWithSearchText | null> {
-    const session = await readChatFile(chatId);
+    const session = await this.readChat(chatId);
     if (!session) {
       return null;
     }
@@ -865,7 +857,7 @@ export class FileChatRepository implements ChatRepository {
     let entries: string[];
 
     try {
-      entries = await fs.readdir(resolveChatsDirectory());
+      entries = await fs.readdir(this.chatsDirectory);
     } catch (error) {
       const candidate = error as NodeJS.ErrnoException;
       if (candidate.code === 'ENOENT') {
@@ -876,7 +868,7 @@ export class FileChatRepository implements ChatRepository {
     }
 
     const sessions = await Promise.all(
-      entries.filter((entry) => entry.endsWith('.jsonl')).map(async (entry) => readChatFile(path.parse(entry).name)),
+      entries.filter((entry) => entry.endsWith('.jsonl')).map(async (entry) => this.readChat(path.parse(entry).name)),
     );
     const needle = options.searchText?.trim().toLowerCase() ?? '';
     const matchesNeedle = (session: ChatSessionRecord): boolean => {
@@ -897,8 +889,8 @@ export class FileChatRepository implements ChatRepository {
     updatedAt: string,
     options?: UpdateGenericChatGenerationSettingsOptions,
   ): Promise<ChatSessionRecord | null> {
-    return chatWriteQueue.run(chatId, async () => {
-      const currentSession = await readChatFile(chatId);
+    return this.writeQueue.run(chatId, async () => {
+      const currentSession = await this.readChat(chatId);
 
       if (!currentSession) {
         return null;
@@ -906,7 +898,7 @@ export class FileChatRepository implements ChatRepository {
 
       options?.assertWritable?.(currentSession.generationSettings);
 
-      const filePath = resolveChatFilePath(chatId);
+      const filePath = this.chatFilePath(chatId);
       const rawContent = await fs.readFile(filePath, 'utf8');
       const lines = rawContent
         .split(/\r?\n/u)
@@ -921,7 +913,7 @@ export class FileChatRepository implements ChatRepository {
 
       await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
 
-      return readChatFile(chatId);
+      return this.readChat(chatId);
     });
   }
 
@@ -930,14 +922,14 @@ export class FileChatRepository implements ChatRepository {
     lorebookIds: string[],
     updatedAt: string,
   ): Promise<ChatSessionRecord | null> {
-    return chatWriteQueue.run(chatId, async () => {
-      const currentSession = await readChatFile(chatId);
+    return this.writeQueue.run(chatId, async () => {
+      const currentSession = await this.readChat(chatId);
 
       if (!currentSession) {
         return null;
       }
 
-      const filePath = resolveChatFilePath(chatId);
+      const filePath = this.chatFilePath(chatId);
       const rawContent = await fs.readFile(filePath, 'utf8');
       const lines = rawContent
         .split(/\r?\n/u)
@@ -956,7 +948,7 @@ export class FileChatRepository implements ChatRepository {
 
       await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
 
-      return readChatFile(chatId);
+      return this.readChat(chatId);
     });
   }
 
@@ -966,8 +958,8 @@ export class FileChatRepository implements ChatRepository {
     updatedAt: string,
     options?: UpdateGenericChatTitleOptions,
   ): Promise<ChatSessionRecord | null> {
-    return chatWriteQueue.run(chatId, async () => {
-      const currentSession = await readChatFile(chatId);
+    return this.writeQueue.run(chatId, async () => {
+      const currentSession = await this.readChat(chatId);
 
       if (!currentSession) {
         return null;
@@ -977,7 +969,7 @@ export class FileChatRepository implements ChatRepository {
         throw new ChatTitleConflictError(chatId);
       }
 
-      const filePath = resolveChatFilePath(chatId);
+      const filePath = this.chatFilePath(chatId);
       const rawContent = await fs.readFile(filePath, 'utf8');
       const lines = rawContent
         .split(/\r?\n/u)
@@ -1000,7 +992,7 @@ export class FileChatRepository implements ChatRepository {
 
       await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
 
-      return readChatFile(chatId);
+      return this.readChat(chatId);
     });
   }
 
@@ -1009,13 +1001,13 @@ export class FileChatRepository implements ChatRepository {
     bindings: GenericChatBindingsUpdate,
     updatedAt: string,
   ): Promise<ChatSessionRecord | null> {
-    return chatWriteQueue.run(chatId, async () => {
-      const currentSession = await readChatFile(chatId);
+    return this.writeQueue.run(chatId, async () => {
+      const currentSession = await this.readChat(chatId);
       if (!currentSession) {
         return null;
       }
 
-      const filePath = resolveChatFilePath(chatId);
+      const filePath = this.chatFilePath(chatId);
       const rawContent = await fs.readFile(filePath, 'utf8');
       const lines = rawContent
         .split(/\r?\n/u)
@@ -1064,7 +1056,7 @@ export class FileChatRepository implements ChatRepository {
 
       await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
 
-      return readChatFile(chatId);
+      return this.readChat(chatId);
     });
   }
 
@@ -1074,8 +1066,8 @@ export class FileChatRepository implements ChatRepository {
     content: string,
     updatedAt: string,
   ): Promise<ChatSessionRecord | null> {
-    return chatWriteQueue.run(chatId, async () => {
-      const currentSession = await readChatFile(chatId);
+    return this.writeQueue.run(chatId, async () => {
+      const currentSession = await this.readChat(chatId);
 
       if (!currentSession) {
         return null;
@@ -1085,7 +1077,7 @@ export class FileChatRepository implements ChatRepository {
         return null;
       }
 
-      const filePath = resolveChatFilePath(chatId);
+      const filePath = this.chatFilePath(chatId);
       const rawContent = await fs.readFile(filePath, 'utf8');
       const lines = rawContent
         .split(/\r?\n/u)
@@ -1116,7 +1108,7 @@ export class FileChatRepository implements ChatRepository {
 
       await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
 
-      return readChatFile(chatId);
+      return this.readChat(chatId);
     });
   }
 
@@ -1125,8 +1117,8 @@ export class FileChatRepository implements ChatRepository {
     messageIndex: number,
     updatedAt: string,
   ): Promise<ChatSessionRecord | null> {
-    return chatWriteQueue.run(chatId, async () => {
-      const currentSession = await readChatFile(chatId);
+    return this.writeQueue.run(chatId, async () => {
+      const currentSession = await this.readChat(chatId);
 
       if (!currentSession) {
         return null;
@@ -1136,7 +1128,7 @@ export class FileChatRepository implements ChatRepository {
         return null;
       }
 
-      const filePath = resolveChatFilePath(chatId);
+      const filePath = this.chatFilePath(chatId);
       const rawContent = await fs.readFile(filePath, 'utf8');
       const lines = rawContent
         .split(/\r?\n/u)
@@ -1155,7 +1147,7 @@ export class FileChatRepository implements ChatRepository {
 
       await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
 
-      return readChatFile(chatId);
+      return this.readChat(chatId);
     });
   }
 
@@ -1165,8 +1157,8 @@ export class FileChatRepository implements ChatRepository {
     updatedAt: string,
     options: TruncateGenericChatMessagesOptions = {},
   ): Promise<ChatSessionRecord | null> {
-    return chatWriteQueue.run(chatId, async () => {
-      const currentSession = await readChatFile(chatId);
+    return this.writeQueue.run(chatId, async () => {
+      const currentSession = await this.readChat(chatId);
 
       if (!currentSession) {
         return null;
@@ -1191,7 +1183,7 @@ export class FileChatRepository implements ChatRepository {
         throw new ChatTranscriptChangedError(chatId);
       }
 
-      const filePath = resolveChatFilePath(chatId);
+      const filePath = this.chatFilePath(chatId);
       const rawContent = await fs.readFile(filePath, 'utf8');
       const lines = rawContent
         .split(/\r?\n/u)
@@ -1207,7 +1199,23 @@ export class FileChatRepository implements ChatRepository {
 
       await writeFileAtomically(filePath, `${nextLines.join('\n')}\n`);
 
-      return readChatFile(chatId);
+      return this.readChat(chatId);
     });
+  }
+
+  private chatFilePath(chatId: string): string {
+    return path.join(this.chatsDirectory, `${chatId}.jsonl`);
+  }
+
+  private chatAttachmentsDirectory(chatId: string): string {
+    return path.join(this.chatsDirectory, `${chatId}.files`);
+  }
+
+  private chatAttachmentPath(chatId: string, attachmentId: string): string {
+    return resolveContainedFilePath(this.chatAttachmentsDirectory(chatId), attachmentId);
+  }
+
+  private readChat(chatId: string): Promise<ChatSessionRecord | null> {
+    return readChatFile(this.chatFilePath(chatId), chatId);
   }
 }
