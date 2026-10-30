@@ -1,0 +1,80 @@
+.rp {
+  border-left: 1px solid var(--hairline);
+  background: var(--bg-2);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rp__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  height: 52px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.rp__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.rp__tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--fz-sm);
+  font-weight: 600;
+  transition:
+    background 120ms ease-out,
+    color 120ms ease-out;
+}
+
+.rp__tab:hover {
+  color: var(--text-1);
+}
+
+.rp__tab[data-active="true"] {
+  background: var(--surface-2);
+  border-color: var(--hairline);
+  color: var(--text);
+}
+
+.rp__body {
+  overflow: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+}
+
+.rp__resize {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 2px;
+  color: var(--muted-dim);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.rp__resize span {
+  display: block;
+  width: 1px;
+  height: 12px;
+  background: currentColor;
+}
+
+.rp__resize:hover {
+  color: var(--text-1);
+}

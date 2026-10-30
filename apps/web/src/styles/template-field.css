@@ -1,0 +1,32 @@
+.tpl-field {
+  position: relative;
+}
+
+.tpl-field__backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: transparent;
+  background: transparent;
+  border-color: transparent;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.tpl-field__input {
+  position: relative;
+  background: transparent;
+}
+
+.tpl-mark {
+  color: transparent;
+  background: oklch(0.72 0.18 295 / 0.26);
+  border-radius: 3px;
+  transition: background 0.12s ease-out;
+}
+
+.tpl-field:hover .tpl-mark,
+.tpl-field:focus-within .tpl-mark {
+  background: oklch(0.72 0.18 295 / 0.45);
+}

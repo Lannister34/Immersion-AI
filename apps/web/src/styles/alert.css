@@ -1,0 +1,16 @@
+.alert {
+  padding: 10px 12px;
+  color: var(--danger);
+}
+
+.alert--danger {
+  border-color: var(--danger);
+}
+
+.alert--soft {
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  font-size: var(--fz-sm);
+  background: var(--danger-soft);
+  border-color: transparent;
+}
