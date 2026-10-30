@@ -1,12 +1,12 @@
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
 
 import { UndoIcon } from '../../../shared/ui/icons';
+import { CONTEXT_TRIM_FIELD } from '../../settings';
 import {
   type AutoSavedGenerationSettings,
   INHERIT_PRESET_VALUE,
 } from '../mutations/use-auto-saved-generation-settings';
 import {
-  CONTEXT_TRIM_FIELD,
   countSamplingOverrides,
   describeContextTrimStrategy,
   type InheritedSampling,

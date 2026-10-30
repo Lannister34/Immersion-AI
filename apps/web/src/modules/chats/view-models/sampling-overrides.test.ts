@@ -1,11 +1,18 @@
-import type { ChatSamplingOverridesDto } from '@immersion/contracts/chats';
+import {
+  ChatContextTrimStrategySchema,
+  type ChatSamplingOverridesDto,
+  ChatSamplingOverridesDtoSchema,
+} from '@immersion/contracts/chats';
 import { describe, expect, it } from 'vitest';
 
+import { numberLimitsOf } from '../../../shared/lib/schema-limits';
+import { CONTEXT_TRIM_FIELD } from '../../settings';
 import {
   countSamplingOverrides,
   createEmptySamplingDraft,
   type InheritedSampling,
   NUMERIC_SAMPLING_FIELDS,
+  type NumericSamplingField,
   parseSamplingDraft,
   samplingDraftsEqual,
   stepSamplingValue,
@@ -39,9 +46,79 @@ const EMPTY_OVERRIDES: ChatSamplingOverridesDto = {
   topP: null,
 };
 
+function chatLimitsOf(field: NumericSamplingField) {
+  return numberLimitsOf(ChatSamplingOverridesDtoSchema.shape[field.key]);
+}
+
+describe('chat sampling fields', () => {
+  it('every numeric chat override has exactly one field', () => {
+    const overrideKeys = Object.keys(ChatSamplingOverridesDtoSchema.shape).filter(
+      (key) => key !== 'contextTrimStrategy',
+    );
+    const fieldKeys = NUMERIC_SAMPLING_FIELDS.map((field) => field.key);
+
+    expect([...fieldKeys].sort()).toEqual([...overrideKeys].sort());
+  });
+
+  it('chat minimums come from the chat override schema', () => {
+    const bounded = NUMERIC_SAMPLING_FIELDS.flatMap((field) => {
+      const { minimum } = chatLimitsOf(field);
+      return minimum === null ? [] : [{ field, minimum: String(minimum) }];
+    });
+
+    expect(bounded.map(({ field }) => field.key)).not.toHaveLength(0);
+    for (const { field, minimum } of bounded) {
+      const atMinimum = parseSamplingDraft({ ...createEmptySamplingDraft(), [field.key]: minimum });
+
+      expect({ key: field.key, stepped: stepSamplingValue(field, minimum, -1, undefined) }).toEqual({
+        key: field.key,
+        stepped: minimum,
+      });
+      expect({ key: field.key, errors: atMinimum.errors }).toEqual({ key: field.key, errors: {} });
+    }
+  });
+
+  it('a field the chat override schema keeps whole explains a fraction on its own row', () => {
+    const wholeFields = NUMERIC_SAMPLING_FIELDS.filter((field) => chatLimitsOf(field).integer);
+
+    expect(wholeFields.map((field) => field.key)).not.toHaveLength(0);
+    for (const field of wholeFields) {
+      const result = parseSamplingDraft({ ...createEmptySamplingDraft(), [field.key]: '1024.5' });
+
+      expect({ key: field.key, errors: result.errors }).toEqual({
+        key: field.key,
+        errors: { [field.key]: 'Только целое число' },
+      });
+    }
+  });
+
+  it('the trim select offers exactly the strategies a chat can override with', () => {
+    const offered = CONTEXT_TRIM_FIELD.options.map((option) => option.value);
+
+    expect([...offered].sort()).toEqual([...ChatContextTrimStrategySchema.options].sort());
+  });
+});
+
 describe('toSamplingDraft', () => {
   it('renders missing overrides as empty strings', () => {
     expect(toSamplingDraft(EMPTY_OVERRIDES)).toEqual(createEmptySamplingDraft());
+  });
+
+  it('round-trips every override through its own field', () => {
+    const overrides: ChatSamplingOverridesDto = {
+      contextTrimStrategy: 'trim_start',
+      maxContextLength: 12_000,
+      maxTokens: 600,
+      minP: 0.03,
+      presencePenalty: -0.4,
+      repeatPenalty: 1.15,
+      repeatPenaltyRange: 320,
+      temperature: 0.72,
+      topK: 45,
+      topP: 0.93,
+    };
+
+    expect(parseSamplingDraft(toSamplingDraft(overrides))).toEqual({ errors: {}, overrides });
   });
 
   it('keeps existing overrides as editable text', () => {
