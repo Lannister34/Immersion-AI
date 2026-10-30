@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -6,25 +7,22 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
 
-import type {
-  RuntimeInstallCommand,
-  RuntimeInstallVariant,
-  RuntimeOverviewResponse,
-} from '@immersion/contracts/runtime';
+import type { RuntimeInstallCommand, RuntimeOverviewResponse } from '@immersion/contracts/runtime';
 
 import { getSharedApiLogger } from '../../../platform/logging/shared-api-logger.js';
 import { getPrimaryRuntimeRoot } from '../infrastructure/llm-process-manager.js';
 import { getRuntimeOverview } from './get-runtime-overview.js';
-import { type GitHubRelease, type GitHubReleaseAsset, GitHubReleaseSchema } from './github-release-schema.js';
+import { type GitHubRelease, type GitHubReleaseAsset, GitHubReleaseListSchema } from './github-release-schema.js';
+import { readAssetSha256 } from './read-asset-sha256.js';
 import { RuntimeInstallError } from './runtime-errors.js';
+import { type RuntimeInstallPlan, selectRuntimeInstallPlan } from './select-runtime-install-plan.js';
 
-const LLAMA_CPP_LATEST_RELEASE_URL = 'https://api.github.com/repos/ggml-org/llama.cpp/releases/latest';
+const LLAMA_CPP_RELEASES_URL = 'https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=30';
 const execFileAsync = promisify(execFile);
 
-interface RuntimeInstallPlan {
-  assets: GitHubReleaseAsset[];
-  releaseTag: string;
-  variant: RuntimeInstallVariant;
+interface AssetDownload {
+  asset: GitHubReleaseAsset;
+  expectedSha256: string | null;
 }
 
 async function runInstallStep<T>(failureMessage: string, step: () => Promise<T>): Promise<T> {
@@ -39,38 +37,9 @@ async function runInstallStep<T>(failureMessage: string, step: () => Promise<T>)
   }
 }
 
-function getExpectedAssetNames(releaseTag: string, variant: RuntimeInstallVariant) {
-  switch (variant) {
-    case 'cpu':
-      return [`llama-${releaseTag}-bin-win-cpu-x64.zip`];
-    case 'cuda-12.4':
-      return [`llama-${releaseTag}-bin-win-cuda-12.4-x64.zip`, 'cudart-llama-bin-win-cuda-12.4-x64.zip'];
-    case 'cuda-13.1':
-      return [`llama-${releaseTag}-bin-win-cuda-13.1-x64.zip`, 'cudart-llama-bin-win-cuda-13.1-x64.zip'];
-    case 'vulkan':
-      return [`llama-${releaseTag}-bin-win-vulkan-x64.zip`];
-  }
-}
-
-export function selectRuntimeInstallPlan(release: GitHubRelease, variant: RuntimeInstallVariant): RuntimeInstallPlan {
-  const expectedNames = getExpectedAssetNames(release.tag_name, variant);
-  const assets = expectedNames.map((assetName) => release.assets.find((asset) => asset.name === assetName));
-  const missingAsset = expectedNames.find((_assetName, index) => !assets[index]);
-
-  if (missingAsset) {
-    throw new RuntimeInstallError(`В релизе llama.cpp ${release.tag_name} не найден asset ${missingAsset}.`);
-  }
-
-  return {
-    assets: assets as GitHubReleaseAsset[],
-    releaseTag: release.tag_name,
-    variant,
-  };
-}
-
-function fetchLatestRelease(): Promise<GitHubRelease> {
-  return runInstallStep('Не удалось получить релиз llama.cpp.', async () => {
-    const response = await fetch(LLAMA_CPP_LATEST_RELEASE_URL, {
+function fetchRecentReleases(): Promise<GitHubRelease[]> {
+  return runInstallStep('Не удалось получить список релизов llama.cpp.', async () => {
+    const response = await fetch(LLAMA_CPP_RELEASES_URL, {
       headers: {
         Accept: 'application/vnd.github+json',
         'User-Agent': 'ImmersionAI-Rewrite',
@@ -78,20 +47,22 @@ function fetchLatestRelease(): Promise<GitHubRelease> {
     });
 
     if (!response.ok) {
-      throw new RuntimeInstallError(`Не удалось получить релиз llama.cpp: HTTP ${response.status}.`);
+      throw new RuntimeInstallError(`Не удалось получить список релизов llama.cpp: HTTP ${response.status}.`);
     }
 
-    const release = GitHubReleaseSchema.safeParse(await response.json());
+    const releases = GitHubReleaseListSchema.safeParse(await response.json());
 
-    if (!release.success) {
-      throw new RuntimeInstallError('Ответ GitHub о релизе llama.cpp не распознан.', { cause: release.error });
+    if (!releases.success) {
+      throw new RuntimeInstallError('Ответ GitHub со списком релизов llama.cpp не распознан.', {
+        cause: releases.error,
+      });
     }
 
-    return release.data;
+    return releases.data;
   });
 }
 
-function downloadAsset(asset: GitHubReleaseAsset, destination: string): Promise<void> {
+function downloadAsset({ asset, expectedSha256 }: AssetDownload, destination: string): Promise<void> {
   return runInstallStep(`Не удалось скачать ${asset.name}.`, async () => {
     const response = await fetch(asset.browser_download_url, {
       headers: {
@@ -103,7 +74,22 @@ function downloadAsset(asset: GitHubReleaseAsset, destination: string): Promise<
       throw new RuntimeInstallError(`Не удалось скачать ${asset.name}: HTTP ${response.status}.`);
     }
 
-    await pipeline(Readable.fromWeb(response.body), createWriteStream(destination));
+    const hash = createHash('sha256');
+
+    await pipeline(
+      Readable.fromWeb(response.body),
+      async function* hashChunks(chunks: AsyncIterable<Uint8Array>) {
+        for await (const chunk of chunks) {
+          hash.update(chunk);
+          yield chunk;
+        }
+      },
+      createWriteStream(destination),
+    );
+
+    if (expectedSha256 !== null && hash.digest('hex') !== expectedSha256) {
+      throw new RuntimeInstallError(`Контрольная сумма ${asset.name} не совпадает с указанной в релизе llama.cpp.`);
+    }
   });
 }
 
@@ -185,6 +171,7 @@ async function removeInstallDirectory(directory: string): Promise<void> {
 }
 
 async function installPlan(plan: RuntimeInstallPlan) {
+  const downloads = plan.assets.map((asset) => ({ asset, expectedSha256: readAssetSha256(asset) }));
   const runtimeRoot = getPrimaryRuntimeRoot();
   const installDirectory = path.join(runtimeRoot, 'bin');
   const tempDirectory = await runInstallStep('Не удалось создать временный каталог для установки llama.cpp.', () =>
@@ -192,11 +179,14 @@ async function installPlan(plan: RuntimeInstallPlan) {
   );
 
   try {
-    for (const asset of plan.assets) {
+    for (const download of downloads) {
+      await downloadAsset(download, path.join(tempDirectory, download.asset.name));
+    }
+
+    for (const { asset } of downloads) {
       const zipPath = path.join(tempDirectory, asset.name);
       const extractDirectory = path.join(tempDirectory, asset.name.replace(/\.zip$/i, ''));
 
-      await downloadAsset(asset, zipPath);
       await runInstallStep(`Не удалось распаковать ${asset.name}.`, () => extractZip(zipPath, extractDirectory));
       await runInstallStep(
         `Не удалось скопировать файлы из ${asset.name} в bin/. Если llama-server запущен, остановите его и повторите установку.`,
@@ -212,8 +202,8 @@ async function installPlan(plan: RuntimeInstallPlan) {
 }
 
 export async function installRuntime(command: RuntimeInstallCommand): Promise<RuntimeOverviewResponse> {
-  const release = await fetchLatestRelease();
-  const plan = selectRuntimeInstallPlan(release, command.variant);
+  const releases = await fetchRecentReleases();
+  const plan = selectRuntimeInstallPlan(releases, command.variant);
 
   await installPlan(plan);
 

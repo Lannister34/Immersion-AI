@@ -26,7 +26,7 @@ export type PickRuntimeDirectoryResponse = z.infer<typeof PickRuntimeDirectoryRe
 export const RuntimeStopCommandSchema = z.object({});
 export type RuntimeStopCommand = z.infer<typeof RuntimeStopCommandSchema>;
 
-export const RuntimeInstallVariantSchema = z.enum(['cpu', 'cuda-12.4', 'cuda-13.1', 'vulkan']);
+export const RuntimeInstallVariantSchema = z.enum(['cpu', 'cuda-12.4', 'cuda-13.4', 'vulkan']);
 export type RuntimeInstallVariant = z.infer<typeof RuntimeInstallVariantSchema>;
 
 export const RuntimeInstallCommandSchema = z.object({
