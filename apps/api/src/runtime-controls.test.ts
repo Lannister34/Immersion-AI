@@ -14,8 +14,53 @@ import { useTestApi } from './test-support/use-test-api.js';
 const LLAMA_CPP_RELEASES_URL = 'https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=30';
 const B11912_DOWNLOADS = 'https://github.com/ggml-org/llama.cpp/releases/download/b11912';
 
+const RUNTIME_CONFIG = { port: 5001, gpuLayers: 0, contextSize: 8192, flashAttention: false, threads: 0 };
+
+function spelledWithForwardSlashes(filePath: string): string {
+  return filePath.split(path.sep).join('/');
+}
+
 describe('runtime control routes', () => {
   const api = useTestApi();
+
+  async function leaveRuntimeRunningFromPreviousApiProcess(modelPath: string) {
+    await fs.writeFile(
+      path.join(api().dataRoot, '.llm-server.json'),
+      JSON.stringify({ model: path.basename(modelPath), modelPath, pid: process.pid, port: 5001 }),
+      'utf8',
+    );
+  }
+
+  async function scanModelsIn(modelsDir: string) {
+    const response = await api().app.inject({
+      method: 'PUT',
+      url: '/api/runtime/config',
+      payload: { ...RUNTIME_CONFIG, modelsDirs: [modelsDir] },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    return RuntimeOverviewResponseSchema.parse(response.json());
+  }
+
+  async function readActiveModels() {
+    const response = await api().app.inject({ method: 'GET', url: '/api/runtime/overview' });
+    const overview = RuntimeOverviewResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(overview.serverStatus.status).toBe('running');
+
+    return Object.fromEntries(overview.models.map((model) => [model.name, model.isActive]));
+  }
+
+  async function writeTwoModelsSharingAFileName() {
+    const modelsDir = path.join(api().dataRoot, 'Модели');
+    await fs.mkdir(path.join(modelsDir, 'qwen'), { recursive: true });
+    await fs.writeFile(path.join(modelsDir, 'qwen', 'Квен-14B.Q4_K_M.gguf'), 'gguf');
+    await fs.writeFile(path.join(modelsDir, 'Квен-14B.Q4_K_M.gguf'), 'gguf');
+
+    return modelsDir;
+  }
 
   it('returns empty runtime logs while no server output was captured', async () => {
     const { app } = api();
@@ -159,6 +204,34 @@ describe('runtime control routes', () => {
       'text/Qwen-VL-Q2_K.gguf': null,
       'vl/Qwen-VL-Q4_K_M.gguf': projectorPath,
       'vl/Qwen-VL-Q8_0.gguf': projectorPath,
+    });
+  });
+
+  it('marks the listed model the runtime runs as active, though its start path used forward slashes and ".."', async () => {
+    const modelsDir = await writeTwoModelsSharingAFileName();
+
+    const idle = await scanModelsIn(modelsDir);
+    expect(idle.models.map((model) => model.isActive)).toEqual([false, false]);
+
+    await leaveRuntimeRunningFromPreviousApiProcess(
+      `${spelledWithForwardSlashes(modelsDir)}/mistral/../qwen/Квен-14B.Q4_K_M.gguf`,
+    );
+
+    expect(await readActiveModels()).toEqual({
+      'qwen/Квен-14B.Q4_K_M.gguf': true,
+      'Квен-14B.Q4_K_M.gguf': false,
+    });
+  });
+
+  it('marks no listed model active while the runtime runs a file outside the scanned folders', async () => {
+    const modelsDir = await writeTwoModelsSharingAFileName();
+    await scanModelsIn(modelsDir);
+
+    await leaveRuntimeRunningFromPreviousApiProcess(path.join(api().dataRoot, 'elsewhere', 'Квен-14B.Q4_K_M.gguf'));
+
+    expect(await readActiveModels()).toEqual({
+      'qwen/Квен-14B.Q4_K_M.gguf': false,
+      'Квен-14B.Q4_K_M.gguf': false,
     });
   });
 

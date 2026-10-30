@@ -34,6 +34,7 @@ function createOverview(status: RuntimeServerStatus): RuntimeOverviewResponse {
         size: 1024,
         sourceDirectory: 'models',
         visionProjectorPath: null,
+        isActive: true,
       },
     ],
     modelsDirsStatus: [{ path: 'models', exists: true }],

@@ -32,6 +32,7 @@ export const RuntimeModelSummarySchema = z.object({
   size: z.number().nonnegative(),
   sourceDirectory: z.string().min(1),
   visionProjectorPath: z.string().min(1).nullable(),
+  isActive: z.boolean(),
 });
 
 export const RuntimeModelsDirStatusSchema = z.object({
