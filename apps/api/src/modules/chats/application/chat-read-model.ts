@@ -1,4 +1,3 @@
-import { FileChatRepository } from '../infrastructure/file-chat-repository.js';
 import type { ChatSummaryRecord } from './chat-records.js';
 
 export interface ChatFileStatRecord {
@@ -16,13 +15,4 @@ export interface ChatSearchTextRecord {
 export interface ChatSummaryWithSearchText {
   searchText: ChatSearchTextRecord;
   summary: ChatSummaryRecord;
-}
-
-// TODO: feed the chat index from the app's chat repository instead of these instances (F-38)
-export async function listChatFileStats(): Promise<ChatFileStatRecord[]> {
-  return new FileChatRepository().listChatFileStats();
-}
-
-export async function readChatSummaryWithSearchText(chatId: string): Promise<ChatSummaryWithSearchText | null> {
-  return new FileChatRepository().readChatSummaryWithSearchText(chatId);
 }

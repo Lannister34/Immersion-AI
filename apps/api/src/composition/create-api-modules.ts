@@ -1,7 +1,6 @@
 import { findCharacter, getCharacter } from '../modules/characters/index.js';
 import { type ChatsModule, createChatsModule } from '../modules/chats/index.js';
 import { createGenerationModule, type GenerationModule } from '../modules/generation/index.js';
-import { listIndexedChatSummaries } from '../modules/indexing/index.js';
 import { findLorebook } from '../modules/lorebooks/index.js';
 import { createOpenAiCompatModule, type OpenAiCompatModule } from '../modules/openai-compat/index.js';
 import { createPromptingModule, type PromptingModule } from '../modules/prompting/index.js';
@@ -25,8 +24,17 @@ export interface ApiModules {
 }
 
 export function createApiModules(dependencies: ApiDependencies): ApiModules {
-  const { chatCompletionClient, chatRepository, clock, config, generationJobs, httpFetch, tokenCounter, visionProbe } =
-    dependencies;
+  const {
+    chatCompletionClient,
+    chatIndex,
+    chatRepository,
+    clock,
+    config,
+    generationJobs,
+    httpFetch,
+    tokenCounter,
+    visionProbe,
+  } = dependencies;
   const prompting = createPromptingModule({
     // TODO: wire to modules.characters once it is composed (F-39)
     characters: { findCharacter },
@@ -42,8 +50,7 @@ export function createApiModules(dependencies: ApiDependencies): ApiModules {
   const chats = createChatsModule({
     chatRepository,
     clock,
-    // TODO: wire to the app's own chat index once it is composed (F-38)
-    chatIndex: { listChatSummaries: (options) => listIndexedChatSummaries(options) },
+    chatIndex,
     // TODO: wire to modules.characters once it is composed (F-39)
     characters: { getCharacter },
     // TODO: wire to modules.scenarios once it is composed (F-39)

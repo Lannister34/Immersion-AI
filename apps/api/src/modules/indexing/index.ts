@@ -1,9 +1,5 @@
 export const indexingModuleId = 'indexing' as const;
 
-export { getCharacterChatStats } from './application/get-character-chat-stats.js';
-export { listIndexedChatSummaries } from './application/list-indexed-chat-summaries.js';
-export type {
-  CharacterChatStatsRecord,
-  ChatIndexQueryOptions,
-  ChatIndexSourcePort,
-} from './infrastructure/in-memory-chat-index.js';
+export type { ChatIndex } from './application/chat-index.js';
+export type { ChatIndexSource } from './application/chat-index-source.js';
+export { InMemoryChatIndex } from './infrastructure/in-memory-chat-index.js';

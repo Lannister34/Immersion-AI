@@ -9,7 +9,7 @@ import Fastify, {
 import type { ApiDependencies } from './composition/api-dependencies.js';
 import { apiProblems } from './composition/api-problems.js';
 import type { ApiModules } from './composition/create-api-modules.js';
-import { charactersRoutes } from './modules/characters/index.js';
+import { createCharactersRoutes } from './modules/characters/index.js';
 import { lorebooksRoutes } from './modules/lorebooks/index.js';
 import { providersRoutes } from './modules/providers/index.js';
 import { runtimeRoutes } from './modules/runtime/index.js';
@@ -39,7 +39,8 @@ export function buildApiApp(dependencies: ApiDependencies, modules: ApiModules):
     origin: [...dependencies.config.webOrigins],
   });
   app.register(modules.system.routes);
-  app.register(charactersRoutes, { prefix: '/api/characters' });
+  // TODO: register modules.characters.routes once the characters module is composed (F-39)
+  app.register(createCharactersRoutes({ chatStats: dependencies.chatIndex }), { prefix: '/api/characters' });
   app.register(modules.chats.routes, { prefix: '/api/chats' });
   app.register(modules.generation.routes, { prefix: '/api/generation' });
   app.register(lorebooksRoutes, { prefix: '/api/lorebooks' });
