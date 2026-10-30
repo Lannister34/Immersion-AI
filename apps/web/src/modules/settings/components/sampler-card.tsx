@@ -2,6 +2,7 @@ import type { SamplerPresetInput, SettingsOverviewResponse } from '@immersion/co
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 
 import { getApiErrorMessage } from '../../../shared/api/get-api-error-message';
+import { ErrorBanner } from '../../../shared/ui/error-banner';
 import { CheckIcon, PlusIcon, RefreshIcon, TrashIcon, XIcon } from '../../../shared/ui/icons';
 import {
   useCreateSamplerPreset,
@@ -288,11 +289,7 @@ export function SamplerCard({ data }: SamplerCardProps) {
             value={form.maxContextLength}
           />
         </div>
-        {mutationErrorMessage ? (
-          <div className="card" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', padding: 10 }}>
-            {mutationErrorMessage}
-          </div>
-        ) : null}
+        {mutationErrorMessage ? <ErrorBanner>{mutationErrorMessage}</ErrorBanner> : null}
         <div className="row gap-8" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="row gap-8">
             {!isCreating && selectedPreset ? (

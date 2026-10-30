@@ -2,6 +2,7 @@ import type { SettingsOverviewResponse, UpdateSettingsProfileCommand } from '@im
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import { getApiErrorMessage } from '../../../shared/api/get-api-error-message';
+import { ErrorBanner } from '../../../shared/ui/error-banner';
 import { useUpdateSettingsProfile } from '../mutations/use-update-settings-profile';
 import { PromptTemplateCard } from './prompt-template-card';
 import { ToggleRow } from './toggle-row';
@@ -190,11 +191,7 @@ export function ProfileCard({ data }: ProfileCardProps) {
             onChange={(value) => setForm((current) => ({ ...current, quotesHighlighted: value }))}
           />
         </div>
-        {errorMessage ? (
-          <div className="card" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', padding: 12 }}>
-            {errorMessage}
-          </div>
-        ) : null}
+        {errorMessage ? <ErrorBanner>{errorMessage}</ErrorBanner> : null}
         <div className="row gap-8" style={{ justifyContent: 'flex-end', alignItems: 'center' }}>
           {savedAt && !isDirty ? (
             <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>

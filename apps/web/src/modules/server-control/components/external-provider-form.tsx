@@ -8,6 +8,7 @@ import { useMutation } from '@tanstack/react-query';
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import { pluralRu } from '../../../shared/lib/plural';
+import { ErrorBanner } from '../../../shared/ui/error-banner';
 import { probeProviderModels } from '../api/probe-provider-models';
 import {
   buildProviderConfig,
@@ -195,11 +196,7 @@ export function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalPro
             ) : null}
           </div>
         ) : null}
-        {errorMessage ? (
-          <div className="card" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', padding: 10 }}>
-            {errorMessage}
-          </div>
-        ) : null}
+        {errorMessage ? <ErrorBanner>{errorMessage}</ErrorBanner> : null}
         <div className="row gap-8" style={{ justifyContent: 'flex-end', alignItems: 'center' }}>
           {savedAt && !isDirty ? (
             <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>

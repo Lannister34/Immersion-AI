@@ -14,6 +14,7 @@ import { useUiShellStore } from '../../../app/store/ui-shell';
 import { ApiError, createApiUrl } from '../../../shared/api/client';
 import { getApiErrorMessage } from '../../../shared/api/get-api-error-message';
 import { useDebouncedValue } from '../../../shared/lib/use-debounced-value';
+import { ErrorBanner } from '../../../shared/ui/error-banner';
 import { DownloadIcon, SparkleIcon, TrashIcon } from '../../../shared/ui/icons';
 import {
   chatReplyPromptPreviewQueryOptions,
@@ -480,21 +481,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
             }}
           >
             <div style={{ maxWidth: 780, margin: '0 auto' }}>
-              {generationErrorMessage ? (
-                <div
-                  className="card"
-                  style={{
-                    padding: '8px 12px',
-                    marginBottom: 8,
-                    color: 'var(--danger)',
-                    background: 'var(--danger-soft)',
-                    borderColor: 'transparent',
-                    fontSize: 'var(--fz-sm)',
-                  }}
-                >
-                  {generationErrorMessage}
-                </div>
-              ) : null}
+              {generationErrorMessage ? <ErrorBanner tone="soft">{generationErrorMessage}</ErrorBanner> : null}
               {messageActions.isEditStale ? (
                 <div
                   className="card"
