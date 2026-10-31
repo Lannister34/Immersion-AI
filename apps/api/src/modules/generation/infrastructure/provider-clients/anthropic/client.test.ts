@@ -19,6 +19,7 @@ const BASE_REQUEST: Omit<ChatCompletionRequest, 'onDelta'> = {
     apiKey: 'sk-ant-test',
     apiKind: 'anthropic',
     baseUrl: 'https://api.anthropic.com/v1',
+    contextSize: null,
     model: 'claude-sonnet-4-5',
   },
   maxTokens: 256,

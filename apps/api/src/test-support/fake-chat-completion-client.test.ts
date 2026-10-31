@@ -4,7 +4,13 @@ import type { ChatCompletionRequest } from '../modules/generation/index.js';
 import { FakeChatCompletionClient } from './fake-chat-completion-client.js';
 
 const REQUEST: ChatCompletionRequest = {
-  endpoint: { apiKey: null, apiKind: 'openai-compatible', baseUrl: 'http://127.0.0.1:6007', model: 'm' },
+  endpoint: {
+    apiKey: null,
+    apiKind: 'openai-compatible',
+    baseUrl: 'http://127.0.0.1:6007',
+    contextSize: null,
+    model: 'm',
+  },
   maxTokens: 8,
   messages: [{ content: 'Привет.', role: 'user' }],
   sampling: { minP: 0, presencePenalty: 0, repeatPenalty: 1, repeatPenaltyRange: 0, temperature: 0, topK: 0, topP: 1 },

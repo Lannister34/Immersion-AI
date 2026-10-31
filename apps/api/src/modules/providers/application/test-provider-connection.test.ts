@@ -8,7 +8,12 @@ import { testProviderConnection } from './test-provider-connection.js';
 
 const RUNNING_BUILTIN: RuntimeEndpointPort = {
   getRunningEndpoint: () =>
-    Promise.resolve({ baseUrl: 'http://127.0.0.1:5001', model: 'qwen3-8b.gguf', visionProjectorPath: null }),
+    Promise.resolve({
+      baseUrl: 'http://127.0.0.1:5001',
+      contextSize: null,
+      model: 'qwen3-8b.gguf',
+      visionProjectorPath: null,
+    }),
 };
 
 describe('testProviderConnection', () => {

@@ -5,6 +5,7 @@ import { PassThrough } from 'node:stream';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { getSharedApiLogger } from '../../../platform/logging/shared-api-logger.js';
 import { stubGlobalFetch } from '../../../test-support/global-fetch-stub.js';
 import { useTemporaryDataRoot } from '../../../test-support/use-temporary-data-root.js';
 import { LlmProcessManager, type LlmStartConfig } from './llm-process-manager.js';
@@ -191,6 +192,7 @@ describe('LlmProcessManager', () => {
       error: 'llama-server завершился с кодом 1',
       port: DETACHED_PORT,
       pid: null,
+      launchConfig: { contextSize: 2048, flashAttention: false, gpuLayers: 0, threads: 0 },
     });
 
     await manager.stop();
@@ -242,6 +244,44 @@ describe('LlmProcessManager', () => {
       error: null,
       port: DETACHED_PORT,
       pid: null,
+      launchConfig: null,
     });
+  });
+
+  it('reports the launch parameters the server was started with, not the saved ones, which may have changed since', async () => {
+    const pid = 2_147_483_602;
+    const { config } = await arrangeFakeLlamaServers([pid]);
+    vi.spyOn(process, 'kill').mockReturnValue(true);
+    const manager = new LlmProcessManager();
+
+    await manager.start({ ...config, contextSize: 8192, flashAttention: true, gpuLayers: 99, threads: 6 });
+
+    const expected = { contextSize: 8192, flashAttention: true, gpuLayers: 99, threads: 6 };
+    expect(manager.getState().launchConfig).toEqual(expected);
+    expect(new LlmProcessManager().getState()).toMatchObject({ status: 'running', pid, launchConfig: expected });
+
+    await manager.stop();
+  });
+
+  it('reports unknown launch parameters for a llama-server whose PID file predates them, instead of guessing', async () => {
+    await recordDetachedRuntime();
+    const warn = vi.spyOn(getSharedApiLogger(), 'warn').mockImplementation(() => undefined);
+
+    expect(new LlmProcessManager().getState()).toMatchObject({ status: 'running', launchConfig: null });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('logs a malformed launchConfig in the PID file once and reports it as unknown, since the record is the server fault', async () => {
+    await recordDetachedRuntime();
+    const pidFilePath = path.join(dataRoot(), '.llm-server.json');
+    const record = JSON.parse(await fs.readFile(pidFilePath, 'utf8')) as Record<string, unknown>;
+    await fs.writeFile(pidFilePath, JSON.stringify({ ...record, launchConfig: { contextSize: 'восемь тысяч' } }));
+    const warn = vi.spyOn(getSharedApiLogger(), 'warn').mockImplementation(() => undefined);
+    const manager = new LlmProcessManager();
+
+    expect(manager.getState()).toMatchObject({ status: 'running', launchConfig: null });
+    expect(manager.getState().launchConfig).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.objectContaining({ pid: DETACHED_PID }), expect.any(String));
   });
 });

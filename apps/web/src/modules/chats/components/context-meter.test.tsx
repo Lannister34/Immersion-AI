@@ -2,6 +2,7 @@ import {
   type ChatReplyPromptPreviewResponse,
   ChatReplyPromptPreviewResponseSchema,
   type ContextBudgetStatus,
+  type PromptContextWindow,
 } from '@immersion/contracts/generation';
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
@@ -14,6 +15,7 @@ const ONLY_LAST_MESSAGE = 'только последнее сообщение';
 
 interface PreviewFixture {
   budgetStatus: ContextBudgetStatus;
+  contextWindow?: PromptContextWindow;
   maxContextLength: number;
   maxTokens: number;
   transcriptMessageCount: number;
@@ -47,6 +49,7 @@ function buildPreview(fixture: PreviewFixture): ChatReplyPromptPreviewResponse {
     chatId: 'nochnaya-gavan',
     diagnostics: {
       budgetStatus: fixture.budgetStatus,
+      contextWindow: fixture.contextWindow ?? { size: fixture.maxContextLength, source: 'preset' },
       messageCount: fixture.transcriptMessageCount + 1,
       promptSource: { kind: 'default-template' },
       renderer: {
@@ -86,6 +89,7 @@ function buildPreview(fixture: PreviewFixture): ChatReplyPromptPreviewResponse {
       },
     },
     provider: {
+      contextSize: fixture.contextWindow?.source === 'runtime' ? fixture.contextWindow.size : null,
       model: 'Модель-тест.gguf',
       readiness: {
         activeProvider: 'koboldcpp',
@@ -162,5 +166,36 @@ describe('ContextMeter', () => {
     fireEvent.click(screen.getByTitle('Подробности о контексте'));
 
     expect(rowText('обрезано сообщений')).toBe('обрезано сообщений7');
+  });
+
+  it("measures against the built-in server's context and says so when the preset asks for a larger window", async () => {
+    await renderMeter({
+      budgetStatus: 'trimmed',
+      contextWindow: { size: 8192, source: 'runtime' },
+      maxContextLength: 32_256,
+      maxTokens: 600,
+      transcriptMessageCount: 12,
+      trimmedMessageCount: 7,
+    });
+
+    const badge = screen.getByText('окно ограничено сервером');
+    expect(badge.getAttribute('title')).toContain(`предустановка просит ${(32_256).toLocaleString('ru-RU')}`);
+    expect(screen.getByTitle('Подробности о контексте').textContent).toContain(`/ ${(8192).toLocaleString('ru-RU')} ·`);
+
+    fireEvent.click(screen.getByTitle('Подробности о контексте'));
+
+    expect(rowText('окно контекста')).toBe(`окно контекста${(8192).toLocaleString('ru-RU')} (сервер)`);
+  });
+
+  it('shows no server limit while the preset window fits the server', async () => {
+    await renderMeter({
+      budgetStatus: 'fits',
+      maxContextLength: 8192,
+      maxTokens: 600,
+      transcriptMessageCount: 3,
+      trimmedMessageCount: 0,
+    });
+
+    expect(screen.queryByText('окно ограничено сервером')).toBeNull();
   });
 });

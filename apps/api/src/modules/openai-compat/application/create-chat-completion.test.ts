@@ -12,6 +12,7 @@ const CONFIGURED_ENDPOINT: ChatCompletionEndpoint = {
   apiKey: null,
   apiKind: 'openai-compatible',
   baseUrl: 'http://127.0.0.1:6007',
+  contextSize: null,
   model: 'настроенная-модель',
 };
 

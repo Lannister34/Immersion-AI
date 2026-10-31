@@ -18,6 +18,7 @@ export interface GenerationProviderEndpoint {
   apiKey: string | null;
   apiKind: ProviderApiKind;
   baseUrl: string;
+  contextSize: number | null;
   model: string;
 }
 
@@ -71,6 +72,7 @@ export async function resolveGenerationProviderEndpoint(
       apiKey: null,
       apiKind: 'openai-compatible',
       baseUrl: runtimeEndpoint.baseUrl,
+      contextSize: runtimeEndpoint.contextSize,
       model: runtimeEndpoint.model?.trim() || DEFAULT_OPENAI_COMPATIBLE_MODEL,
     };
   }
@@ -101,6 +103,7 @@ export async function resolveGenerationProviderEndpoint(
     apiKey: parsedConfig.apiKey?.trim() || null,
     apiKind: getProviderApiKind(provider),
     baseUrl: parsedConfig.url,
+    contextSize: null,
     model,
   };
 }

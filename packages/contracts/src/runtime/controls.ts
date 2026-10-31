@@ -2,10 +2,10 @@ import { z } from 'zod';
 
 import { RuntimeConfigSnapshotSchema } from './overview.js';
 
-export const RuntimeConfigCommandSchema = RuntimeConfigSnapshotSchema;
+export const RuntimeConfigCommandSchema = RuntimeConfigSnapshotSchema.partial();
 export type RuntimeConfigCommand = z.infer<typeof RuntimeConfigCommandSchema>;
 
-export const RuntimeStartCommandSchema = RuntimeConfigCommandSchema.omit({
+export const RuntimeStartCommandSchema = RuntimeConfigSnapshotSchema.omit({
   modelsDirs: true,
 }).extend({
   mmprojPath: z.string().min(1).optional(),

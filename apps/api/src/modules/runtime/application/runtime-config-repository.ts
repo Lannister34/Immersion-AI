@@ -1,4 +1,4 @@
-import type { RuntimeConfigCommand } from '@immersion/contracts/runtime';
+import type { RuntimeConfigCommand, RuntimeConfigSnapshot } from '@immersion/contracts/runtime';
 
 import {
   readLegacyUserSettingsSource,
@@ -7,16 +7,16 @@ import {
 import { normalizeRuntimeConfig } from './runtime-config.js';
 
 export class RuntimeConfigRepository {
-  async read() {
+  async read(): Promise<RuntimeConfigSnapshot> {
     const stored = readLegacyUserSettingsSource();
 
     return normalizeRuntimeConfig(stored.llmServerConfig);
   }
 
-  async write(next: RuntimeConfigCommand) {
+  async merge(patch: RuntimeConfigCommand): Promise<void> {
     await updateLegacyUserSettingsSource((existing) => ({
       ...existing,
-      llmServerConfig: next,
+      llmServerConfig: { ...normalizeRuntimeConfig(existing.llmServerConfig), ...patch },
     }));
   }
 }

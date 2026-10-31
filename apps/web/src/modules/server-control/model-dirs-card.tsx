@@ -36,7 +36,7 @@ export function ModelDirsCard({ dirsStatus, serverConfig }: ModelDirsCardProps) 
 
   const applyDirs = (nextDirs: string[]) => {
     setValidationError(null);
-    saveMutation.mutate({ ...serverConfig, modelsDirs: nextDirs });
+    saveMutation.mutate({ modelsDirs: nextDirs });
   };
 
   const addDir = (candidate: string) => {

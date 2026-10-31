@@ -7,9 +7,9 @@ export async function updateRuntimeConfig(
   command: RuntimeConfigCommand,
   repository = new RuntimeConfigRepository(),
 ): Promise<RuntimeOverviewResponse> {
-  const modelsDirs = [...new Set(command.modelsDirs)];
+  const patch = command.modelsDirs ? { ...command, modelsDirs: [...new Set(command.modelsDirs)] } : command;
 
-  await repository.write({ ...command, modelsDirs });
+  await repository.merge(patch);
   invalidateRuntimeModelScanCache();
 
   return getRuntimeOverview();

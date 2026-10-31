@@ -173,6 +173,12 @@ export type TokenCountMethod = z.infer<typeof TokenCountMethodSchema>;
 export const ContextBudgetStatusSchema = z.enum(['fits', 'trimmed', 'reply-exceeds-context']);
 export type ContextBudgetStatus = z.infer<typeof ContextBudgetStatusSchema>;
 
+export const PromptContextWindowSchema = z.object({
+  size: z.number().int().nonnegative(),
+  source: z.enum(['preset', 'runtime']),
+});
+export type PromptContextWindow = z.infer<typeof PromptContextWindowSchema>;
+
 export const ChatReplyPromptPreviewTokenEstimateSchema = z.object({
   finalTotal: z.number().int().nonnegative(),
   promptBudget: z.number().int().nonnegative(),
@@ -187,6 +193,7 @@ export const ChatReplyPromptPreviewResponseSchema = z.object({
   chatId: ChatIdSchema,
   diagnostics: z.object({
     budgetStatus: ContextBudgetStatusSchema,
+    contextWindow: PromptContextWindowSchema,
     messageCount: z.number().int().nonnegative(),
     promptSource: ChatReplyPromptPreviewSourceSchema,
     renderer: ChatReplyPromptPreviewRendererDiagnosticsSchema,
@@ -208,6 +215,7 @@ export const ChatReplyPromptPreviewResponseSchema = z.object({
     sampling: ChatReplyPromptPreviewSamplingSchema,
   }),
   provider: z.object({
+    contextSize: z.number().int().positive().nullable(),
     model: z.string().nullable(),
     readiness: GenerationReadinessResponseSchema,
   }),
