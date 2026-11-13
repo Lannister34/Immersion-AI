@@ -6,11 +6,14 @@ import path from 'node:path';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { type ApiConfig, parseApiConfig } from '../config/api-config.js';
+import { type CharacterStore, createFileCharacterStore } from '../modules/characters/index.js';
 import { FileChatRepository } from '../modules/chats/index.js';
 import { InMemoryGenerationJobRegistry } from '../modules/generation/index.js';
 import { type ChatIndex, InMemoryChatIndex } from '../modules/indexing/index.js';
+import { createFileLorebookStore } from '../modules/lorebooks/index.js';
 import { heuristicTokenCounter } from '../modules/prompting/index.js';
 import type { VisionProbe } from '../modules/providers/index.js';
+import { createFileScenarioStore } from '../modules/scenarios/index.js';
 import type { Clock } from '../platform/clock/clock.js';
 import { systemClock } from '../platform/clock/system-clock.js';
 import { createKeyedSerialQueue } from '../platform/concurrency/keyed-serial-queue.js';
@@ -39,6 +42,11 @@ async function claimConfig(): Promise<ApiConfig> {
 
 function chatFilePath(config: ApiConfig, chatId: string): string {
   return path.join(config.dataRoot, 'chats', '_no_character_', `${chatId}.jsonl`);
+}
+
+async function writeJson(filePath: string, value: unknown): Promise<void> {
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, JSON.stringify(value), 'utf8');
 }
 
 function holdReadsOf(filePath: string): { readonly entered: Promise<void>; release(): void } {
@@ -74,8 +82,12 @@ describe('createApiDependencies', () => {
     };
     const generationJobs = new InMemoryGenerationJobRegistry({ clock });
     const visionProbe: VisionProbe = { getVisionSupport: () => Promise.resolve('supported') };
+    const characterStore = createFileCharacterStore({ directory: path.join(projectRoot, 'персонажи'), logger });
+    const lorebookStore = createFileLorebookStore({ directory: path.join(projectRoot, 'миры') });
+    const scenarioStore = createFileScenarioStore({ directory: path.join(projectRoot, 'сценарии') });
 
     const dependencies = createApiDependencies(parseApiConfig({}, projectRoot), {
+      characterStore,
       chatCompletionClient,
       chatIndex,
       chatRepository,
@@ -83,6 +95,8 @@ describe('createApiDependencies', () => {
       generationJobs,
       httpFetch,
       logger,
+      lorebookStore,
+      scenarioStore,
       tokenCounter: heuristicTokenCounter,
       visionProbe,
     });
@@ -96,9 +110,12 @@ describe('createApiDependencies', () => {
     expect(dependencies.generationJobs).toBe(generationJobs);
     expect(dependencies.tokenCounter).toBe(heuristicTokenCounter);
     expect(dependencies.visionProbe).toBe(visionProbe);
+    expect(dependencies.characterStore).toBe(characterStore);
+    expect(dependencies.lorebookStore).toBe(lorebookStore);
+    expect(dependencies.scenarioStore).toBe(scenarioStore);
   });
 
-  it('builds a chat repository, chat index, job registry, token counter and vision probe of its own for every app', () => {
+  it('builds library stores, a chat repository, chat index, job registry, token counter and vision probe of its own for every app', () => {
     const config = parseApiConfig({}, projectRoot);
     const first = createApiDependencies(config);
     const second = createApiDependencies(config);
@@ -110,6 +127,9 @@ describe('createApiDependencies', () => {
     expect(second.generationJobs).not.toBe(first.generationJobs);
     expect(second.tokenCounter).not.toBe(first.tokenCounter);
     expect(second.visionProbe).not.toBe(first.visionProbe);
+    expect(second.characterStore).not.toBe(first.characterStore);
+    expect(second.lorebookStore).not.toBe(first.lorebookStore);
+    expect(second.scenarioStore).not.toBe(first.scenarioStore);
   });
 
   it('builds the vision probe on the overridden HttpFetch and clock', async () => {
@@ -208,6 +228,31 @@ describe('createApiDependencies', () => {
       'Новый',
       'Сохранённый',
     ]);
+  });
+
+  it('places characters, lorebooks and scenarios under the configured data root', async () => {
+    const config = await claimConfig();
+    await writeJson(path.join(config.dataRoot, 'characters', 'Ирис.json'), { name: 'Ирис' });
+    await writeJson(path.join(config.dataRoot, 'worlds', 'Мир.json'), { entries: [], name: 'Мир' });
+    await writeJson(path.join(config.dataRoot, 'scenarios', 'Порт.json'), { content: 'Порт.', name: 'Порт' });
+    const dependencies = createApiDependencies(config, { logger: createCapturingLogger().logger });
+
+    expect((await dependencies.characterStore.listCharacters()).map((item) => item.id)).toEqual(['Ирис.json']);
+    expect((await dependencies.lorebookStore.listLorebooks()).map((item) => item.id)).toEqual(['Мир.json']);
+    expect((await dependencies.scenarioStore.listScenarios()).map((item) => item.id)).toEqual(['Порт.json']);
+  });
+
+  it('two apps with different data roots list different characters', async () => {
+    const firstConfig = await claimConfig();
+    const secondConfig = await claimConfig();
+    await writeJson(path.join(firstConfig.dataRoot, 'characters', 'Первый.json'), { name: 'Первый' });
+    await writeJson(path.join(secondConfig.dataRoot, 'characters', 'Второй.json'), { name: 'Второй' });
+    const logger = createCapturingLogger().logger;
+    const first: CharacterStore = createApiDependencies(firstConfig, { logger }).characterStore;
+    const second: CharacterStore = createApiDependencies(secondConfig, { logger }).characterStore;
+
+    expect((await first.listCharacters()).map((item) => item.name)).toEqual(['Первый']);
+    expect((await second.listCharacters()).map((item) => item.name)).toEqual(['Второй']);
   });
 
   it('two apps on different data roots keep separate chat indexes and write queues', async () => {

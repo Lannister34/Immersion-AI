@@ -1,13 +1,20 @@
-import { deleteCharacterAvatarFiles, findCharacterFile } from '../infrastructure/file-character-repository.js';
+import type { CharacterStore } from './character-store.js';
 import { CharacterAvatarNotFoundError, CharacterNotFoundError } from './get-character-avatar.js';
 
-export async function deleteCharacterAvatar(characterId: string): Promise<void> {
-  const summary = await findCharacterFile(characterId);
+export interface DeleteCharacterAvatarDependencies {
+  readonly characterStore: Pick<CharacterStore, 'deleteCharacterAvatar' | 'findCharacterSummary'>;
+}
+
+export async function deleteCharacterAvatar(
+  characterId: string,
+  { characterStore }: DeleteCharacterAvatarDependencies,
+): Promise<void> {
+  const summary = await characterStore.findCharacterSummary(characterId);
   if (!summary) {
     throw new CharacterNotFoundError(characterId);
   }
 
-  const removed = await deleteCharacterAvatarFiles(summary.id);
+  const removed = await characterStore.deleteCharacterAvatar(summary.id);
   if (!removed) {
     throw new CharacterAvatarNotFoundError(characterId);
   }

@@ -1,6 +1,6 @@
 import type { ScenarioDetailDto } from '@immersion/contracts/scenarios';
 
-import { readScenarioDetail } from '../infrastructure/file-scenario-repository.js';
+import type { ScenarioStore } from './scenario-store.js';
 
 export class ScenarioNotFoundError extends Error {
   constructor(scenarioId: string) {
@@ -9,8 +9,12 @@ export class ScenarioNotFoundError extends Error {
   }
 }
 
-export async function getScenario(id: string): Promise<ScenarioDetailDto> {
-  const detail = await readScenarioDetail(id);
+export interface GetScenarioDependencies {
+  readonly scenarioStore: Pick<ScenarioStore, 'readScenarioDetail'>;
+}
+
+export async function getScenario(id: string, { scenarioStore }: GetScenarioDependencies): Promise<ScenarioDetailDto> {
+  const detail = await scenarioStore.readScenarioDetail(id);
   if (!detail) {
     throw new ScenarioNotFoundError(id);
   }

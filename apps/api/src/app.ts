@@ -9,11 +9,8 @@ import Fastify, {
 import type { ApiDependencies } from './composition/api-dependencies.js';
 import { apiProblems } from './composition/api-problems.js';
 import type { ApiModules } from './composition/create-api-modules.js';
-import { createCharactersRoutes } from './modules/characters/index.js';
-import { lorebooksRoutes } from './modules/lorebooks/index.js';
 import { providersRoutes } from './modules/providers/index.js';
 import { runtimeRoutes } from './modules/runtime/index.js';
-import { scenariosRoutes } from './modules/scenarios/index.js';
 import { settingsRoutes } from './modules/settings/index.js';
 import { installNotFoundHandler, installProblemHandler } from './platform/http/problem-handler.js';
 import type { ApiLogger } from './platform/logging/api-logger.js';
@@ -39,12 +36,11 @@ export function buildApiApp(dependencies: ApiDependencies, modules: ApiModules):
     origin: [...dependencies.config.webOrigins],
   });
   app.register(modules.system.routes);
-  // TODO: register modules.characters.routes once the characters module is composed (F-39)
-  app.register(createCharactersRoutes({ chatStats: dependencies.chatIndex }), { prefix: '/api/characters' });
+  app.register(modules.characters.routes, { prefix: '/api/characters' });
   app.register(modules.chats.routes, { prefix: '/api/chats' });
   app.register(modules.generation.routes, { prefix: '/api/generation' });
-  app.register(lorebooksRoutes, { prefix: '/api/lorebooks' });
-  app.register(scenariosRoutes, { prefix: '/api/scenarios' });
+  app.register(modules.lorebooks.routes, { prefix: '/api/lorebooks' });
+  app.register(modules.scenarios.routes, { prefix: '/api/scenarios' });
   app.register(settingsRoutes, { prefix: '/api/settings' });
   app.register(providersRoutes, { prefix: '/api/providers' });
   app.register(runtimeRoutes, { prefix: '/api/runtime' });

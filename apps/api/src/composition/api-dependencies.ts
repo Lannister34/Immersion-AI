@@ -1,6 +1,7 @@
 import path from 'node:path';
 
 import type { ApiConfig } from '../config/api-config.js';
+import { type CharacterStore, createFileCharacterStore } from '../modules/characters/index.js';
 import { type ChatRepository, FileChatRepository } from '../modules/chats/index.js';
 import {
   type ChatCompletionClient,
@@ -10,9 +11,11 @@ import {
   ProviderTokenCounter,
 } from '../modules/generation/index.js';
 import { type ChatIndex, InMemoryChatIndex } from '../modules/indexing/index.js';
+import { createFileLorebookStore, type LorebookStore } from '../modules/lorebooks/index.js';
 import type { TokenCounter } from '../modules/prompting/index.js';
 import { getProviderSettings, ProviderVisionProbe, type VisionProbe } from '../modules/providers/index.js';
 import { getRunningRuntimeEndpoint } from '../modules/runtime/index.js';
+import { createFileScenarioStore, type ScenarioStore } from '../modules/scenarios/index.js';
 import type { Clock } from '../platform/clock/clock.js';
 import { systemClock } from '../platform/clock/system-clock.js';
 import { createKeyedSerialQueue } from '../platform/concurrency/keyed-serial-queue.js';
@@ -28,6 +31,9 @@ export interface ApiDependencies {
   readonly clock: Clock;
   readonly httpFetch: HttpFetch;
   readonly chatCompletionClient: ChatCompletionClient;
+  readonly characterStore: CharacterStore;
+  readonly lorebookStore: LorebookStore;
+  readonly scenarioStore: ScenarioStore;
   readonly chatRepository: ChatRepository;
   readonly chatIndex: ChatIndex;
   readonly generationJobs: GenerationJobRegistry;
@@ -55,6 +61,13 @@ export function createApiDependencies(config: ApiConfig, overrides: ApiDependenc
     clock,
     httpFetch,
     chatCompletionClient: overrides.chatCompletionClient ?? createChatCompletionClient({ httpFetch }),
+    characterStore:
+      overrides.characterStore ??
+      createFileCharacterStore({ directory: path.join(config.dataRoot, 'characters'), logger }),
+    lorebookStore:
+      overrides.lorebookStore ?? createFileLorebookStore({ directory: path.join(config.dataRoot, 'worlds') }),
+    scenarioStore:
+      overrides.scenarioStore ?? createFileScenarioStore({ directory: path.join(config.dataRoot, 'scenarios') }),
     chatRepository,
     chatIndex:
       overrides.chatIndex ??

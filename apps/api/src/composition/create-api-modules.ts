@@ -1,7 +1,7 @@
-import { findCharacter, getCharacter } from '../modules/characters/index.js';
+import { type CharactersModule, createCharactersModule } from '../modules/characters/index.js';
 import { type ChatsModule, createChatsModule } from '../modules/chats/index.js';
 import { createGenerationModule, type GenerationModule } from '../modules/generation/index.js';
-import { findLorebook } from '../modules/lorebooks/index.js';
+import { createLorebooksModule, type LorebooksModule } from '../modules/lorebooks/index.js';
 import { createOpenAiCompatModule, type OpenAiCompatModule } from '../modules/openai-compat/index.js';
 import { createPromptingModule, type PromptingModule } from '../modules/prompting/index.js';
 import {
@@ -10,13 +10,16 @@ import {
   testProviderConnection,
 } from '../modules/providers/index.js';
 import { getRunningRuntimeEndpoint, getRuntimeOverview } from '../modules/runtime/index.js';
-import { findScenario, getScenario } from '../modules/scenarios/index.js';
+import { createScenariosModule, type ScenariosModule } from '../modules/scenarios/index.js';
 import { getProfileUserName, getSettingsOverview, resolveSamplerPresetForModel } from '../modules/settings/index.js';
 import { createSystemModule, type SystemModule } from '../modules/system/index.js';
 import type { ApiDependencies } from './api-dependencies.js';
 
 export interface ApiModules {
   readonly system: SystemModule;
+  readonly characters: CharactersModule;
+  readonly lorebooks: LorebooksModule;
+  readonly scenarios: ScenariosModule;
   readonly prompting: PromptingModule;
   readonly chats: ChatsModule;
   readonly generation: GenerationModule;
@@ -25,6 +28,7 @@ export interface ApiModules {
 
 export function createApiModules(dependencies: ApiDependencies): ApiModules {
   const {
+    characterStore,
     chatCompletionClient,
     chatIndex,
     chatRepository,
@@ -32,16 +36,18 @@ export function createApiModules(dependencies: ApiDependencies): ApiModules {
     config,
     generationJobs,
     httpFetch,
+    lorebookStore,
+    scenarioStore,
     tokenCounter,
     visionProbe,
   } = dependencies;
+  const characters = createCharactersModule({ characterStore, chatStats: chatIndex, clock });
+  const lorebooks = createLorebooksModule({ clock, lorebookStore });
+  const scenarios = createScenariosModule({ clock, scenarioStore });
   const prompting = createPromptingModule({
-    // TODO: wire to modules.characters once it is composed (F-39)
-    characters: { findCharacter },
-    // TODO: wire to modules.lorebooks once it is composed (F-39)
-    lorebooks: { findLorebook },
-    // TODO: wire to modules.scenarios once it is composed (F-39)
-    scenarios: { findScenario },
+    characters,
+    lorebooks,
+    scenarios,
     // TODO: wire to modules.settings once it is composed (F-42)
     settings: {
       getSettingsOverview: () => getSettingsOverview(),
@@ -51,10 +57,8 @@ export function createApiModules(dependencies: ApiDependencies): ApiModules {
     chatRepository,
     clock,
     chatIndex,
-    // TODO: wire to modules.characters once it is composed (F-39)
-    characters: { getCharacter },
-    // TODO: wire to modules.scenarios once it is composed (F-39)
-    scenarios: { getScenario },
+    characters,
+    scenarios,
     // TODO: wire to modules.settings once it is composed (F-42)
     profile: { getProfileUserName: () => getProfileUserName() },
     // TODO: wire to modules.settings once it is composed (F-42)
@@ -66,6 +70,9 @@ export function createApiModules(dependencies: ApiDependencies): ApiModules {
 
   return {
     system: createSystemModule({ clock, webPort: config.webPort }),
+    characters,
+    lorebooks,
+    scenarios,
     prompting,
     chats,
     generation: createGenerationModule({

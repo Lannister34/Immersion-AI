@@ -1,6 +1,6 @@
 import { type CharacterListResponse, CharacterListResponseSchema } from '@immersion/contracts/characters';
 
-import { listCharacterFiles } from '../infrastructure/file-character-repository.js';
+import type { CharacterStore } from './character-store.js';
 
 export interface CharacterChatUsageRecord {
   chatCount: number;
@@ -30,19 +30,20 @@ export function resolveCharacterChatUsage(
 }
 
 export interface ListCharactersDependencies {
+  readonly characterStore: Pick<CharacterStore, 'listCharacters'>;
   readonly chatStats: CharacterChatStatsPort;
 }
 
-export async function listCharacters(dependencies: ListCharactersDependencies): Promise<CharacterListResponse> {
-  const [summaries, chatStats] = await Promise.all([
-    listCharacterFiles(),
-    dependencies.chatStats.getCharacterChatStats(),
-  ]);
+export async function listCharacters({
+  characterStore,
+  chatStats,
+}: ListCharactersDependencies): Promise<CharacterListResponse> {
+  const [summaries, stats] = await Promise.all([characterStore.listCharacters(), chatStats.getCharacterChatStats()]);
 
   return CharacterListResponseSchema.parse({
-    items: summaries.map(({ filePath: _filePath, ...summary }) => ({
+    items: summaries.map((summary) => ({
       ...summary,
-      ...resolveCharacterChatUsage(chatStats, summary.id),
+      ...resolveCharacterChatUsage(stats, summary.id),
     })),
   });
 }

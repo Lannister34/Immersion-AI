@@ -1,31 +1,29 @@
 import type { CharacterDetailDto } from '@immersion/contracts/characters';
 
-import {
-  createCharacterFile,
-  readCharacterDetail,
-  writeCharacterFile,
-} from '../infrastructure/file-character-repository.js';
+import type { Clock } from '../../../platform/clock/clock.js';
+import type { CharacterFields, CharacterStore } from './character-store.js';
 import { CharacterNotFoundError } from './get-character-avatar.js';
 
-export interface SaveCharacterInput {
-  description: string;
-  exampleDialogue: string;
-  firstMessage: string;
-  name: string;
-  personality: string;
-  scenario: string;
-  systemPrompt: string;
-  tags: string[];
+export interface SaveCharacterDependencies {
+  readonly characterStore: Pick<CharacterStore, 'createCharacter' | 'readCharacterDetail' | 'writeCharacter'>;
+  readonly clock: Clock;
 }
 
-export async function updateCharacter(id: string, input: SaveCharacterInput): Promise<CharacterDetailDto> {
-  const existing = await readCharacterDetail(id);
+export async function updateCharacter(
+  id: string,
+  fields: CharacterFields,
+  { characterStore, clock }: SaveCharacterDependencies,
+): Promise<CharacterDetailDto> {
+  const existing = await characterStore.readCharacterDetail(id);
   if (!existing) {
     throw new CharacterNotFoundError(id);
   }
-  return writeCharacterFile(existing.id, input);
+  return characterStore.writeCharacter(existing.id, fields, clock.now().toISOString());
 }
 
-export async function createCharacter(input: SaveCharacterInput): Promise<CharacterDetailDto> {
-  return createCharacterFile(input);
+export async function createCharacter(
+  fields: CharacterFields,
+  { characterStore, clock }: SaveCharacterDependencies,
+): Promise<CharacterDetailDto> {
+  return characterStore.createCharacter(fields, clock.now().toISOString());
 }
