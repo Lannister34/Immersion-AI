@@ -1,8 +1,12 @@
 import type { ModelBindingMutationResponse } from '@immersion/contracts/settings';
 
-import { updateLegacyUserSettingsSource } from '../../../shared/infrastructure/legacy-settings-source.js';
 import { getSettingsOverview } from './get-settings-overview.js';
 import { SamplerPresetNotFoundError } from './sampler-preset-mutations.js';
+import type { UserSettingsDocument } from './user-settings-document.js';
+
+export interface ModelBindingMutationDependencies {
+  readonly userSettings: UserSettingsDocument;
+}
 
 export class ModelBindingNotFoundError extends Error {
   constructor(modelName: string) {
@@ -36,13 +40,17 @@ function readPresetIds(source: Record<string, unknown>): Set<string> {
   return ids;
 }
 
-export async function upsertModelBinding(modelName: string, presetId: string): Promise<ModelBindingMutationResponse> {
+export async function upsertModelBinding(
+  modelName: string,
+  presetId: string,
+  dependencies: ModelBindingMutationDependencies,
+): Promise<ModelBindingMutationResponse> {
   const trimmedModelName = modelName.trim();
   if (trimmedModelName.length === 0) {
     throw new ModelBindingNotFoundError(modelName);
   }
 
-  await updateLegacyUserSettingsSource((source) => {
+  await dependencies.userSettings.update((source) => {
     const presetIds = readPresetIds(source);
     if (!presetIds.has(presetId)) {
       throw new SamplerPresetNotFoundError(presetId);
@@ -54,11 +62,14 @@ export async function upsertModelBinding(modelName: string, presetId: string): P
     };
   });
 
-  return { sampler: getSettingsOverview().sampler };
+  return { sampler: getSettingsOverview(dependencies).sampler };
 }
 
-export async function deleteModelBinding(modelName: string): Promise<ModelBindingMutationResponse> {
-  await updateLegacyUserSettingsSource((source) => {
+export async function deleteModelBinding(
+  modelName: string,
+  dependencies: ModelBindingMutationDependencies,
+): Promise<ModelBindingMutationResponse> {
+  await dependencies.userSettings.update((source) => {
     const existing = readBindingMap(source);
     if (!(modelName in existing)) {
       throw new ModelBindingNotFoundError(modelName);
@@ -71,5 +82,5 @@ export async function deleteModelBinding(modelName: string): Promise<ModelBindin
     };
   });
 
-  return { sampler: getSettingsOverview().sampler };
+  return { sampler: getSettingsOverview(dependencies).sampler };
 }
