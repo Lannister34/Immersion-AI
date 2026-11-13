@@ -8,8 +8,3 @@ export function readApiConfig(): ApiConfig {
 
   return parseApiConfig(process.env, projectRoot);
 }
-
-// TODO: delete when every repository receives the data root from the composition root (F-43)
-export function readDataRoot(): string {
-  return readApiConfig().dataRoot;
-}
