@@ -16,7 +16,16 @@ function overview(
     engine: { found: true, executablePath: 'bin/llama-server', defaultModelsDir: 'models' },
     serverStatus: { status, model: 'Гемма-27B.gguf', modelPath, error: null, port: 5001, pid: 4242, launchConfig },
     serverConfig: { modelsDirs: ['D:/Модели'], port: 5002, ...SAVED },
-    models: [{ name: 'Гемма-27B.gguf', path: MODEL_PATH, size: 1, sourceDirectory: 'D:/Модели', visionProjectorPath }],
+    models: [
+      {
+        name: 'Гемма-27B.gguf',
+        path: MODEL_PATH,
+        size: 1,
+        sourceDirectory: 'D:/Модели',
+        visionProjectorPath,
+        isActive: modelPath === MODEL_PATH,
+      },
+    ],
     modelsDirsStatus: [{ path: 'D:/Модели', exists: true }],
   };
 }

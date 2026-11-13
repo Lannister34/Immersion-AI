@@ -1578,7 +1578,7 @@ describe('generation routes', () => {
       threads: 0,
     });
     const chat = await createChat();
-    await appendChatMessages(chat.id, [
+    await api().modules.chats.appendChatMessages(chat.id, [
       { role: 'user', content: 'OLD_CONTEXT '.repeat(20), createdAt: '2026-01-01T00:00:00.000Z' },
       { role: 'assistant', content: 'Старый ответ.', createdAt: '2026-01-01T00:00:01.000Z' },
     ]);
