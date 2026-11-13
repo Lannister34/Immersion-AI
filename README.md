@@ -57,6 +57,30 @@ value stops the client from loading, with an error in the browser console that n
 Earlier versions started with `npm run dev:api` or `start.bat` kept data in `apps/data`: move that
 folder to `data` in the repository root to keep your library.
 
+### Opening the app to your local network
+
+By default the Vite dev server listens on `127.0.0.1` only. To use the app from a phone or another
+computer on the same network, create `apps/web/.env.local` (ignored by git) with:
+
+```
+IMMERSION_WEB_LAN=1
+```
+
+The dev server restarts by itself and listens on every IPv4 interface; `pm2 restart immersion-web`
+does the same. Open `http://<this computer's IP>:4788` on the other device: the address, not the
+computer's name, which the dev server refuses. Delete the line or set `0` to close it again. The
+variable accepts `1`, `true`, `yes`, `on`, `0`, `false`, `no` or `off`; a non-blank value in the
+process environment wins over the file, and any other value, an unknown `IMMERSION_` key or a UTF-16
+file stops the dev server at startup. The API stays on loopback and is reached through the dev
+server's `/api` proxy, so leave `VITE_API_BASE_URL` unset; the dev server also reads
+`IMMERSION_API_PROXY_TARGET` (default `http://127.0.0.1:4787`) from the same file.
+
+Only callers from loopback and the private and link-local ranges (`10.0.0.0/8`, `172.16.0.0/12`,
+`192.168.0.0/16`, `169.254.0.0/16`) are served; a connection from any other address is dropped. There
+is no password: everyone on the network can use the app as you do. Stored provider keys are never
+returned, but anyone there can replace them, clear them or point a provider at another server. The
+file stays on when a laptop joins another network, such as a café's Wi-Fi.
+
 ## Using Immersion as a backend
 
 The API exposes an OpenAI-compatible endpoint, so any OpenAI client can generate through
@@ -191,6 +215,31 @@ Vite. Если она не задана или пуста, клиент шлёт
 
 Прежние версии, запущенные через `npm run dev:api` или `start.bat`, хранили данные в `apps/data`:
 перенесите эту папку в `data` в корне репозитория, чтобы не потерять библиотеку.
+
+### Доступ из локальной сети
+
+По умолчанию dev-сервер Vite слушает только `127.0.0.1`. Чтобы пользоваться приложением с телефона
+или другого компьютера в той же сети, создайте `apps/web/.env.local` (git его игнорирует) со
+строкой:
+
+```
+IMMERSION_WEB_LAN=1
+```
+
+Dev-сервер перезапустится сам и будет слушать все IPv4-интерфейсы; `pm2 restart immersion-web`
+делает то же. На другом устройстве откройте `http://<IP этого компьютера>:4788` — именно адрес, а не
+имя компьютера: имя dev-сервер отклоняет. Чтобы снова закрыть доступ, удалите строку или поставьте
+`0`. Переменная принимает `1`, `true`, `yes`, `on`, `0`, `false`, `no` или `off`; непустое значение
+из окружения процесса важнее файла, а любое другое значение, неизвестный ключ `IMMERSION_` или файл
+в UTF-16 останавливают dev-сервер при запуске. API остаётся на loopback, и до него доходят через
+прокси `/api` dev-сервера, поэтому `VITE_API_BASE_URL` не задавайте; из того же файла dev-сервер
+читает и `IMMERSION_API_PROXY_TARGET` (по умолчанию `http://127.0.0.1:4787`).
+
+Обслуживаются только запросы с loopback и из частных и link-local диапазонов (`10.0.0.0/8`,
+`172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`); соединение с любого другого адреса
+сбрасывается. Пароля нет: любой в сети может пользоваться приложением так же, как вы. Сохранённые
+ключи провайдеров не отдаются, но их можно заменить, удалить или направить провайдера на другой
+сервер. Файл остаётся в силе, когда ноутбук подключается к другой сети, например к Wi-Fi в кафе.
 
 ## Immersion как бэкенд
 

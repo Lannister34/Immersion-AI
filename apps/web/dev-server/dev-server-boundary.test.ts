@@ -5,8 +5,8 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL, URL } from 'node:url';
-import { createServer, type InlineConfig, type ViteDevServer } from 'vite';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createServer, type InlineConfig, type ResolvedConfig, resolveConfig, type ViteDevServer } from 'vite';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 interface Reply {
   readonly status: number;
@@ -88,6 +88,35 @@ function devServerConfig(cacheDir: string, port: number, upstreamOrigin: string)
   };
 }
 
+async function resolveWithLanAccess(lanAccess: '0' | '1'): Promise<ResolvedConfig> {
+  vi.stubEnv('IMMERSION_WEB_LAN', lanAccess);
+
+  try {
+    return await resolveConfig({ configFile, root: webRoot, logLevel: 'silent' }, 'serve');
+  } finally {
+    vi.unstubAllEnvs();
+  }
+}
+
+describe('the LAN opt-in of vite.config.ts', () => {
+  it('binds every IPv4 interface when IMMERSION_WEB_LAN is on and loopback when it is off', async () => {
+    expect((await resolveWithLanAccess('1')).server.host).toBe('0.0.0.0');
+    expect((await resolveWithLanAccess('0')).server.host).toBe(LOOPBACK);
+  }, 60_000);
+
+  it('keeps the file allow list, the CORS refusal and the strict port when the LAN is on', async () => {
+    const off = await resolveWithLanAccess('0');
+    const on = await resolveWithLanAccess('1');
+
+    expect(on.server.fs.allow).toEqual(off.server.fs.allow);
+    expect(on.server.cors).toBe(false);
+    expect(on.server.strictPort).toBe(true);
+    expect(on.server.allowedHosts).not.toBe(true);
+    expect(on.plugins.map((plugin) => plugin.name)).toEqual(off.plugins.map((plugin) => plugin.name));
+    expect(on.plugins.map((plugin) => plugin.name)).toContain('immersion:refuse-foreign-network-callers');
+  }, 60_000);
+});
+
 describe('the dev server that vite.config.ts configures', () => {
   let cacheDir: string;
   let upstream: Server;
@@ -103,7 +132,12 @@ describe('the dev server that vite.config.ts configures', () => {
     });
     upstreamOrigin = `http://${LOOPBACK}:${await listen(upstream)}`;
 
-    devServer = await createServer(devServerConfig(cacheDir, 0, upstreamOrigin));
+    vi.stubEnv('IMMERSION_WEB_LAN', '0');
+    try {
+      devServer = await createServer(devServerConfig(cacheDir, 0, upstreamOrigin));
+    } finally {
+      vi.unstubAllEnvs();
+    }
     await devServer.listen();
     port = portOf(devServer.httpServer);
   }, 60_000);
@@ -235,7 +269,10 @@ describe('the dev server that vite.config.ts configures', () => {
   it('refuses to start, rather than move to the next port, when its port is taken', async () => {
     const occupant = createHttpServer();
     const taken = await listen(occupant);
-    const contender = await createServer(devServerConfig(cacheDir, taken, upstreamOrigin));
+    vi.stubEnv('IMMERSION_WEB_LAN', '0');
+    const contender = await createServer(devServerConfig(cacheDir, taken, upstreamOrigin)).finally(() =>
+      vi.unstubAllEnvs(),
+    );
 
     try {
       await expect(contender.listen()).rejects.toThrow(`Port ${taken} is already in use`);
