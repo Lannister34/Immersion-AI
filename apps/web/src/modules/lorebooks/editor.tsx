@@ -5,8 +5,10 @@ import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } 
 
 import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
+import { useEditorDraft } from '../../shared/drafts/use-editor-draft';
 import { formatRelative } from '../../shared/lib/format-relative';
 import { pluralRu } from '../../shared/lib/plural';
+import { DraftRestoredNotice } from '../../shared/ui/draft-restored-notice';
 import { ErrorBanner } from '../../shared/ui/error-banner';
 import { Field } from '../../shared/ui/field';
 import { PlusIcon, SparkleIcon, TrashIcon } from '../../shared/ui/icons';
@@ -30,6 +32,11 @@ interface LorebookFormState {
   entries: EditorEntry[];
   name: string;
   tagsText: string;
+}
+
+interface LorebookEditorDraft {
+  concept: string;
+  fields: LorebookFormState;
 }
 
 function entryToEditor(entry: LorebookEntryDto): EditorEntry {
@@ -108,9 +115,14 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
   const detail = isNew ? null : (detailQuery.data?.lorebook ?? null);
 
   const initialState = useMemo(() => toFormState(detail), [detail]);
-  const [form, setForm] = useState<LorebookFormState>(initialState);
+  const editorDraft = useEditorDraft<LorebookEditorDraft>({
+    entityId: lorebookId,
+    kind: 'lorebook',
+    savedVersion: detail?.updatedAt ?? null,
+  });
+  const [form, setForm] = useState<LorebookFormState>(() => editorDraft.restored?.fields ?? initialState);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [draftConcept, setDraftConcept] = useState('');
+  const [draftConcept, setDraftConcept] = useState(() => editorDraft.restored?.concept ?? '');
   const appliedInitialStateRef = useRef(initialState);
 
   useEffect(() => {
@@ -120,6 +132,23 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
   }, [initialState]);
 
   const isDirty = useMemo(() => !formsEqual(form, initialState), [form, initialState]);
+  const editorState = useMemo<LorebookEditorDraft>(
+    () => ({ concept: draftConcept, fields: form }),
+    [draftConcept, form],
+  );
+  const matchesSaved = JSON.stringify(toCommand(form)) === JSON.stringify(toCommand(initialState));
+  const isPristine = matchesSaved && draftConcept.trim().length === 0;
+  const { track: trackDraft } = editorDraft;
+
+  useEffect(() => {
+    trackDraft(editorState, isPristine);
+  }, [editorState, isPristine, trackDraft]);
+
+  const discardDraft = () => {
+    setForm(initialState);
+    setDraftConcept('');
+    editorDraft.discard();
+  };
 
   const setField = <K extends keyof LorebookFormState>(field: K, value: LorebookFormState[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -134,6 +163,7 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
       return updateLorebook(lorebookId, command);
     },
     onSuccess: async (response) => {
+      editorDraft.markSaved();
       queryClient.setQueryData(lorebookDetailQueryKey(response.lorebook.id), response);
       await queryClient.invalidateQueries({ queryKey: lorebookListQueryKey });
       if (isNew) {
@@ -144,6 +174,7 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
 
   const deleteMutation = useDeleteLorebook(lorebookId ?? '', {
     onSuccess: async () => {
+      editorDraft.close();
       await navigate({ to: '/lorebooks' });
     },
   });
@@ -311,6 +342,12 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
               onSubmit={handleSubmit}
               style={{ maxWidth: 1100, margin: '0 auto' }}
             >
+              <DraftRestoredNotice
+                busy={saveMutation.isPending || deleteMutation.isPending}
+                notice={editorDraft.notice}
+                onDiscard={discardDraft}
+                onDismiss={editorDraft.dismissNotice}
+              />
               <div className="row gap-12" style={{ alignItems: 'flex-start' }}>
                 <div style={{ flex: 1 }}>
                   <Field id="lorebook-name" label="Название" required>

@@ -8,20 +8,25 @@ import {
 } from '@tanstack/react-router';
 import { createContext, type JSXElementConstructor, type ReactNode, useContext } from 'react';
 
+import { createEditorDraftStore, type EditorDraftStore } from '../shared/drafts/editor-draft-store';
+import { EditorDraftStoreContext } from '../shared/drafts/editor-draft-store-context';
 import { createTestQueryClient } from './create-test-query-client';
 
 export interface TestProvidersOptions {
+  editorDraftStore?: EditorDraftStore;
   queryClient?: QueryClient;
   initialPath?: string;
 }
 
 export interface TestProviders {
+  editorDraftStore: EditorDraftStore;
   queryClient: QueryClient;
   router: AnyRouter;
   wrapper: JSXElementConstructor<{ children: ReactNode }>;
 }
 
 export async function createTestProviders({
+  editorDraftStore = createEditorDraftStore(),
   queryClient = createTestQueryClient(),
   initialPath = '/',
 }: TestProvidersOptions = {}): Promise<TestProviders> {
@@ -34,11 +39,13 @@ export async function createTestProviders({
 
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>
-      <RoutedChildren.Provider value={children}>
-        <RouterProvider router={router} />
-      </RoutedChildren.Provider>
+      <EditorDraftStoreContext value={editorDraftStore}>
+        <RoutedChildren.Provider value={children}>
+          <RouterProvider router={router} />
+        </RoutedChildren.Provider>
+      </EditorDraftStoreContext>
     </QueryClientProvider>
   );
 
-  return { queryClient, router, wrapper };
+  return { editorDraftStore, queryClient, router, wrapper };
 }

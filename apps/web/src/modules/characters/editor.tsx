@@ -10,8 +10,10 @@ import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } 
 
 import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
+import { useEditorDraft } from '../../shared/drafts/use-editor-draft';
 import { formatRelative } from '../../shared/lib/format-relative';
 import { readFileAsBase64 } from '../../shared/lib/read-file-as-base64';
+import { DraftRestoredNotice } from '../../shared/ui/draft-restored-notice';
 import { ErrorBanner } from '../../shared/ui/error-banner';
 import { Field } from '../../shared/ui/field';
 import { ChatIcon, CopyIcon, SparkleIcon, TrashIcon } from '../../shared/ui/icons';
@@ -44,6 +46,12 @@ interface CharacterFormState {
   scenario: string;
   systemPrompt: string;
   tagsText: string;
+}
+
+interface CharacterEditorDraft {
+  avatar: File | null;
+  concept: string;
+  fields: CharacterFormState;
 }
 
 function toFormState(detail: CharacterDetailDto | null): CharacterFormState {
@@ -130,11 +138,16 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
   const detail = isNew ? null : (detailQuery.data?.character ?? null);
 
   const initialState = useMemo(() => toFormState(detail), [detail]);
-  const [form, setForm] = useState<CharacterFormState>(initialState);
+  const editorDraft = useEditorDraft<CharacterEditorDraft>({
+    entityId: characterId,
+    kind: 'character',
+    savedVersion: detail?.updatedAt ?? null,
+  });
+  const [form, setForm] = useState<CharacterFormState>(() => editorDraft.restored?.fields ?? initialState);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [draftConcept, setDraftConcept] = useState('');
+  const [draftConcept, setDraftConcept] = useState(() => editorDraft.restored?.concept ?? '');
   const [avatarCopyState, setAvatarCopyState] = useState<AvatarCopyState>('idle');
-  const [pendingAvatar, setPendingAvatar] = useState<File | null>(null);
+  const [pendingAvatar, setPendingAvatar] = useState<File | null>(() => editorDraft.restored?.avatar ?? null);
   const appliedInitialStateRef = useRef(initialState);
   const createdIdRef = useRef<string | null>(null);
 
@@ -145,6 +158,24 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
   }, [initialState]);
 
   const isDirty = !formsEqual(form, initialState);
+  const editorState = useMemo<CharacterEditorDraft>(
+    () => ({ avatar: pendingAvatar, concept: draftConcept, fields: form }),
+    [draftConcept, form, pendingAvatar],
+  );
+  const matchesSaved = JSON.stringify(toCommand(form)) === JSON.stringify(toCommand(initialState));
+  const isPristine = matchesSaved && draftConcept.trim().length === 0 && pendingAvatar === null;
+  const { track: trackDraft } = editorDraft;
+
+  useEffect(() => {
+    trackDraft(editorState, isPristine);
+  }, [editorState, isPristine, trackDraft]);
+
+  const discardDraft = () => {
+    setForm(initialState);
+    setDraftConcept('');
+    setPendingAvatar(null);
+    editorDraft.discard();
+  };
 
   const setField = <K extends keyof CharacterFormState>(field: K, value: CharacterFormState[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -168,6 +199,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
       return withAvatar;
     },
     onSuccess: async (response) => {
+      editorDraft.markSaved();
       queryClient.setQueryData(characterDetailQueryKey(response.character.id), response);
       await queryClient.invalidateQueries({ queryKey: characterListQueryKey });
       if (isNew) {
@@ -178,6 +210,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
 
   const deleteMutation = useDeleteCharacter(characterId ?? '', {
     onSuccess: async () => {
+      editorDraft.close();
       await navigate({ to: '/characters' });
     },
   });
@@ -420,6 +453,12 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
               }}
             >
               <form className="col gap-12" id="character-editor-form" onSubmit={handleSubmit}>
+                <DraftRestoredNotice
+                  busy={saveMutation.isPending || deleteMutation.isPending}
+                  notice={editorDraft.notice}
+                  onDiscard={discardDraft}
+                  onDismiss={editorDraft.dismissNotice}
+                />
                 <div className="card col gap-8" style={{ padding: 12 }}>
                   <Field
                     hint={

@@ -27,6 +27,10 @@ interface LorebookEditorScreenProps {
   lorebookId: string | null;
 }
 
+interface EditorProbeProps {
+  label: string;
+}
+
 vi.mock('../layout/root-layout', async () => {
   const { Outlet } = await import('@tanstack/react-router');
   return { RootLayout: () => <Outlet /> };
@@ -58,21 +62,46 @@ vi.mock('../../modules/chats', async () => {
   };
 });
 
+const { EditorProbe } = await vi.hoisted(async () => {
+  const { useState } = await import('react');
+
+  function EditorProbe({ label }: EditorProbeProps) {
+    const [value, setValue] = useState('');
+
+    return (
+      <>
+        <p>{label}</p>
+        <input
+          aria-label={`input of ${label}`}
+          onChange={(event) => setValue(event.currentTarget.value)}
+          value={value}
+        />
+      </>
+    );
+  }
+
+  return { EditorProbe };
+});
+
 vi.mock('../../modules/characters', () => ({
   CharactersScreen: () => <p>characters</p>,
   CharacterEditorScreen: ({ characterId }: CharacterEditorScreenProps) => (
-    <p>{`character editor:${String(characterId)}`}</p>
+    <EditorProbe label={`character editor:${String(characterId)}`} />
   ),
 }));
 
 vi.mock('../../modules/scenarios', () => ({
   ScenariosScreen: () => <p>scenarios</p>,
-  ScenarioEditorScreen: ({ scenarioId }: ScenarioEditorScreenProps) => <p>{`scenario editor:${String(scenarioId)}`}</p>,
+  ScenarioEditorScreen: ({ scenarioId }: ScenarioEditorScreenProps) => (
+    <EditorProbe label={`scenario editor:${String(scenarioId)}`} />
+  ),
 }));
 
 vi.mock('../../modules/lorebooks', () => ({
   LorebooksScreen: () => <p>lorebooks</p>,
-  LorebookEditorScreen: ({ lorebookId }: LorebookEditorScreenProps) => <p>{`lorebook editor:${String(lorebookId)}`}</p>,
+  LorebookEditorScreen: ({ lorebookId }: LorebookEditorScreenProps) => (
+    <EditorProbe label={`lorebook editor:${String(lorebookId)}`} />
+  ),
 }));
 
 vi.mock('../../modules/server-control', () => ({ ServerControlScreen: () => <p>server</p> }));
@@ -141,5 +170,21 @@ describe('app router', () => {
 
     const branchDraft = await screen.findByRole('textbox', { name: `draft of ${branchChatId}` });
     expect(branchDraft).toHaveProperty('value', '');
+  });
+
+  it.each([
+    ['character', '/characters/first', { to: '/characters/$characterId', params: { characterId: 'second' } }],
+    ['scenario', '/scenarios/first', { to: '/scenarios/$scenarioId', params: { scenarioId: 'second' } }],
+    ['lorebook', '/lorebooks/first', { to: '/lorebooks/$lorebookId', params: { lorebookId: 'second' } }],
+  ] as const)('mounts a new %s editor for each id, so one entity never shows the state of another', async (kind, url, next) => {
+    const { app, router } = await loadAppAt(url);
+    render(app);
+    const firstInput = await screen.findByRole('textbox', { name: `input of ${kind} editor:first` });
+    fireEvent.change(firstInput, { target: { value: 'правка' } });
+
+    await act(() => router.navigate(next));
+
+    const secondInput = await screen.findByRole('textbox', { name: `input of ${kind} editor:second` });
+    expect(secondInput).toHaveProperty('value', '');
   });
 });

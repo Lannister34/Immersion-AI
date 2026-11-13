@@ -6,5 +6,5 @@ const characterEditorRouteApi = getRouteApi('/characters/$characterId');
 
 export function CharacterEditorRouteComponent() {
   const { characterId } = characterEditorRouteApi.useParams();
-  return <CharacterEditorScreen characterId={characterId} />;
+  return <CharacterEditorScreen key={characterId} characterId={characterId} />;
 }
