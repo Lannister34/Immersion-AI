@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiConfigError } from './api-config.js';
-import { readApiConfig, readDataRoot } from './read-api-config.js';
+import { readApiConfig } from './read-api-config.js';
 
 const repositoryRoot = path.resolve(fileURLToPath(new URL('../../../..', import.meta.url)));
 
@@ -35,7 +35,6 @@ describe('readApiConfig', () => {
 
     expect(config.projectRoot).toBe(repositoryRoot);
     expect(config.dataRoot).toBe(path.join(repositoryRoot, 'data'));
-    expect(readDataRoot()).toBe(path.join(repositoryRoot, 'data'));
   });
 
   it('reads IMMERSION_DATA_ROOT from the process environment on every call', () => {
@@ -43,10 +42,10 @@ describe('readApiConfig', () => {
     const secondDataRoot = path.join(os.tmpdir(), 'immersion-second');
 
     vi.stubEnv('IMMERSION_DATA_ROOT', firstDataRoot);
-    expect(readDataRoot()).toBe(firstDataRoot);
+    expect(readApiConfig().dataRoot).toBe(firstDataRoot);
 
     vi.stubEnv('IMMERSION_DATA_ROOT', secondDataRoot);
-    expect(readDataRoot()).toBe(secondDataRoot);
+    expect(readApiConfig().dataRoot).toBe(secondDataRoot);
   });
 
   it('fails with an ApiConfigError naming the key when the process environment holds an invalid value', () => {

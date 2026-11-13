@@ -9,7 +9,6 @@ export default defineConfig({
     },
   },
   test: {
-    env: { IMMERSION_DATA_ROOT: 'data-root-inherited-from-the-shell' },
     environment: 'node',
     include: ['src/**/*.test.ts'],
     restoreMocks: true,
