@@ -1,8 +1,9 @@
 import {
+  type PatchProviderSettingsCommand,
+  ProviderApiKeyInputSchema,
   type ProviderSettingsSnapshot,
   type ProviderType,
   ProviderTypeSchema,
-  type UpdateProviderSettingsCommand,
 } from '@immersion/contracts/providers';
 import { useMutation } from '@tanstack/react-query';
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
@@ -11,16 +12,29 @@ import { pluralRu } from '../../../shared/lib/plural';
 import { ErrorBanner } from '../../../shared/ui/error-banner';
 import { probeProviderModels } from '../api/probe-provider-models';
 import {
-  buildProviderConfig,
   configToFormState,
   formsEqual,
   type ProviderFormState,
+  toProviderKeyChange,
+  toProviderSettingsPatch,
 } from '../forms/provider-form-state';
 
 interface ExternalProviderFormProps {
   isSaving: boolean;
-  onSave: (command: UpdateProviderSettingsCommand) => Promise<unknown>;
+  onSave: (command: PatchProviderSettingsCommand) => Promise<unknown>;
   snapshot: ProviderSettingsSnapshot | undefined;
+}
+
+function findApiKeyProblem(newApiKey: string): string | null {
+  const parsed = ProviderApiKeyInputSchema.safeParse(newApiKey);
+
+  return parsed.success ? null : (parsed.error.issues[0]?.message ?? 'API-ключ задан неверно.');
+}
+
+function describeApiKeyPlaceholder(clearRequested: boolean, keySaved: boolean, fieldPlaceholder?: string): string {
+  if (clearRequested) return 'ключ будет удалён при сохранении';
+  if (keySaved) return 'ключ сохранён — введите новый, чтобы заменить';
+  return fieldPlaceholder ?? 'опционально';
 }
 
 export function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalProviderFormProps) {
@@ -76,17 +90,15 @@ export function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalPro
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canSave) return;
+    const apiKeyProblem = findApiKeyProblem(form.newApiKey);
+    if (apiKeyProblem) {
+      setErrorMessage(apiKeyProblem);
+      return;
+    }
     setErrorMessage(null);
     try {
-      const nextConfigs = {
-        ...snapshot.providerConfigs,
-        [selectedProvider]: buildProviderConfig(form),
-      };
-      await onSave({
-        mode: snapshot.mode,
-        activeProvider: selectedProvider,
-        providerConfigs: nextConfigs,
-      });
+      await onSave(toProviderSettingsPatch(selectedProvider, form));
+      setForm((current) => ({ ...current, clearApiKey: false, newApiKey: '' }));
       setSavedAt(Date.now());
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Не удалось сохранить настройки внешнего API.');
@@ -94,6 +106,8 @@ export function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalPro
   };
 
   const apiKeyField = definition?.fields.find((field) => field.key === 'apiKey');
+  const apiKeySaved = snapshot.providerConfigs[selectedProvider]?.apiKeyConfigured === true;
+  const apiKeyPlaceholder = describeApiKeyPlaceholder(form.clearApiKey, apiKeySaved, apiKeyField?.placeholder);
   const modelField = definition?.fields.find((field) => field.key === 'model');
 
   return (
@@ -137,18 +151,33 @@ export function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalPro
         {apiKeyField ? (
           <div className="field">
             <label htmlFor="provider-api-key">API-ключ</label>
-            <input
-              autoComplete="off"
-              className="input"
-              id="provider-api-key"
-              onChange={(event) => {
-                const { value } = event.currentTarget;
-                setForm((current) => ({ ...current, apiKey: value }));
-              }}
-              placeholder={apiKeyField.placeholder ?? 'опционально'}
-              type="password"
-              value={form.apiKey}
-            />
+            <div className="row gap-8">
+              <input
+                autoComplete="off"
+                className="input"
+                disabled={form.clearApiKey}
+                id="provider-api-key"
+                onChange={(event) => {
+                  const { value } = event.currentTarget;
+                  setForm((current) => ({ ...current, newApiKey: value }));
+                }}
+                placeholder={apiKeyPlaceholder}
+                style={{ flex: 1 }}
+                type="password"
+                value={form.newApiKey}
+              />
+              {apiKeySaved ? (
+                <button
+                  className="btn btn--ghost-bordered"
+                  onClick={() =>
+                    setForm((current) => ({ ...current, clearApiKey: !current.clearApiKey, newApiKey: '' }))
+                  }
+                  type="button"
+                >
+                  {form.clearApiKey ? 'Не удалять' : 'Удалить ключ'}
+                </button>
+              ) : null}
+            </div>
           </div>
         ) : null}
         {modelField ? (
@@ -171,11 +200,16 @@ export function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalPro
                 className="btn btn--ghost-bordered"
                 disabled={form.url.trim().length === 0 || modelsMutation.isPending}
                 onClick={() => {
+                  const apiKeyProblem = findApiKeyProblem(form.newApiKey);
+                  if (apiKeyProblem) {
+                    setErrorMessage(apiKeyProblem);
+                    return;
+                  }
                   setErrorMessage(null);
                   modelsMutation.mutate({
                     provider: selectedProvider,
                     url: form.url.trim(),
-                    ...(form.apiKey.trim() ? { apiKey: form.apiKey.trim() } : {}),
+                    ...toProviderKeyChange(form),
                   });
                 }}
                 type="button"

@@ -1,8 +1,4 @@
-import type {
-  ProviderMode,
-  ProviderSettingsSnapshot,
-  UpdateProviderSettingsCommand,
-} from '@immersion/contracts/providers';
+import type { ProviderMode } from '@immersion/contracts/providers';
 import type { RuntimeOverviewResponse, RuntimeStartCommand } from '@immersion/contracts/runtime';
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useState } from 'react';
@@ -25,14 +21,6 @@ import { startRuntimeMutationKey } from './queries/start-runtime-mutation-key';
 import { ServerLogsCard } from './server-logs-card';
 import { toModelRowState } from './view-models/model-row-state';
 import { canStopRuntime } from './view-models/runtime-stop-availability';
-
-function toProviderCommand(snapshot: ProviderSettingsSnapshot, mode: ProviderMode): UpdateProviderSettingsCommand {
-  return {
-    mode,
-    activeProvider: snapshot.activeProvider,
-    providerConfigs: snapshot.providerConfigs,
-  };
-}
 
 function formatModelsDirsLabel(modelsDirs: string[]): string {
   const [firstDir] = modelsDirs;
@@ -126,7 +114,7 @@ export function ServerControlScreen() {
     if (!snapshot || mode === activeMode || saveProviderMutation.isPending) return;
     setModeChangeError(null);
     try {
-      await saveProviderMutation.mutateAsync(toProviderCommand(snapshot, mode));
+      await saveProviderMutation.mutateAsync({ mode });
     } catch (error) {
       setModeChangeError(getApiErrorMessage(error, 'Не удалось переключить режим провайдера.'));
     }

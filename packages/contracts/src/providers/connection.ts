@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { ProviderModeSchema, ProviderTypeSchema } from './settings.js';
+import { ProviderApiKeyInputSchema, ProviderModeSchema, ProviderTypeSchema } from './settings.js';
 
 export const ProviderConnectionStatusSchema = z.enum(['error', 'ok']);
 export type ProviderConnectionStatus = z.infer<typeof ProviderConnectionStatusSchema>;
@@ -28,7 +28,7 @@ export const ProviderModelSummarySchema = z.object({
 export type ProviderModelSummary = z.infer<typeof ProviderModelSummarySchema>;
 
 export const ProviderModelsProbeCommandSchema = z.object({
-  apiKey: z.string().max(500).optional(),
+  apiKey: ProviderApiKeyInputSchema.optional(),
   provider: ProviderTypeSchema,
   url: z.string().min(1).max(2000),
 });

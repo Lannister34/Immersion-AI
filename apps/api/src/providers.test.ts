@@ -1,11 +1,7 @@
 import fs from 'node:fs/promises';
 
 import { ApiProblemSchema } from '@immersion/contracts/common';
-import {
-  ProviderConnectionResponseSchema,
-  ProviderSettingsSnapshotSchema,
-  type UpdateProviderSettingsCommand,
-} from '@immersion/contracts/providers';
+import { ProviderConnectionResponseSchema, ProviderSettingsSnapshotSchema } from '@immersion/contracts/providers';
 import { describe, expect, it } from 'vitest';
 
 import { useTestApi } from './test-support/use-test-api.js';
@@ -48,11 +44,12 @@ describe('provider settings routes', () => {
       providerConfigs: {
         custom: {
           url: 'http://127.0.0.1:6001',
-          apiKey: 'secret',
+          apiKeyConfigured: true,
           model: 'local-model',
         },
       },
     });
+    expect(response.body).not.toContain('secret');
   });
 
   it('tests the active external provider models endpoint without exposing secrets', async () => {
@@ -287,34 +284,22 @@ describe('provider settings routes', () => {
     expect(provider.requests()).toHaveLength(0);
   });
 
-  it('updates provider settings without overwriting unrelated user settings', async () => {
+  it('switches the mode by a patch, keeping the stored keys and unrelated user settings', async () => {
     await api().settings.write({
       userName: 'Misha',
       backendMode: 'external',
       activeProvider: 'custom',
       providerConfigs: {
-        custom: {
-          url: 'http://127.0.0.1:6001',
-          apiKey: 'secret',
-        },
+        custom: { url: 'http://127.0.0.1:6001', apiKey: 'secret' },
+        openai: { url: 'https://api.openai.com/v1', apiKey: 'sk-openai-secret', model: 'gpt-4o' },
       },
     });
-    const command: UpdateProviderSettingsCommand = {
-      mode: 'builtin',
-      activeProvider: 'custom',
-      providerConfigs: {
-        custom: {
-          url: 'http://127.0.0.1:6001',
-          model: 'settings-model',
-        },
-      },
-    };
 
     const { app } = api();
     const response = await app.inject({
-      method: 'PUT',
+      method: 'PATCH',
       url: '/api/providers/settings',
-      payload: command,
+      payload: { mode: 'builtin' },
     });
 
     expect(response.statusCode).toBe(200);
@@ -322,10 +307,8 @@ describe('provider settings routes', () => {
       mode: 'builtin',
       activeProvider: 'custom',
       providerConfigs: {
-        custom: {
-          url: 'http://127.0.0.1:6001',
-          model: 'settings-model',
-        },
+        custom: { url: 'http://127.0.0.1:6001', apiKeyConfigured: true },
+        openai: { url: 'https://api.openai.com/v1', apiKeyConfigured: true },
       },
     });
 
@@ -333,13 +316,22 @@ describe('provider settings routes', () => {
 
     expect(stored.userName).toBe('Misha');
     expect(stored.backendMode).toBe('builtin');
-    expect(stored.activeProvider).toBe('custom');
     expect(stored.providerConfigs).toMatchObject({
-      custom: {
-        url: 'http://127.0.0.1:6001',
-        model: 'settings-model',
-      },
+      custom: { url: 'http://127.0.0.1:6001', apiKey: 'secret' },
+      openai: { apiKey: 'sk-openai-secret' },
     });
+  });
+
+  it('no longer accepts a whole-settings PUT, which would drop keys the client never sees', async () => {
+    const { app } = api();
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/providers/settings',
+      payload: { mode: 'builtin', activeProvider: 'custom', providerConfigs: {} },
+    });
+
+    expect(response.statusCode).toBe(404);
   });
 
   it('patches a single provider field without touching the rest', async () => {
@@ -363,7 +355,7 @@ describe('provider settings routes', () => {
 
     expect(response.statusCode).toBe(200);
     expect(snapshot.providerConfigs.custom).toMatchObject({
-      apiKey: 'secret',
+      apiKeyConfigured: true,
       model: 'new-model',
       url: 'http://127.0.0.1:6001',
     });
@@ -415,12 +407,17 @@ describe('provider settings routes', () => {
 
     expect(snapshot.mode).toBe('external');
     expect(snapshot.activeProvider).toBe('anthropic');
-    expect(snapshot.providerConfigs.anthropic).toMatchObject({
-      apiKey: 'sk-ant-test',
+    expect(snapshot.providerConfigs.anthropic).toEqual({
+      apiKeyConfigured: true,
       model: 'claude-sonnet-4-5',
       url: 'https://api.anthropic.com/v1',
     });
-    expect(snapshot.providerConfigs.custom).toEqual({ model: 'local-model', url: 'http://127.0.0.1:6001' });
+    expect(snapshot.providerConfigs.custom).toEqual({
+      apiKeyConfigured: false,
+      model: 'local-model',
+      url: 'http://127.0.0.1:6001',
+    });
+    expect(response.body).not.toContain('sk-ant-test');
   });
 
   it('clears the api key on an empty string and keeps it when the field is absent', async () => {
@@ -436,14 +433,60 @@ describe('provider settings routes', () => {
       url: '/api/providers/settings',
       payload: { config: { model: 'gpt-4o-mini' } },
     });
-    expect(ProviderSettingsSnapshotSchema.parse(untouched.json()).providerConfigs.openai?.apiKey).toBe('sk-old');
+    expect(ProviderSettingsSnapshotSchema.parse(untouched.json()).providerConfigs.openai?.apiKeyConfigured).toBe(true);
+    expect((await api().settings.read()).providerConfigs).toMatchObject({ openai: { apiKey: 'sk-old' } });
 
     const cleared = await app.inject({
       method: 'PATCH',
       url: '/api/providers/settings',
       payload: { config: { apiKey: '' } },
     });
-    expect(ProviderSettingsSnapshotSchema.parse(cleared.json()).providerConfigs.openai?.apiKey).toBeUndefined();
+    expect(ProviderSettingsSnapshotSchema.parse(cleared.json()).providerConfigs.openai?.apiKeyConfigured).toBe(false);
+    expect((await api().settings.read()).providerConfigs).toMatchObject({
+      openai: { url: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+    });
+    expect(JSON.stringify(await api().settings.read())).not.toContain('sk-old');
+  });
+
+  it('clears the model on an empty string so the provider falls back to its default', async () => {
+    await api().settings.write({
+      backendMode: 'external',
+      activeProvider: 'custom',
+      providerConfigs: { custom: { url: 'http://127.0.0.1:6001', model: 'old-model' } },
+    });
+    const { app } = api();
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/providers/settings',
+      payload: { config: { model: '' } },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect((await api().settings.read()).providerConfigs).toMatchObject({ custom: { url: 'http://127.0.0.1:6001' } });
+    expect(JSON.stringify(await api().settings.read())).not.toContain('old-model');
+  });
+
+  it('lists models for the saved url with the stored key when the form sends none', async () => {
+    await api().settings.write({
+      backendMode: 'external',
+      activeProvider: 'openai',
+      providerConfigs: { openai: { url: 'https://api.openai.com/v1', apiKey: 'sk-stored', model: 'gpt-4o' } },
+    });
+    const provider = answerProviderModels({ data: [{ id: 'gpt-4o-mini' }] });
+    const { app } = api();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/providers/models',
+      payload: { provider: 'openai', url: 'https://api.openai.com/v1/' },
+    });
+
+    expect(ProviderConnectionResponseSchema.parse(response.json()).models).toEqual([{ id: 'gpt-4o-mini' }]);
+    expect(provider.requests()).toEqual([
+      { authorization: 'Bearer sk-stored', url: 'https://api.openai.com/v1/models' },
+    ]);
+    expect(response.body).not.toContain('sk-stored');
   });
 
   it('lists models with the key typed into the form, not the stored one, so the list comes before saving', async () => {
@@ -513,9 +556,9 @@ describe('provider settings routes', () => {
     const { app, logs } = api();
 
     const response = await app.inject({
-      method: 'PUT',
+      method: 'PATCH',
       url: '/api/providers/settings',
-      payload: { mode: 'cloud', activeProvider: 'custom', providerConfigs: {} },
+      payload: { mode: 'cloud' },
     });
 
     expect(response.statusCode).toBe(400);

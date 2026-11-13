@@ -1,12 +1,12 @@
 import { type ProvidersOverviewResponse, ProvidersOverviewResponseSchema } from '@immersion/contracts/providers';
 
 import { providerDefinitions } from '../domain/provider-catalog.js';
-import { type GetProviderSettingsDependencies, getProviderSettings } from './get-provider-settings.js';
+import type { GetProviderSettingsDependencies } from './get-provider-settings.js';
 
 export async function getProvidersOverview(
   dependencies: GetProviderSettingsDependencies,
 ): Promise<ProvidersOverviewResponse> {
-  const settings = await getProviderSettings(dependencies);
+  const settings = dependencies.providerSettings.read();
 
   return ProvidersOverviewResponseSchema.parse({
     backendMode: settings.mode,
