@@ -13,9 +13,15 @@ import {
 import { type ChatIndex, InMemoryChatIndex } from '../modules/indexing/index.js';
 import { createFileLorebookStore, type LorebookStore } from '../modules/lorebooks/index.js';
 import type { TokenCounter } from '../modules/prompting/index.js';
-import { getProviderSettings, ProviderVisionProbe, type VisionProbe } from '../modules/providers/index.js';
+import {
+  getProviderSettings,
+  ProviderSettingsRepository,
+  ProviderVisionProbe,
+  type VisionProbe,
+} from '../modules/providers/index.js';
 import { getRunningRuntimeEndpoint } from '../modules/runtime/index.js';
 import { createFileScenarioStore, type ScenarioStore } from '../modules/scenarios/index.js';
+import type { UserSettingsDocument } from '../modules/settings/index.js';
 import type { Clock } from '../platform/clock/clock.js';
 import { systemClock } from '../platform/clock/system-clock.js';
 import { createKeyedSerialQueue } from '../platform/concurrency/keyed-serial-queue.js';
@@ -23,6 +29,10 @@ import { createSerialQueue } from '../platform/concurrency/serial-queue.js';
 import { type ApiLogger, createApiLogger } from '../platform/logging/api-logger.js';
 import { globalHttpFetch } from '../platform/outbound-http/global-http-fetch.js';
 import type { HttpFetch } from '../platform/outbound-http/http-fetch.js';
+import {
+  readLegacyUserSettingsSource,
+  updateLegacyUserSettingsSource,
+} from '../shared/infrastructure/legacy-settings-source.js';
 import { createBuiltinTokenizeTargetResolver } from './resolve-builtin-tokenize-target.js';
 
 export interface ApiDependencies {
@@ -30,6 +40,7 @@ export interface ApiDependencies {
   readonly logger: ApiLogger;
   readonly clock: Clock;
   readonly httpFetch: HttpFetch;
+  readonly userSettings: UserSettingsDocument;
   readonly chatCompletionClient: ChatCompletionClient;
   readonly characterStore: CharacterStore;
   readonly lorebookStore: LorebookStore;
@@ -47,6 +58,12 @@ export function createApiDependencies(config: ApiConfig, overrides: ApiDependenc
   const clock = overrides.clock ?? systemClock;
   const httpFetch = overrides.httpFetch ?? globalHttpFetch;
   const logger = overrides.logger ?? createApiLogger(config.logLevel);
+  const userSettings = overrides.userSettings ?? {
+    // TODO: replace the process-wide legacy source with one settings file per app (F-42)
+    read: readLegacyUserSettingsSource,
+    update: updateLegacyUserSettingsSource,
+  };
+  const providerSettings = new ProviderSettingsRepository({ document: userSettings });
   const chatRepository =
     overrides.chatRepository ??
     new FileChatRepository({
@@ -60,6 +77,7 @@ export function createApiDependencies(config: ApiConfig, overrides: ApiDependenc
     logger,
     clock,
     httpFetch,
+    userSettings,
     chatCompletionClient: overrides.chatCompletionClient ?? createChatCompletionClient({ httpFetch }),
     characterStore:
       overrides.characterStore ??
@@ -81,7 +99,7 @@ export function createApiDependencies(config: ApiConfig, overrides: ApiDependenc
         // TODO: bind the tokenize target from the composed providers module instead of these exports (SP-10c)
         resolveTokenizeTarget: createBuiltinTokenizeTargetResolver({
           log: logger,
-          providers: { getProviderSettings: () => getProviderSettings() },
+          providers: { getProviderSettings: () => getProviderSettings({ providerSettings }) },
           runtime: { getRunningRuntimeEndpoint: () => getRunningRuntimeEndpoint() },
         }),
       }),

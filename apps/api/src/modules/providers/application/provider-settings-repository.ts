@@ -1,19 +1,15 @@
 import type { UpdateProviderSettingsCommand } from '@immersion/contracts/providers';
-import {
-  readLegacyUserSettingsSource,
-  updateLegacyUserSettingsSource,
-} from '../../../shared/infrastructure/legacy-settings-source.js';
-import {
-  normalizeStoredProviderSettings,
-  type StoredUserSettingsRecord,
-} from '../domain/normalize-stored-provider-settings.js';
+
+import type { UserSettingsDocument, UserSettingsRecord } from '../../settings/index.js';
+import { normalizeStoredProviderSettings } from '../domain/normalize-stored-provider-settings.js';
 
 export type ProviderSettingsChange = (current: UpdateProviderSettingsCommand) => UpdateProviderSettingsCommand;
 
-function toStoredRecord(
-  existing: Record<string, unknown>,
-  next: UpdateProviderSettingsCommand,
-): Record<string, unknown> {
+export interface ProviderSettingsRepositoryOptions {
+  readonly document: UserSettingsDocument;
+}
+
+function toStoredRecord(existing: UserSettingsRecord, next: UpdateProviderSettingsCommand): UserSettingsRecord {
   return {
     ...existing,
     backendMode: next.mode,
@@ -23,18 +19,22 @@ function toStoredRecord(
 }
 
 export class ProviderSettingsRepository {
-  async read() {
-    const stored = readLegacyUserSettingsSource() as StoredUserSettingsRecord;
+  private readonly document: UserSettingsDocument;
 
-    return normalizeStoredProviderSettings(stored);
+  constructor({ document }: ProviderSettingsRepositoryOptions) {
+    this.document = document;
   }
 
-  async write(next: UpdateProviderSettingsCommand) {
-    await updateLegacyUserSettingsSource((existing) => toStoredRecord(existing, next));
+  read(): UpdateProviderSettingsCommand {
+    return normalizeStoredProviderSettings(this.document.read());
+  }
+
+  async write(next: UpdateProviderSettingsCommand): Promise<void> {
+    await this.document.update((existing) => toStoredRecord(existing, next));
   }
 
   async update(change: ProviderSettingsChange): Promise<UpdateProviderSettingsCommand> {
-    const stored = await updateLegacyUserSettingsSource((existing) =>
+    const stored = await this.document.update((existing) =>
       toStoredRecord(existing, change(normalizeStoredProviderSettings(existing))),
     );
 

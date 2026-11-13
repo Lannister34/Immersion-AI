@@ -1,14 +1,13 @@
 import type { ProviderConnectionResponse, ProviderModelsProbeCommand } from '@immersion/contracts/providers';
 
 import { getProviderApiKind, isProviderApiKeyRequired } from '../domain/provider-catalog.js';
-import { fetchProviderModels } from './fetch-provider-models.js';
+import { fetchProviderModels, type ProviderModelsFetchDependencies } from './fetch-provider-models.js';
 import { resolveVersionedUrl } from './generation-provider.js';
 import { type ConnectionSubject, createErrorResponse } from './provider-connection-response.js';
-import type { TestProviderConnectionDependencies } from './test-provider-connection-dependencies.js';
 
 export async function probeProviderModels(
   command: ProviderModelsProbeCommand,
-  dependencies: TestProviderConnectionDependencies,
+  dependencies: ProviderModelsFetchDependencies,
 ): Promise<ProviderConnectionResponse> {
   const subject: ConnectionSubject = { activeProvider: command.provider, mode: 'external' };
   const apiKey = command.apiKey?.trim() || null;

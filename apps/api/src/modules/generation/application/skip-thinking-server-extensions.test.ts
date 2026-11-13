@@ -1,16 +1,16 @@
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-
-import { describe, expect, it, onTestFinished, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { createHttpStub, type HttpStub } from '../../../test-support/http-stub.js';
 import { InMemoryChatSessions } from '../../../test-support/in-memory-chat-sessions.js';
+import {
+  createInMemoryUserSettings,
+  type InMemoryUserSettings,
+} from '../../../test-support/in-memory-user-settings.js';
 import { openAiChatCompletion } from '../../../test-support/provider-responses.js';
 import { resolveChatGenerationSettings } from '../../prompting/index.js';
-import { resolveGenerationProviderEndpoint } from '../../providers/index.js';
-import { getSettingsOverview } from '../../settings/index.js';
+import { createProvidersModule } from '../../providers/index.js';
+import { getSettingsOverview, type UserSettingsRecord } from '../../settings/index.js';
 import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import { generateCharacterAvatarPrompt } from './generate-character-avatar-prompt.js';
@@ -45,27 +45,40 @@ const CONCEPT = 'Гончар из приморского города, кото
 
 type DraftUseCase = (chatCompletionClient: ChatCompletionClient) => Promise<unknown>;
 
-function onSettingsFile(chatCompletionClient: ChatCompletionClient): DraftGenerationDependencies {
+let storedProviderSettings: InMemoryUserSettings = createInMemoryUserSettings();
+
+function onProviderSettings(chatCompletionClient: ChatCompletionClient): DraftGenerationDependencies {
   return {
     chatCompletionClient,
-    providers: { resolveGenerationProviderEndpoint: () => resolveGenerationProviderEndpoint() },
+    providers: createProvidersModule({
+      httpFetch: createHttpStub().fetch,
+      runtimeEndpoint: { getRunningEndpoint: () => Promise.resolve(null) },
+      settingsDocument: storedProviderSettings,
+    }),
     settings: { getSettingsOverview },
   };
 }
 
 const DRAFT_USE_CASES: ReadonlyArray<readonly [string, DraftUseCase]> = [
-  ['character draft', (client) => generateCharacterDraft({ concept: CONCEPT }, onSettingsFile(client))],
+  ['character draft', (client) => generateCharacterDraft({ concept: CONCEPT }, onProviderSettings(client))],
   [
     'character field',
-    (client) => generateCharacterField({ concept: CONCEPT, current: {}, field: 'personality' }, onSettingsFile(client)),
+    (client) =>
+      generateCharacterField({ concept: CONCEPT, current: {}, field: 'personality' }, onProviderSettings(client)),
   ],
   [
     'character avatar prompt',
-    (client) => generateCharacterAvatarPrompt({ card: { name: 'Ария Глинская' } }, onSettingsFile(client)),
+    (client) => generateCharacterAvatarPrompt({ card: { name: 'Ария Глинская' } }, onProviderSettings(client)),
   ],
-  ['scenario draft', (client) => generateScenarioDraft({ concept: CONCEPT }, onSettingsFile(client))],
-  ['scenario first message', (client) => generateScenarioFirstMessage({ concept: CONCEPT }, onSettingsFile(client))],
-  ['lorebook draft', (client) => generateLorebookDraft({ concept: CONCEPT, entryCount: 8 }, onSettingsFile(client))],
+  ['scenario draft', (client) => generateScenarioDraft({ concept: CONCEPT }, onProviderSettings(client))],
+  [
+    'scenario first message',
+    (client) => generateScenarioFirstMessage({ concept: CONCEPT }, onProviderSettings(client)),
+  ],
+  [
+    'lorebook draft',
+    (client) => generateLorebookDraft({ concept: CONCEPT, entryCount: 8 }, onProviderSettings(client)),
+  ],
   ['chat title', generateTitleForSeededChat],
 ];
 
@@ -80,21 +93,15 @@ async function generateTitleForSeededChat(chatCompletionClient: ChatCompletionCl
   return generateChatTitle(
     { chatId: 'chat-ceramics' },
     {
-      ...onSettingsFile(chatCompletionClient),
+      ...onProviderSettings(chatCompletionClient),
       chats,
       prompting: { resolveChatGenerationSettings },
     },
   );
 }
 
-async function useProviderSettings(settings: object): Promise<void> {
-  const dataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'immersion-api-skip-thinking-'));
-  await fs.writeFile(path.join(dataRoot, 'user-settings.json'), JSON.stringify(settings), 'utf8');
-  vi.stubEnv('IMMERSION_DATA_ROOT', dataRoot);
-  onTestFinished(async () => {
-    vi.unstubAllEnvs();
-    await fs.rm(dataRoot, { force: true, recursive: true });
-  });
+function useProviderSettings(settings: UserSettingsRecord): void {
+  storedProviderSettings = createInMemoryUserSettings(settings);
 }
 
 const ProviderRequestBodySchema = z.record(z.string(), z.unknown());
@@ -119,7 +126,7 @@ function onlyRequestBody(http: HttpStub): Record<string, unknown> {
 
 describe('llama-server counts reasoning tokens against max_tokens, so drafts ask the template to skip thinking', () => {
   it.each(DRAFT_USE_CASES)('the %s asks a local server to skip thinking', async (_name, generate) => {
-    await useProviderSettings(LOCAL_PROVIDER_SETTINGS);
+    useProviderSettings(LOCAL_PROVIDER_SETTINGS);
     const http = stubProviderReply();
 
     await generate(createChatCompletionClient({ httpFetch: http.fetch }));
@@ -128,7 +135,7 @@ describe('llama-server counts reasoning tokens against max_tokens, so drafts ask
   });
 
   it.each(DRAFT_USE_CASES)('the %s never sends chat_template_kwargs to the OpenAI cloud', async (_name, generate) => {
-    await useProviderSettings(CLOUD_PROVIDER_SETTINGS);
+    useProviderSettings(CLOUD_PROVIDER_SETTINGS);
     const http = stubProviderReply();
 
     await generate(createChatCompletionClient({ httpFetch: http.fetch }));

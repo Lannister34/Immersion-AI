@@ -1,6 +1,14 @@
-import { toProviderSettingsSnapshot } from '../domain/provider-settings-snapshot.js';
-import { ProviderSettingsRepository } from './provider-settings-repository.js';
+import type { ProviderSettingsSnapshot } from '@immersion/contracts/providers';
 
-export async function getProviderSettings(repository = new ProviderSettingsRepository()) {
-  return toProviderSettingsSnapshot(await repository.read());
+import { toProviderSettingsSnapshot } from '../domain/provider-settings-snapshot.js';
+import type { ProviderSettingsRepository } from './provider-settings-repository.js';
+
+export interface GetProviderSettingsDependencies {
+  readonly providerSettings: Pick<ProviderSettingsRepository, 'read'>;
+}
+
+export async function getProviderSettings({
+  providerSettings,
+}: GetProviderSettingsDependencies): Promise<ProviderSettingsSnapshot> {
+  return toProviderSettingsSnapshot(providerSettings.read());
 }
