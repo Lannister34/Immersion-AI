@@ -142,30 +142,14 @@ describe('generation routes', () => {
     return getMessagesByRole(GetChatSessionResponseSchema.parse(response.json()).messages);
   }
 
-  async function writeDetachedRuntimeState(
+  function runBuiltinServer(
     modelPath: string,
     port = 6006,
-    mmprojPath?: string | null,
-    dataRoot = api().dataRoot,
-    launchConfig?: RuntimeLaunchConfig,
+    mmprojPath: string | null = null,
+    testApi: TestApi = api(),
+    launchConfig: RuntimeLaunchConfig | null = null,
   ) {
-    await fs.writeFile(
-      path.join(dataRoot, '.llm-server.json'),
-      JSON.stringify(
-        {
-          ...(mmprojPath === undefined ? {} : { mmprojPath }),
-          ...(launchConfig === undefined ? {} : { launchConfig }),
-          model: path.basename(modelPath),
-          modelPath,
-          // TODO: seed a fake runtime process instead of claiming the test process as llama-server (F-41)
-          pid: process.pid,
-          port,
-        },
-        null,
-        2,
-      ),
-      'utf8',
-    );
+    testApi.fakeRuntime().runAs({ launchConfig, mmprojPath, modelPath, port });
   }
 
   async function updateChatGenerationSettings(chatId: string, payload: UpdateChatGenerationSettingsCommand) {
@@ -278,8 +262,7 @@ describe('generation routes', () => {
 
     expect(payload.mode).toBe('builtin');
     expect(payload.status).toBe('blocked');
-    // TODO: pin builtin_runtime_not_installed once the runtime looks for llama-server in the test project (F-41)
-    expect(payload.issue?.code).toMatch(/^builtin_/u);
+    expect(payload.issue?.code).toBe('builtin_runtime_not_running');
     expect(payload.runtime).not.toBeNull();
     expect(api().http.requestLines()).toEqual([]);
   });
@@ -300,13 +283,13 @@ describe('generation routes', () => {
     const modelPath = path.join(api().dataRoot, 'qwen-vl.gguf');
     await fs.writeFile(modelPath, 'gguf', 'utf8');
 
-    await writeDetachedRuntimeState(modelPath, 5001, null);
+    runBuiltinServer(modelPath, 5001, null);
     const withoutProjector = await readReadiness();
 
     expect(withoutProjector.status).toBe('ready');
     expect(withoutProjector.visionSupport).toBe('unsupported');
 
-    await writeDetachedRuntimeState(modelPath, 5001, path.join(api().dataRoot, 'mmproj-qwen-vl.gguf'));
+    runBuiltinServer(modelPath, 5001, path.join(api().dataRoot, 'mmproj-qwen-vl.gguf'));
     const withProjector = await readReadiness();
 
     expect(withProjector.visionSupport).toBe('supported');
@@ -370,12 +353,7 @@ describe('generation routes', () => {
     await testApi.settings.patch({
       backendMode: 'builtin',
     });
-    await writeDetachedRuntimeState(
-      path.join(testApi.dataRoot, 'models', 'sandbox.gguf'),
-      TOKENIZER_PORT,
-      undefined,
-      testApi.dataRoot,
-    );
+    runBuiltinServer(path.join(testApi.dataRoot, 'models', 'sandbox.gguf'), TOKENIZER_PORT, null, testApi);
     testApi.http.on('POST', `${TOKENIZER_URL}/tokenize`, (request) => {
       const { content } = request.json(LlamaTokenizeRequestSchema);
 
@@ -419,7 +397,7 @@ describe('generation routes', () => {
     await api().settings.patch({
       backendMode: 'builtin',
     });
-    await writeDetachedRuntimeState(path.join(api().dataRoot, 'models', 'sandbox.gguf'), TOKENIZER_PORT);
+    runBuiltinServer(path.join(api().dataRoot, 'models', 'sandbox.gguf'), TOKENIZER_PORT);
     api().http.on('POST', `${TOKENIZER_URL}/api/extra/tokencount`, (request) => {
       const { prompt } = request.json(z.object({ prompt: z.string() }));
 
@@ -1571,7 +1549,7 @@ describe('generation routes', () => {
   it("budgets the built-in reply against the running llama-server's context, not a larger preset window it would cut silently", async () => {
     answerWith('Ответ в окне сервера.');
     await api().settings.patch({ backendMode: 'builtin' });
-    await writeDetachedRuntimeState(path.join(api().dataRoot, 'models', 'sandbox.gguf'), 6006, undefined, undefined, {
+    runBuiltinServer(path.join(api().dataRoot, 'models', 'sandbox.gguf'), 6006, null, api(), {
       contextSize: 74,
       flashAttention: false,
       gpuLayers: 0,
@@ -2102,7 +2080,7 @@ describe('generation routes', () => {
         'nested/secondary.gguf': 'smoke-model-preset',
       },
     });
-    await writeDetachedRuntimeState(nestedModelPath);
+    runBuiltinServer(nestedModelPath);
     answerWith('Assistant reply from builtin runtime.');
     const chat = await createChat();
     const response = await api().app.inject({

@@ -1,13 +1,19 @@
 import type { LogPort } from '../../../platform/logging/log-port.js';
-import { getLlmProcessManager } from '../infrastructure/llm-process-manager.js';
+import type { RuntimeProcess } from './runtime-process.js';
 
-export async function reconnectDetachedRuntime(logger: LogPort): Promise<void> {
+export interface ReconnectDetachedRuntimeDependencies {
+  readonly logger: LogPort;
+  readonly runtimeProcess: Pick<RuntimeProcess, 'getState' | 'reconnect'>;
+}
+
+export async function reconnectDetachedRuntime({
+  logger,
+  runtimeProcess,
+}: ReconnectDetachedRuntimeDependencies): Promise<void> {
   try {
-    const manager = getLlmProcessManager();
+    await runtimeProcess.reconnect();
 
-    await manager.reconnectToDetachedRuntime();
-
-    const { status, model, port, pid } = manager.getState();
+    const { status, model, port, pid } = runtimeProcess.getState();
 
     logger.info({ status, model, port, pid }, 'llm-process: reconnect finished');
   } catch (error) {

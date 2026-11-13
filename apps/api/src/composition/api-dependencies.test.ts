@@ -13,6 +13,7 @@ import { type ChatIndex, InMemoryChatIndex } from '../modules/indexing/index.js'
 import { createFileLorebookStore } from '../modules/lorebooks/index.js';
 import { heuristicTokenCounter } from '../modules/prompting/index.js';
 import type { VisionProbe } from '../modules/providers/index.js';
+import { LlmProcessManager, ModelDirectoryScanner } from '../modules/runtime/index.js';
 import { createFileScenarioStore } from '../modules/scenarios/index.js';
 import type { Clock } from '../platform/clock/clock.js';
 import { systemClock } from '../platform/clock/system-clock.js';
@@ -22,6 +23,7 @@ import type { HttpFetch } from '../platform/outbound-http/http-fetch.js';
 import { createCapturingLogger } from '../test-support/capturing-logger.js';
 import { createDeferred } from '../test-support/deferred.js';
 import { FakeChatCompletionClient } from '../test-support/fake-chat-completion-client.js';
+import { FakeRuntimeProcess } from '../test-support/fake-runtime-process.js';
 import { createHttpStub } from '../test-support/http-stub.js';
 import { createInMemoryUserSettings } from '../test-support/in-memory-user-settings.js';
 import { createManualClock } from '../test-support/manual-clock.js';
@@ -87,6 +89,8 @@ describe('createApiDependencies', () => {
     const lorebookStore = createFileLorebookStore({ directory: path.join(projectRoot, 'миры') });
     const scenarioStore = createFileScenarioStore({ directory: path.join(projectRoot, 'сценарии') });
     const userSettings = createInMemoryUserSettings();
+    const runtimeProcess = new FakeRuntimeProcess({ defaultModelsDir: path.join(projectRoot, 'models') });
+    const modelScanner = new ModelDirectoryScanner({ clock });
 
     const dependencies = createApiDependencies(parseApiConfig({}, projectRoot), {
       characterStore,
@@ -98,6 +102,8 @@ describe('createApiDependencies', () => {
       httpFetch,
       logger,
       lorebookStore,
+      modelScanner,
+      runtimeProcess,
       scenarioStore,
       tokenCounter: heuristicTokenCounter,
       userSettings,
@@ -117,6 +123,8 @@ describe('createApiDependencies', () => {
     expect(dependencies.lorebookStore).toBe(lorebookStore);
     expect(dependencies.scenarioStore).toBe(scenarioStore);
     expect(dependencies.userSettings).toBe(userSettings);
+    expect(dependencies.runtimeProcess).toBe(runtimeProcess);
+    expect(dependencies.modelScanner).toBe(modelScanner);
   });
 
   it('builds library stores, a chat repository, chat index, job registry, token counter and vision probe of its own for every app', () => {
@@ -134,6 +142,32 @@ describe('createApiDependencies', () => {
     expect(second.characterStore).not.toBe(first.characterStore);
     expect(second.lorebookStore).not.toBe(first.lorebookStore);
     expect(second.scenarioStore).not.toBe(first.scenarioStore);
+    expect(first.runtimeProcess).toBeInstanceOf(LlmProcessManager);
+    expect(second.runtimeProcess).not.toBe(first.runtimeProcess);
+    expect(first.modelScanner).toBeInstanceOf(ModelDirectoryScanner);
+    expect(second.modelScanner).not.toBe(first.modelScanner);
+  });
+
+  it('looks for llama-server under the configured project root and reads its PID file from the configured data root', async () => {
+    const config = await claimConfig();
+    await fs.mkdir(path.join(config.projectRoot, 'bin'), { recursive: true });
+    await fs.writeFile(path.join(config.projectRoot, 'bin', 'llama-server'), '');
+    await fs.writeFile(
+      path.join(config.dataRoot, '.llm-server.json'),
+      JSON.stringify({ model: 'model.gguf', modelPath: 'model.gguf', pid: 2_147_483_646, port: 5001 }),
+    );
+    vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' });
+    });
+    const { runtimeProcess } = createApiDependencies(config, { logger: createCapturingLogger().logger });
+
+    expect(runtimeProcess.getEngineInfo()).toEqual({
+      defaultModelsDir: path.join(config.projectRoot, 'models'),
+      executablePath: path.join(config.projectRoot, 'bin', 'llama-server'),
+      found: true,
+    });
+    expect(runtimeProcess.getState()).toMatchObject({ status: 'idle', pid: null });
+    await expect(fs.stat(path.join(config.dataRoot, '.llm-server.json'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('resolves the generation provider from the overridden settings document', async () => {

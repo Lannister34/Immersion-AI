@@ -23,12 +23,8 @@ function spelledWithForwardSlashes(filePath: string): string {
 describe('runtime control routes', () => {
   const api = useTestApi();
 
-  async function leaveRuntimeRunningFromPreviousApiProcess(modelPath: string) {
-    await fs.writeFile(
-      path.join(api().dataRoot, '.llm-server.json'),
-      JSON.stringify({ model: path.basename(modelPath), modelPath, pid: process.pid, port: 5001 }),
-      'utf8',
-    );
+  function runBuiltinServer(modelPath: string) {
+    api().fakeRuntime().runAs({ modelPath, port: 5001 });
   }
 
   async function scanModelsIn(modelsDir: string) {
@@ -73,25 +69,6 @@ describe('runtime control routes', () => {
     expect(response.statusCode).toBe(200);
     expect(logs.lines).toEqual([]);
     expect(logs.status).toBe('idle');
-  });
-
-  it('falls back to the log file when the in-memory buffer is empty, as after an API restart that left the model running', async () => {
-    const { app, dataRoot } = api();
-    await fs.mkdir(path.join(dataRoot, 'logs'), { recursive: true });
-    await fs.writeFile(
-      path.join(dataRoot, 'logs', 'llm-server.log'),
-      'llama_model_loader: loaded meta data\n[stderr] warming up the model\n',
-      'utf8',
-    );
-
-    const response = await app.inject({
-      method: 'GET',
-      url: '/api/runtime/logs',
-    });
-    const logs = RuntimeLogsResponseSchema.parse(response.json());
-
-    expect(response.statusCode).toBe(200);
-    expect(logs.lines).toEqual(['llama_model_loader: loaded meta data', '[stderr] warming up the model']);
   });
 
   it('updates runtime config without overwriting unrelated user settings', async () => {
@@ -248,9 +225,7 @@ describe('runtime control routes', () => {
     const idle = await scanModelsIn(modelsDir);
     expect(idle.models.map((model) => model.isActive)).toEqual([false, false]);
 
-    await leaveRuntimeRunningFromPreviousApiProcess(
-      `${spelledWithForwardSlashes(modelsDir)}/mistral/../qwen/Квен-14B.Q4_K_M.gguf`,
-    );
+    runBuiltinServer(`${spelledWithForwardSlashes(modelsDir)}/mistral/../qwen/Квен-14B.Q4_K_M.gguf`);
 
     expect(await readActiveModels()).toEqual({
       'qwen/Квен-14B.Q4_K_M.gguf': true,
@@ -262,7 +237,7 @@ describe('runtime control routes', () => {
     const modelsDir = await writeTwoModelsSharingAFileName();
     await scanModelsIn(modelsDir);
 
-    await leaveRuntimeRunningFromPreviousApiProcess(path.join(api().dataRoot, 'elsewhere', 'Квен-14B.Q4_K_M.gguf'));
+    runBuiltinServer(path.join(api().dataRoot, 'elsewhere', 'Квен-14B.Q4_K_M.gguf'));
 
     expect(await readActiveModels()).toEqual({
       'qwen/Квен-14B.Q4_K_M.gguf': false,
@@ -378,6 +353,39 @@ describe('runtime control routes', () => {
     });
   });
 
+  it('starts the model and reports running', async () => {
+    const { app, dataRoot } = api();
+    const modelPath = path.join(dataRoot, 'Модели', 'Квен-VL.gguf');
+    const mmprojPath = path.join(dataRoot, 'Модели', 'mmproj-Квен-VL.gguf');
+    await fs.mkdir(path.dirname(modelPath), { recursive: true });
+    await fs.writeFile(modelPath, 'gguf');
+    await fs.writeFile(mmprojPath, 'gguf');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/runtime/start',
+      payload: { ...RUNTIME_CONFIG, mmprojPath, modelPath },
+    });
+    const overview = RuntimeOverviewResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(overview.serverStatus).toMatchObject({ status: 'running', model: 'Квен-VL.gguf', modelPath, port: 5001 });
+    expect(overview.serverStatus.pid).not.toBe(process.pid);
+    expect(api().fakeRuntime().starts).toEqual([{ ...RUNTIME_CONFIG, mmprojPath, modelPath }]);
+  });
+
+  it('stops a running model', async () => {
+    const { app, dataRoot } = api();
+    runBuiltinServer(path.join(dataRoot, 'Модели', 'Квен-VL.gguf'));
+
+    const response = await app.inject({ method: 'POST', url: '/api/runtime/stop', payload: {} });
+    const overview = RuntimeOverviewResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(overview.serverStatus).toMatchObject({ status: 'idle', model: null, pid: null });
+    expect(api().fakeRuntime().stops).toBe(1);
+  });
+
   it('returns runtime overview after stop on an idle server', async () => {
     const { app } = api();
     const response = await app.inject({
@@ -392,8 +400,65 @@ describe('runtime control routes', () => {
   });
 });
 
+describe('runtime control routes on the real llama-server manager, in a project without bin/', () => {
+  const api = useTestApi({ runtime: 'real' });
+
+  it('reads llama-server logs from the data root it was given once its in-memory buffer is empty, as after an API restart', async () => {
+    const { app, dataRoot } = api();
+    await fs.mkdir(path.join(dataRoot, 'logs'), { recursive: true });
+    await fs.writeFile(
+      path.join(dataRoot, 'logs', 'llm-server.log'),
+      'llama_model_loader: loaded meta data\n[stderr] warming up the model\n',
+      'utf8',
+    );
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/runtime/logs',
+    });
+    const logs = RuntimeLogsResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(logs.lines).toEqual(['llama_model_loader: loaded meta data', '[stderr] warming up the model']);
+  });
+
+  it('reports a missing llama-server binary as 409 runtime_unavailable', async () => {
+    const { app, dataRoot } = api();
+    const modelPath = path.join(dataRoot, 'Модели', 'Квен-14B.Q4_K_M.gguf');
+    await fs.mkdir(path.dirname(modelPath), { recursive: true });
+    await fs.writeFile(modelPath, 'gguf');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/runtime/start',
+      payload: { ...RUNTIME_CONFIG, modelPath },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ code: 'runtime_unavailable' });
+    await expect(fs.stat(path.join(dataRoot, '.llm-server.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+});
+
 describe('runtime install failures', () => {
   const api = useTestApi();
+
+  it('reports a failed asset download as 502 runtime_install_failed and leaves no install directory behind', async () => {
+    const { app, http, projectRoot } = api();
+    const assetUrl = `${B11912_DOWNLOADS}/llama-b11912-bin-win-cpu-x64.zip`;
+    http.on('GET', LLAMA_CPP_RELEASES_URL, () => Response.json([llamaCppBuildRelease('b11912')]));
+    http.on('GET', assetUrl, () => new Response('not found', { status: 404 }));
+
+    const response = await app.inject({ method: 'POST', url: '/api/runtime/install', payload: { variant: 'cpu' } });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({
+      code: 'runtime_install_failed',
+      message: 'Не удалось скачать llama-b11912-bin-win-cpu-x64.zip: HTTP 404.',
+    });
+    expect(http.requestLines()).toEqual([`GET ${LLAMA_CPP_RELEASES_URL}`, `GET ${assetUrl}`]);
+    expect((await fs.readdir(projectRoot)).filter((entry) => entry !== 'data')).toEqual([]);
+  });
 
   it('answers a failed release lookup with 502 runtime_install_failed', async () => {
     const { app, http } = api();

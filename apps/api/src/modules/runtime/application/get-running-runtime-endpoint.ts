@@ -1,5 +1,5 @@
-import { getLlmProcessManager } from '../infrastructure/llm-process-manager.js';
-import { getRuntimeOverview } from './get-runtime-overview.js';
+import { type GetRuntimeOverviewDependencies, getRuntimeOverview } from './get-runtime-overview.js';
+import type { RuntimeProcess } from './runtime-process.js';
 
 export interface RunningRuntimeEndpoint {
   baseUrl: string;
@@ -8,19 +8,29 @@ export interface RunningRuntimeEndpoint {
   visionProjectorPath: string | null;
 }
 
-async function resolveCanonicalModelName(modelPath: string | null, fallbackModel: string | null) {
+export interface GetRunningRuntimeEndpointDependencies extends GetRuntimeOverviewDependencies {
+  readonly runtimeProcess: Pick<RuntimeProcess, 'getEngineInfo' | 'getState' | 'getVisionProjectorPath'>;
+}
+
+async function resolveCanonicalModelName(
+  modelPath: string | null,
+  fallbackModel: string | null,
+  dependencies: GetRuntimeOverviewDependencies,
+) {
   if (!modelPath) {
     return fallbackModel;
   }
 
-  const overview = await getRuntimeOverview();
+  const overview = await getRuntimeOverview(dependencies);
   const activeModel = overview.models.find((model) => model.isActive);
 
   return activeModel?.name ?? fallbackModel;
 }
 
-export async function getRunningRuntimeEndpoint(): Promise<RunningRuntimeEndpoint | null> {
-  const state = getLlmProcessManager().getState();
+export async function getRunningRuntimeEndpoint(
+  dependencies: GetRunningRuntimeEndpointDependencies,
+): Promise<RunningRuntimeEndpoint | null> {
+  const state = dependencies.runtimeProcess.getState();
 
   if (state.status !== 'running') {
     return null;
@@ -29,7 +39,7 @@ export async function getRunningRuntimeEndpoint(): Promise<RunningRuntimeEndpoin
   return {
     baseUrl: `http://127.0.0.1:${state.port}`,
     contextSize: state.launchConfig?.contextSize ?? null,
-    model: await resolveCanonicalModelName(state.modelPath, state.model),
-    visionProjectorPath: getLlmProcessManager().getVisionProjectorPath(),
+    model: await resolveCanonicalModelName(state.modelPath, state.model, dependencies),
+    visionProjectorPath: dependencies.runtimeProcess.getVisionProjectorPath(),
   };
 }

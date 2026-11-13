@@ -1,19 +1,21 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import path from 'node:path';
+
+import { describe, expect, it, vi } from 'vitest';
 
 import { createCapturingLogger } from '../../../test-support/capturing-logger.js';
-import { LlmProcessManager } from '../infrastructure/llm-process-manager.js';
+import { FakeRuntimeProcess } from '../../../test-support/fake-runtime-process.js';
 import { reconnectDetachedRuntime } from './reconnect-detached-runtime.js';
 
-describe('reconnectDetachedRuntime', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+const MODELS_DIR = path.join('D:', 'Модели');
 
+describe('reconnectDetachedRuntime', () => {
   it('logs the runtime state it found, idle when no previous API process left a llama-server behind', async () => {
     const { logger, lines } = createCapturingLogger();
+    const runtimeProcess = new FakeRuntimeProcess({ defaultModelsDir: MODELS_DIR });
 
-    await reconnectDetachedRuntime(logger);
+    await reconnectDetachedRuntime({ logger, runtimeProcess });
 
+    expect(runtimeProcess.reconnects).toBe(1);
     expect(lines).toEqual([
       expect.objectContaining({
         level: 'info',
@@ -26,12 +28,13 @@ describe('reconnectDetachedRuntime', () => {
   });
 
   it('logs a failed reconnect and resolves, so the API keeps serving', async () => {
-    vi.spyOn(LlmProcessManager.prototype, 'reconnectToDetachedRuntime').mockRejectedValueOnce(
+    const runtimeProcess = new FakeRuntimeProcess({ defaultModelsDir: MODELS_DIR });
+    vi.spyOn(runtimeProcess, 'reconnect').mockRejectedValueOnce(
       new Error('EACCES: permission denied, open .llm-server.json'),
     );
     const { logger, lines } = createCapturingLogger();
 
-    await expect(reconnectDetachedRuntime(logger)).resolves.toBeUndefined();
+    await expect(reconnectDetachedRuntime({ logger, runtimeProcess })).resolves.toBeUndefined();
     expect(lines).toEqual([
       expect.objectContaining({
         err: expect.objectContaining({ message: 'EACCES: permission denied, open .llm-server.json' }),
