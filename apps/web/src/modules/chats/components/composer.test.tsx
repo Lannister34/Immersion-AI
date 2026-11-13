@@ -1,5 +1,5 @@
-import { screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import { buildChatReplyPromptPreview } from '../../../test-support/chat-reply-prompt-preview-fixture';
 import { renderWithProviders } from '../../../test-support/render-with-providers';
@@ -29,6 +29,7 @@ async function renderComposer(props: Partial<ComposerProps> = {}) {
       attachments={[]}
       attachmentsError={null}
       attachmentsHint="Прикрепить изображение"
+      attachmentsNotice={null}
       canAnswer={false}
       canAttachImages
       canContinue={false}
@@ -66,5 +67,23 @@ describe('Composer', () => {
     await renderComposer();
 
     expect(screen.queryByText(/с черновиком/)).toBeNull();
+  });
+
+  it('shows a note about skipped files under the composer', async () => {
+    await renderComposer({ attachmentsNotice: 'Прикрепить можно только изображения — остальные файлы пропущены.' });
+
+    expect(screen.getByText('Прикрепить можно только изображения — остальные файлы пропущены.')).toBeTruthy();
+  });
+
+  it('attaches only the image files from a paste', async () => {
+    const onAttachFiles = vi.fn<ComposerProps['onAttachFiles']>();
+    await renderComposer({ onAttachFiles });
+    const image = new File(['x'], 'маяк.png', { type: 'image/png' });
+
+    fireEvent.paste(screen.getByRole('textbox'), {
+      clipboardData: { files: [image, new File(['x'], 'лоция.txt', { type: 'text/plain' })] },
+    });
+
+    expect(onAttachFiles).toHaveBeenCalledExactlyOnceWith([image]);
   });
 });

@@ -46,3 +46,23 @@
   border: 1px solid var(--hairline);
   object-fit: cover;
 }
+
+.image-drop-zone {
+  position: relative;
+}
+
+.image-drop-zone__overlay {
+  position: absolute;
+  inset: 8px;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  border: 2px dashed var(--accent);
+  border-radius: var(--r-lg);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: var(--fz-md);
+  text-align: center;
+  pointer-events: none;
+}
