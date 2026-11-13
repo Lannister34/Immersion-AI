@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { ChevronDownIcon } from '../../../shared/ui/icons';
+import { formatContextEstimate } from '../view-models/context-estimate';
 import type { ContextStats } from '../view-models/context-stats';
 
 export interface ContextMeterProps {
@@ -98,8 +99,7 @@ export function ContextMeter({ stats }: ContextMeterProps) {
           <span className="between" style={{ fontSize: 'var(--fz-2xs)' }}>
             <span className="muted">Контекст</span>
             <span className="mono tnum muted">
-              {isApproximate ? '≈ ' : ''}
-              {formatNumber(stats.totalTokens)} / {formatNumber(stats.contextWindow)} · {percent}%
+              {formatContextEstimate(stats)} · {percent}%
             </span>
           </span>
           <span className="tokenbar__track" style={{ display: 'block', marginTop: 4 }}>

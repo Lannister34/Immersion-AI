@@ -9,6 +9,7 @@ import { useDebouncedValue } from '../../../shared/lib/use-debounced-value';
 import { Avatar } from '../../../shared/ui/avatar';
 import { BranchIcon, CopyIcon, EditIcon, RefreshIcon, TrashIcon } from '../../../shared/ui/icons';
 import { chatReplyPromptPreviewQueryOptions } from '../../generation';
+import { formatContextEstimate } from '../view-models/context-estimate';
 import { toContextStats } from '../view-models/context-stats';
 import { renderMessageContent } from '../view-models/message-content';
 import { planMessageEditSave } from '../view-models/message-edit-save';
@@ -69,11 +70,12 @@ export function BubbleMessage({
   const [actionError, setActionError] = useState<string | null>(null);
   const debouncedDraft = useDebouncedValue(draft, 400);
   const trimmedDraft = debouncedDraft.trim();
+  const isEditPreviewEnabled = isEditing && trimmedDraft.length > 0 && trimmedDraft !== text;
   const editPreviewQuery = useQuery({
     ...chatReplyPromptPreviewQueryOptions(chatId, undefined, [{ content: trimmedDraft, messageIndex }]),
-    enabled: isEditing && trimmedDraft.length > 0 && trimmedDraft !== text,
+    enabled: isEditPreviewEnabled,
   });
-  const editPreviewStats = isEditing ? toContextStats(editPreviewQuery.data) : undefined;
+  const editPreviewStats = isEditPreviewEnabled ? toContextStats(editPreviewQuery.data) : undefined;
 
   if (isSystem) {
     return <div className="bubble--system bubble">{text}</div>;
@@ -241,9 +243,7 @@ export function BubbleMessage({
                       : 'Точный подсчёт контекста после применения правки'
                   }
                 >
-                  {editPreviewStats.tokenCountMethod === 'approximate' ? '≈ ' : ''}
-                  {editPreviewStats.totalTokens.toLocaleString('ru-RU')} /{' '}
-                  {editPreviewStats.contextWindow.toLocaleString('ru-RU')} ток.
+                  {formatContextEstimate(editPreviewStats)} ток.
                 </span>
               ) : null}
               {editPreviewQuery.isFetching ? (

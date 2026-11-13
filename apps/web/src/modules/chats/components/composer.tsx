@@ -12,6 +12,8 @@ import {
   StopIcon,
   XIcon,
 } from '../../../shared/ui/icons';
+import { formatContextEstimate } from '../view-models/context-estimate';
+import type { ContextStats } from '../view-models/context-stats';
 
 export interface ComposerProps {
   attachments: ChatMessageAttachmentDto[];
@@ -25,6 +27,7 @@ export interface ComposerProps {
   canAnswer: boolean;
   canContinue: boolean;
   canSend: boolean;
+  draftStats: ContextStats | undefined;
   isStreaming: boolean;
   onAnswer: () => void;
   onCancel: () => void;
@@ -50,6 +53,7 @@ export function Composer({
   canAnswer,
   canContinue,
   canSend,
+  draftStats,
   isStreaming,
   onAnswer,
   onCancel,
@@ -144,9 +148,26 @@ export function Composer({
             ref={fileInputRef}
             type="file"
           />
-          <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }} title="Длина сообщения в символах">
+          <span
+            className="muted mono"
+            style={{ fontSize: 'var(--fz-xs)', whiteSpace: 'nowrap' }}
+            title="Длина сообщения в символах"
+          >
             {value.length.toLocaleString('ru-RU')} симв.
           </span>
+          {draftStats ? (
+            <span
+              className="muted mono"
+              style={{ fontSize: 'var(--fz-xs)', whiteSpace: 'nowrap' }}
+              title={
+                draftStats.tokenCountMethod === 'approximate'
+                  ? 'Приблизительная оценка контекста, если отправить черновик'
+                  : 'Точный подсчёт контекста, если отправить черновик'
+              }
+            >
+              {formatContextEstimate(draftStats)} ток. с черновиком
+            </span>
+          ) : null}
         </div>
         <div className="row gap-8">
           <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>

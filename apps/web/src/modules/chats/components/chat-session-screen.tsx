@@ -97,7 +97,8 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
 
   const chatSessionQuery = useQuery(chatSessionQueryOptions(chatId));
   const generationReadinessQuery = useQuery(generationReadinessQueryOptions());
-  const promptPreviewQuery = useQuery(chatReplyPromptPreviewQueryOptions(chatId, debouncedDraftMessage));
+  const promptPreviewQuery = useQuery(chatReplyPromptPreviewQueryOptions(chatId));
+  const draftPromptPreviewQuery = useQuery(chatReplyPromptPreviewQueryOptions(chatId, debouncedDraftMessage));
   const settingsOverviewQuery = useQuery(settingsOverviewQueryOptions());
   const updateMessageMutation = useUpdateChatMessage(chatId);
   const deleteMessageMutation = useDeleteChatMessage(chatId);
@@ -263,6 +264,8 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const messageCount = session.messages.length;
   const lastUpdated = session.chat.updatedAt;
   const tokenStats = toContextStats(promptPreviewQuery.data);
+  const hasDraftEstimate = draftMessage.trim().length > 0 && debouncedDraftMessage.trim().length > 0;
+  const draftTokenStats = hasDraftEstimate ? toContextStats(draftPromptPreviewQuery.data) : undefined;
   const assembledPrompt = promptPreviewQuery.data?.request.messages.find(
     (message) => message.role === 'system',
   )?.content;
@@ -506,6 +509,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                 canAnswer={canAnswer}
                 canContinue={canContinue}
                 canSend={canSend}
+                draftStats={draftTokenStats}
                 isStreaming={isStreaming}
                 onCancel={chatReplyGeneration.cancel}
                 onChange={(event) => setDraftMessage(event.currentTarget.value)}

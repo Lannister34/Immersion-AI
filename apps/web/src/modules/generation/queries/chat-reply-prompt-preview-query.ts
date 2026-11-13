@@ -1,5 +1,8 @@
-import type { ChatReplyPromptPreviewMessageOverride } from '@immersion/contracts/generation';
-import { queryOptions } from '@tanstack/react-query';
+import type {
+  ChatReplyPromptPreviewMessageOverride,
+  ChatReplyPromptPreviewResponse,
+} from '@immersion/contracts/generation';
+import { type Query, queryOptions } from '@tanstack/react-query';
 
 import { previewChatReplyPrompt } from '../api/preview-chat-reply-prompt';
 
@@ -23,6 +26,21 @@ export const chatReplyPromptPreviewQueryKey = (
   overrides?: ChatReplyPromptPreviewMessageOverride[],
 ) => [...chatReplyPromptPreviewQueryBaseKey(chatId), draftUserMessage.trim(), normalizeOverrides(overrides)] as const;
 
+type ChatReplyPromptPreviewQueryKey = ReturnType<typeof chatReplyPromptPreviewQueryKey>;
+
+function keepPreviousEstimateUnlessDraftLess(
+  previousData: ChatReplyPromptPreviewResponse | undefined,
+  previousQuery:
+    | Query<ChatReplyPromptPreviewResponse, Error, ChatReplyPromptPreviewResponse, ChatReplyPromptPreviewQueryKey>
+    | undefined,
+): ChatReplyPromptPreviewResponse | undefined {
+  if (!previousQuery) {
+    return undefined;
+  }
+  const [, , , draftUserMessage, overrides] = previousQuery.queryKey;
+  return draftUserMessage === '' && overrides.length === 0 ? undefined : previousData;
+}
+
 export function chatReplyPromptPreviewQueryOptions(
   chatId: string,
   draftUserMessage = '',
@@ -40,5 +58,6 @@ export function chatReplyPromptPreviewQueryOptions(
         ...(normalizedOverrides.length > 0 ? { messageOverrides: normalizedOverrides } : {}),
       }),
     gcTime: 30_000,
+    placeholderData: keepPreviousEstimateUnlessDraftLess,
   });
 }
