@@ -5,7 +5,9 @@ import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } 
 
 import { Topbar } from '../../app/layout/topbar';
 import { getApiErrorMessage } from '../../shared/api/get-api-error-message';
+import { useEditorDraft } from '../../shared/drafts/use-editor-draft';
 import { formatRelative } from '../../shared/lib/format-relative';
+import { DraftRestoredNotice } from '../../shared/ui/draft-restored-notice';
 import { ErrorBanner } from '../../shared/ui/error-banner';
 import { Field } from '../../shared/ui/field';
 import { ChatIcon, SparkleIcon, TrashIcon } from '../../shared/ui/icons';
@@ -77,7 +79,12 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
   const detail = isNew ? null : (detailQuery.data?.scenario ?? null);
 
   const initialState = useMemo(() => toFormState(detail), [detail]);
-  const [form, setForm] = useState<ScenarioFormState>(initialState);
+  const editorDraft = useEditorDraft<ScenarioFormState>({
+    entityId: scenarioId,
+    kind: 'scenario',
+    savedVersion: detail?.updatedAt ?? null,
+  });
+  const [form, setForm] = useState<ScenarioFormState>(() => editorDraft.restored ?? initialState);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const appliedInitialStateRef = useRef(initialState);
 
@@ -88,6 +95,17 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
   }, [initialState]);
 
   const isDirty = !formsEqual(form, initialState);
+  const isPristine = JSON.stringify(toCommand(form)) === JSON.stringify(toCommand(initialState));
+  const { track: trackDraft } = editorDraft;
+
+  useEffect(() => {
+    trackDraft(form, isPristine);
+  }, [form, isPristine, trackDraft]);
+
+  const discardDraft = () => {
+    setForm(initialState);
+    editorDraft.discard();
+  };
 
   const setField = <K extends keyof ScenarioFormState>(field: K, value: ScenarioFormState[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -102,6 +120,7 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
       return updateScenario(scenarioId, command);
     },
     onSuccess: async (response) => {
+      editorDraft.markSaved();
       queryClient.setQueryData(scenarioDetailQueryKey(response.scenario.id), response);
       await queryClient.invalidateQueries({ queryKey: scenarioListQueryKey });
       if (isNew) {
@@ -112,6 +131,7 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
 
   const deleteMutation = useDeleteScenario(scenarioId ?? '', {
     onSuccess: async () => {
+      editorDraft.close();
       await navigate({ to: '/scenarios' });
     },
   });
@@ -302,6 +322,12 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
               onSubmit={handleSubmit}
               style={{ maxWidth: 960, margin: '0 auto' }}
             >
+              <DraftRestoredNotice
+                busy={saveMutation.isPending || deleteMutation.isPending}
+                notice={editorDraft.notice}
+                onDiscard={discardDraft}
+                onDismiss={editorDraft.dismissNotice}
+              />
               <Field id="scenario-name" label="Название" required>
                 <input
                   autoComplete="off"

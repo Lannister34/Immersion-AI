@@ -13,9 +13,9 @@ export async function renderWithProviders(
   ui: ReactNode,
   options: TestProvidersOptions = {},
 ): Promise<RenderResult & ProviderHandles> {
-  const { queryClient, router, wrapper } = await createTestProviders(options);
+  const { editorDraftStore, queryClient, router, wrapper } = await createTestProviders(options);
 
-  return Object.assign(render(ui, { wrapper }), { queryClient, router });
+  return Object.assign(render(ui, { wrapper }), { editorDraftStore, queryClient, router });
 }
 
 export async function renderHookWithProviders<Result, Props>(
@@ -23,7 +23,7 @@ export async function renderHookWithProviders<Result, Props>(
   options: RenderHookWithProvidersOptions<Props> = {},
 ): Promise<RenderHookResult<Result, Props> & ProviderHandles> {
   const { initialProps, ...providersOptions } = options;
-  const { queryClient, router, wrapper } = await createTestProviders(providersOptions);
+  const { editorDraftStore, queryClient, router, wrapper } = await createTestProviders(providersOptions);
 
-  return Object.assign(renderHook(hook, { initialProps, wrapper }), { queryClient, router });
+  return Object.assign(renderHook(hook, { initialProps, wrapper }), { editorDraftStore, queryClient, router });
 }

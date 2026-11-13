@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { useEditorDraftStore } from '../../../shared/drafts/use-editor-draft-store';
 import { chatListQueryKey } from '../../chats/queries/chat-list-query';
 import { deleteScenario } from '../api/delete-scenario';
 import { scenarioDetailQueryKey } from '../queries/scenario-detail-query';
@@ -11,10 +12,12 @@ interface UseDeleteScenarioOptions {
 
 export function useDeleteScenario(scenarioId: string, options: UseDeleteScenarioOptions = {}) {
   const queryClient = useQueryClient();
+  const editorDraftStore = useEditorDraftStore();
 
   return useMutation({
     mutationFn: () => deleteScenario(scenarioId),
     onSuccess: async () => {
+      editorDraftStore.discard('scenario', scenarioId);
       queryClient.removeQueries({ queryKey: scenarioDetailQueryKey(scenarioId) });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: scenarioListQueryKey }),

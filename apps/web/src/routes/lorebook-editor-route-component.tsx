@@ -6,5 +6,5 @@ const lorebookEditorRouteApi = getRouteApi('/lorebooks/$lorebookId');
 
 export function LorebookEditorRouteComponent() {
   const { lorebookId } = lorebookEditorRouteApi.useParams();
-  return <LorebookEditorScreen lorebookId={lorebookId} />;
+  return <LorebookEditorScreen key={lorebookId} lorebookId={lorebookId} />;
 }

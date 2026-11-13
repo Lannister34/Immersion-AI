@@ -14,3 +14,17 @@
   background: var(--danger-soft);
   border-color: transparent;
 }
+
+.alert--info {
+  font-size: var(--fz-sm);
+  color: var(--text-1);
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+.alert--warn {
+  font-size: var(--fz-sm);
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-color: var(--warn);
+}
