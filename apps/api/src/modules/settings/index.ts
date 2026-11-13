@@ -4,5 +4,10 @@ export { resolveSamplerPresetForModel } from './application/active-sampler-prese
 export { getProfileUserName } from './application/get-profile-user-name.js';
 export { getSettingsOverview } from './application/get-settings-overview.js';
 export { ReplyLimitExceedsContextError } from './application/reply-limit-exceeds-context-error.js';
+export type {
+  UserSettingsDocument,
+  UserSettingsMutator,
+  UserSettingsRecord,
+} from './application/user-settings-document.js';
 export { settingsRoutes } from './interface/http/routes.js';
 export { settingsProblems } from './interface/http/settings-problems.js';

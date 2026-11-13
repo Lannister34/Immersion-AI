@@ -6,7 +6,6 @@ import { createManualClock } from '../../../test-support/manual-clock.js';
 import { useTestApi } from '../../../test-support/use-test-api.js';
 import { ChatTranscriptChangedError } from '../../chats/index.js';
 import { heuristicTokenCounter } from '../../prompting/index.js';
-import { resolveGenerationProviderEndpoint } from '../../providers/index.js';
 import { getSettingsOverview } from '../../settings/index.js';
 import { InMemoryGenerationJobRegistry } from '../infrastructure/in-memory-generation-job-registry.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
@@ -33,7 +32,7 @@ describe('regenerateChatReplyJob', () => {
   const api = useTestApi({ fixture: 'smoke' });
 
   it('refuses to delete the reply when the transcript changes after the job is claimed', async () => {
-    const { chats, prompting } = api().modules;
+    const { chats, prompting, providers } = api().modules;
     const completeChat = vi.fn<ChatCompletionClient['completeChat']>();
     const created = await api().app.inject({
       method: 'POST',
@@ -60,7 +59,7 @@ describe('regenerateChatReplyJob', () => {
           clock: createManualClock(),
           generationJobs: registry,
           prompting,
-          providers: { resolveGenerationProviderEndpoint: () => resolveGenerationProviderEndpoint() },
+          providers,
           settings: { getSettingsOverview },
           tokenCounter: heuristicTokenCounter,
         },

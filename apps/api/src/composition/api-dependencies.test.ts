@@ -23,6 +23,7 @@ import { createCapturingLogger } from '../test-support/capturing-logger.js';
 import { createDeferred } from '../test-support/deferred.js';
 import { FakeChatCompletionClient } from '../test-support/fake-chat-completion-client.js';
 import { createHttpStub } from '../test-support/http-stub.js';
+import { createInMemoryUserSettings } from '../test-support/in-memory-user-settings.js';
 import { createManualClock } from '../test-support/manual-clock.js';
 import { openAiChatCompletion } from '../test-support/provider-responses.js';
 import { readStoredChatFile } from '../test-support/stored-chat-file.js';
@@ -85,6 +86,7 @@ describe('createApiDependencies', () => {
     const characterStore = createFileCharacterStore({ directory: path.join(projectRoot, 'персонажи'), logger });
     const lorebookStore = createFileLorebookStore({ directory: path.join(projectRoot, 'миры') });
     const scenarioStore = createFileScenarioStore({ directory: path.join(projectRoot, 'сценарии') });
+    const userSettings = createInMemoryUserSettings();
 
     const dependencies = createApiDependencies(parseApiConfig({}, projectRoot), {
       characterStore,
@@ -98,6 +100,7 @@ describe('createApiDependencies', () => {
       lorebookStore,
       scenarioStore,
       tokenCounter: heuristicTokenCounter,
+      userSettings,
       visionProbe,
     });
 
@@ -113,6 +116,7 @@ describe('createApiDependencies', () => {
     expect(dependencies.characterStore).toBe(characterStore);
     expect(dependencies.lorebookStore).toBe(lorebookStore);
     expect(dependencies.scenarioStore).toBe(scenarioStore);
+    expect(dependencies.userSettings).toBe(userSettings);
   });
 
   it('builds library stores, a chat repository, chat index, job registry, token counter and vision probe of its own for every app', () => {
@@ -130,6 +134,20 @@ describe('createApiDependencies', () => {
     expect(second.characterStore).not.toBe(first.characterStore);
     expect(second.lorebookStore).not.toBe(first.lorebookStore);
     expect(second.scenarioStore).not.toBe(first.scenarioStore);
+  });
+
+  it('resolves the generation provider from the overridden settings document', async () => {
+    const userSettings = createInMemoryUserSettings({
+      activeProvider: 'custom',
+      backendMode: 'external',
+      providerConfigs: { custom: { model: 'qwen3-8b', url: 'http://127.0.0.1:6001' } },
+    });
+    const modules = createApiModules(createApiDependencies(parseApiConfig({}, projectRoot), { userSettings }));
+
+    await expect(modules.providers.resolveGenerationProviderEndpoint()).resolves.toMatchObject({
+      baseUrl: 'http://127.0.0.1:6001',
+      model: 'qwen3-8b',
+    });
   });
 
   it('builds the vision probe on the overridden HttpFetch and clock', async () => {

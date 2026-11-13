@@ -4,11 +4,7 @@ import { createGenerationModule, type GenerationModule } from '../modules/genera
 import { createLorebooksModule, type LorebooksModule } from '../modules/lorebooks/index.js';
 import { createOpenAiCompatModule, type OpenAiCompatModule } from '../modules/openai-compat/index.js';
 import { createPromptingModule, type PromptingModule } from '../modules/prompting/index.js';
-import {
-  getProviderSettings,
-  resolveGenerationProviderEndpoint,
-  testProviderConnection,
-} from '../modules/providers/index.js';
+import { createProvidersModule, type ProvidersModule } from '../modules/providers/index.js';
 import { getRunningRuntimeEndpoint, getRuntimeOverview } from '../modules/runtime/index.js';
 import { createScenariosModule, type ScenariosModule } from '../modules/scenarios/index.js';
 import { getProfileUserName, getSettingsOverview, resolveSamplerPresetForModel } from '../modules/settings/index.js';
@@ -18,6 +14,7 @@ import type { ApiDependencies } from './api-dependencies.js';
 export interface ApiModules {
   readonly system: SystemModule;
   readonly characters: CharactersModule;
+  readonly providers: ProvidersModule;
   readonly lorebooks: LorebooksModule;
   readonly scenarios: ScenariosModule;
   readonly prompting: PromptingModule;
@@ -39,8 +36,15 @@ export function createApiModules(dependencies: ApiDependencies): ApiModules {
     lorebookStore,
     scenarioStore,
     tokenCounter,
+    userSettings,
     visionProbe,
   } = dependencies;
+  const providers = createProvidersModule({
+    httpFetch,
+    // TODO: wire to modules.runtime once it is composed (F-41)
+    runtimeEndpoint: { getRunningEndpoint: () => getRunningRuntimeEndpoint() },
+    settingsDocument: userSettings,
+  });
   const characters = createCharactersModule({ characterStore, chatStats: chatIndex, clock });
   const lorebooks = createLorebooksModule({ clock, lorebookStore });
   const scenarios = createScenariosModule({ clock, scenarioStore });
@@ -73,6 +77,7 @@ export function createApiModules(dependencies: ApiDependencies): ApiModules {
     characters,
     lorebooks,
     scenarios,
+    providers,
     prompting,
     chats,
     generation: createGenerationModule({
@@ -83,11 +88,7 @@ export function createApiModules(dependencies: ApiDependencies): ApiModules {
       tokenCounter,
       visionProbe,
       prompting,
-      // TODO: wire to modules.providers once it is composed (F-40)
-      providers: {
-        getProviderSettings: () => getProviderSettings(),
-        resolveGenerationProviderEndpoint: () => resolveGenerationProviderEndpoint(),
-      },
+      providers,
       // TODO: wire to modules.runtime once it is composed (F-41)
       runtime: {
         getRunningRuntimeEndpoint: () => getRunningRuntimeEndpoint(),
@@ -101,11 +102,7 @@ export function createApiModules(dependencies: ApiDependencies): ApiModules {
     openAiCompat: createOpenAiCompatModule({
       chatCompletionClient,
       clock,
-      // TODO: wire to modules.providers once it is composed (F-40)
-      providers: {
-        resolveGenerationProviderEndpoint: () => resolveGenerationProviderEndpoint(),
-        testConnection: () => testProviderConnection({ httpFetch }),
-      },
+      providers,
       // TODO: wire to modules.settings once it is composed (F-42)
       settings: {
         resolveSamplerPresetForModel: (modelName) => resolveSamplerPresetForModel(getSettingsOverview(), modelName),

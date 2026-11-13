@@ -1,6 +1,5 @@
 import type { ProviderConnectionResponse, ProviderSettingsSnapshot } from '@immersion/contracts/providers';
 
-import { runtimeEndpointAdapter } from '../infrastructure/runtime-endpoint-adapter.js';
 import { fetchProviderModels } from './fetch-provider-models.js';
 import { resolveVersionedUrl } from './generation-provider.js';
 import { getProviderSettings } from './get-provider-settings.js';
@@ -29,12 +28,11 @@ function getConfiguredExternalApiKey(settings: ProviderSettingsSnapshot) {
 export async function testProviderConnection(
   dependencies: TestProviderConnectionDependencies,
 ): Promise<ProviderConnectionResponse> {
-  const settings = await getProviderSettings();
+  const settings = await getProviderSettings(dependencies);
   const subject = toSubject(settings);
 
   if (settings.mode === 'builtin') {
-    const runtimeEndpointPort = dependencies.runtimeEndpointPort ?? runtimeEndpointAdapter;
-    const runtimeBaseUrl = (await runtimeEndpointPort.getRunningEndpoint())?.baseUrl ?? null;
+    const runtimeBaseUrl = (await dependencies.runtimeEndpoint.getRunningEndpoint())?.baseUrl ?? null;
 
     if (!runtimeBaseUrl) {
       return createErrorResponse(subject, 'builtin_runtime_not_running', 'Встроенный сервер не запущен.', null);

@@ -3,8 +3,7 @@ import { z } from 'zod';
 import { getProviderApiKind } from '../domain/provider-catalog.js';
 import { findCloudProviderReadinessIssue, resolveProviderModel } from '../domain/provider-readiness.js';
 import { DEFAULT_OPENAI_COMPATIBLE_MODEL } from '../domain/provider-settings.js';
-import { runtimeEndpointAdapter } from '../infrastructure/runtime-endpoint-adapter.js';
-import { getProviderSettings } from './get-provider-settings.js';
+import { type GetProviderSettingsDependencies, getProviderSettings } from './get-provider-settings.js';
 import type { RuntimeEndpointPort } from './runtime-endpoint-port.js';
 
 export class GenerationProviderUnavailableError extends Error {
@@ -56,13 +55,17 @@ export function resolveAnthropicMessagesUrl(endpoint: GenerationProviderEndpoint
   return resolveVersionedUrl(endpoint.baseUrl, 'messages');
 }
 
+export interface ResolveGenerationProviderEndpointDependencies extends GetProviderSettingsDependencies {
+  readonly runtimeEndpoint: RuntimeEndpointPort;
+}
+
 export async function resolveGenerationProviderEndpoint(
-  runtimeEndpointPort: RuntimeEndpointPort = runtimeEndpointAdapter,
+  dependencies: ResolveGenerationProviderEndpointDependencies,
 ): Promise<GenerationProviderEndpoint> {
-  const settings = await getProviderSettings();
+  const settings = await getProviderSettings(dependencies);
 
   if (settings.mode === 'builtin') {
-    const runtimeEndpoint = await runtimeEndpointPort.getRunningEndpoint();
+    const runtimeEndpoint = await dependencies.runtimeEndpoint.getRunningEndpoint();
 
     if (!runtimeEndpoint) {
       throw new GenerationProviderUnavailableError('Встроенный сервер не запущен.');
@@ -78,6 +81,11 @@ export async function resolveGenerationProviderEndpoint(
   }
 
   const config = settings.providerConfigs[settings.activeProvider];
+
+  if (!config?.url?.trim()) {
+    throw new GenerationProviderUnavailableError('URL внешнего API не настроен.');
+  }
+
   const parsedConfig = z
     .object({
       apiKey: z.string().min(1).optional(),

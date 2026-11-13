@@ -7,7 +7,7 @@ import {
 
 import { createDefaultProviderConfig } from '../domain/provider-settings.js';
 import { toProviderSettingsSnapshot } from '../domain/provider-settings-snapshot.js';
-import { ProviderSettingsRepository } from './provider-settings-repository.js';
+import type { ProviderSettingsRepository } from './provider-settings-repository.js';
 
 function mergeConfig(current: ProviderConfig, patch: PatchProviderSettingsCommand['config']): ProviderConfig {
   const next: ProviderConfig = { ...current };
@@ -31,11 +31,15 @@ function mergeConfig(current: ProviderConfig, patch: PatchProviderSettingsComman
   return next;
 }
 
+export interface PatchProviderSettingsDependencies {
+  readonly providerSettings: Pick<ProviderSettingsRepository, 'update'>;
+}
+
 export async function patchProviderSettings(
   command: PatchProviderSettingsCommand,
-  repository = new ProviderSettingsRepository(),
+  { providerSettings }: PatchProviderSettingsDependencies,
 ): Promise<ProviderSettingsSnapshot> {
-  const updated = await repository.update((current) => {
+  const updated = await providerSettings.update((current) => {
     const activeProvider = command.activeProvider ?? current.activeProvider;
     const currentConfig = current.providerConfigs[activeProvider] ?? createDefaultProviderConfig(activeProvider);
 
