@@ -20,7 +20,7 @@ export function toLaunchRestartState(overview: RuntimeOverviewResponse): LaunchR
     return { kind: 'none' };
   }
 
-  const runningModel = overview.models.find((model) => model.path === serverStatus.modelPath);
+  const runningModel = overview.models.find((model) => model.isActive);
 
   if (!runningModel) {
     return { kind: 'manual', runningConfig };

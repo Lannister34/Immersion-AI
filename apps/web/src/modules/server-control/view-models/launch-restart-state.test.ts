@@ -57,6 +57,19 @@ describe('toLaunchRestartState', () => {
     expect(toLaunchRestartState(overview('running', null))).toMatchObject({ kind: 'restart', runningConfig: null });
   });
 
+  it('restarts the model the API marks as running even when the recorded path is spelled differently', () => {
+    const listed = overview('running', null);
+    const spelledDifferently: RuntimeOverviewResponse = {
+      ...listed,
+      serverStatus: { ...listed.serverStatus, modelPath: 'd:\\модели\\гемма-27b.gguf' },
+    };
+
+    expect(toLaunchRestartState(spelledDifferently)).toMatchObject({
+      kind: 'restart',
+      command: { modelPath: MODEL_PATH },
+    });
+  });
+
   it('asks for a manual restart when the running model is not in the list, so its projector cannot be known', () => {
     expect(toLaunchRestartState(overview('running', null, 'C:/elsewhere/model.gguf'))).toEqual({
       kind: 'manual',
