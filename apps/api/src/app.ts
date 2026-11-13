@@ -9,7 +9,6 @@ import Fastify, {
 import type { ApiDependencies } from './composition/api-dependencies.js';
 import { apiProblems } from './composition/api-problems.js';
 import type { ApiModules } from './composition/create-api-modules.js';
-import { runtimeRoutes } from './modules/runtime/index.js';
 import { settingsRoutes } from './modules/settings/index.js';
 import { installNotFoundHandler, installProblemHandler } from './platform/http/problem-handler.js';
 import type { ApiLogger } from './platform/logging/api-logger.js';
@@ -42,9 +41,12 @@ export function buildApiApp(dependencies: ApiDependencies, modules: ApiModules):
   app.register(modules.scenarios.routes, { prefix: '/api/scenarios' });
   app.register(settingsRoutes, { prefix: '/api/settings' });
   app.register(modules.providers.routes, { prefix: '/api/providers' });
-  app.register(runtimeRoutes, { prefix: '/api/runtime' });
+  app.register(modules.runtime.routes, { prefix: '/api/runtime' });
   app.register(modules.openAiCompat.routes, { prefix: '/v1' });
-  app.addHook('onClose', () => modules.generation.close());
+  app.addHook('onClose', () => {
+    modules.generation.close();
+    modules.runtime.close();
+  });
 
   return app;
 }

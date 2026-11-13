@@ -5,7 +5,6 @@ import { type ApiConfig, ApiConfigError } from './config/api-config.js';
 import { readApiConfig } from './config/read-api-config.js';
 import { registerShutdownSignals } from './lifecycle/register-shutdown-signals.js';
 import { startApiServer } from './lifecycle/start-api-server.js';
-import { reconnectDetachedRuntime } from './modules/runtime/index.js';
 
 let config: ApiConfig;
 
@@ -21,12 +20,13 @@ try {
 }
 
 const dependencies = createApiDependencies(config);
-const app = buildApiApp(dependencies, createApiModules(dependencies));
+const modules = createApiModules(dependencies);
+const app = buildApiApp(dependencies, modules);
 
 registerShutdownSignals(app, { signals: process, exit: process.exit, deadlineMs: 5_000 });
 
 startApiServer(app, config).then(
-  () => reconnectDetachedRuntime(app.log),
+  () => modules.runtime.reconnect(),
   () => {
     process.exitCode = 1;
   },

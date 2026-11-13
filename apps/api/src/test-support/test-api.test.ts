@@ -55,11 +55,12 @@ describe('createTestApi', () => {
     expect(fs.readFileSync(committedSmokeSettings, 'utf8')).toBe(committedBefore);
   });
 
-  it('points the data-root variable and the global fetch that unmigrated modules still read at the harness', async () => {
+  it('points the data-root variable that unmigrated modules still read at the harness, and leaves the global fetch alone', async () => {
+    const globalFetch = globalThis.fetch;
     const api = await createTestApi();
 
     expect(readDataRoot()).toBe(api.dataRoot);
-    expect(globalThis.fetch).toBe(api.http.fetch);
+    expect(globalThis.fetch).toBe(globalFetch);
     expect(api.dependencies.httpFetch).toBe(api.http.fetch);
     expect(api.dependencies.clock).toBe(api.clock);
     expect(api.dependencies.logger).toBe(api.logs.logger);

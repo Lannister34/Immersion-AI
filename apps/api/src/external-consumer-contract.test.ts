@@ -405,3 +405,79 @@ describe('ComfyUI node pack replay in external mode: success shapes change only 
     });
   });
 });
+
+describe('ComfyUI node pack replay in builtin mode: llm_load starts the model, the prompters use it, llm_unload stops it', () => {
+  const api = useTestApi();
+  const BUILTIN_URL = 'http://127.0.0.1:5001';
+
+  function modelsDirectory(): string {
+    return path.join(api().dataRoot, MODELS_DIRECTORY_NAME);
+  }
+
+  async function callAsTheNode(method: HttpMethod, route: string, json?: unknown): Promise<SocketResponse> {
+    const origin = await api().listen();
+
+    return requestOverSocket(`${origin}${route}`, { headers: PYTHON_URLLIB_HEADERS, json, method });
+  }
+
+  beforeEach(async () => {
+    const { settings } = api();
+    await fs.mkdir(modelsDirectory(), { recursive: true });
+    await Promise.all(
+      [VISION_MODEL, VISION_PROJECTOR].map((name) => fs.writeFile(path.join(modelsDirectory(), name), 'gguf')),
+    );
+    await settings.patch({ backendMode: 'builtin', llmServerConfig: { modelsDirs: [modelsDirectory()] } });
+  });
+
+  it('starts the vision model with its projector, serves it as running and vision-ready, completes /v1 through it, and stops on {}', async () => {
+    const modelPath = path.join(modelsDirectory(), VISION_MODEL);
+    const mmprojPath = path.join(modelsDirectory(), VISION_PROJECTOR);
+    api().http.on('POST', `${BUILTIN_URL}/v1/chat/completions`, () => openAiChatCompletion('ok'));
+
+    const started = await callAsTheNode('POST', '/api/runtime/start', {
+      contextSize: 32_768,
+      flashAttention: true,
+      gpuLayers: 999,
+      mmprojPath,
+      modelPath,
+      port: 5001,
+      threads: 0,
+    });
+    const overview = readAsTheNode(
+      await callAsTheNode('GET', '/api/runtime/overview'),
+      ComfyUiRuntimeOverviewFixtureSchema,
+    );
+    const readiness = readAsTheNode(
+      await callAsTheNode('GET', '/api/generation/readiness'),
+      ComfyUiGenerationReadinessFixtureSchema,
+    );
+    const pixel = pngDataUrl(1, 1);
+    const completion = readAsTheNode(
+      await callAsTheNode('POST', '/v1/chat/completions', visionProbeBody(pixel)),
+      OpenAiChatCompletionFixtureSchema,
+    );
+    const sent = readProviderChatRequest(api().http);
+    const stopped = await callAsTheNode('POST', '/api/runtime/stop', {});
+    const afterStop = readAsTheNode(
+      await callAsTheNode('GET', '/api/runtime/overview'),
+      ComfyUiRuntimeOverviewFixtureSchema,
+    );
+
+    expect(started.status, started.body).toBe(200);
+    expect(overview.serverStatus).toMatchObject({ error: null, modelPath, status: 'running' });
+    expect(readiness).toMatchObject({ mode: 'builtin', visionSupport: 'supported' });
+    expect(completion.choices[0].message.content).toBe('ok');
+    expect(imageUrlsOf(userPartsOf(sent))).toEqual([pixel]);
+    expect(
+      api()
+        .http.requestLines()
+        .filter((line) => line.endsWith('/chat/completions')),
+    ).toEqual([`POST ${BUILTIN_URL}/v1/chat/completions`]);
+    expect(stopped.status, stopped.body).toBe(200);
+    expect(() => JSON.parse(stopped.body)).not.toThrow();
+    expect(afterStop.serverStatus).toMatchObject({ modelPath: null, status: 'idle' });
+    expect(api().fakeRuntime().starts).toEqual([
+      { contextSize: 32_768, flashAttention: true, gpuLayers: 999, mmprojPath, modelPath, port: 5001, threads: 0 },
+    ]);
+  });
+});

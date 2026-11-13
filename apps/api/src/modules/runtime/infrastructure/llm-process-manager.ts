@@ -3,29 +3,30 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import {
-  type RuntimeConfigSnapshot,
   type RuntimeEngineInfo,
   type RuntimeLaunchConfig,
   RuntimeLaunchConfigSchema,
   type RuntimeStatusSnapshot,
 } from '@immersion/contracts/runtime';
 
-import { findProjectRoot } from '../../../config/find-project-root.js';
-import { readDataRoot } from '../../../config/read-api-config.js';
-import { getSharedApiLogger } from '../../../platform/logging/shared-api-logger.js';
+import type { LogPort } from '../../../platform/logging/log-port.js';
+import type { HttpFetch } from '../../../platform/outbound-http/http-fetch.js';
 import { RuntimeBinaryMissingError } from '../application/runtime-errors.js';
+import type { RuntimeProcess, RuntimeStartConfig } from '../application/runtime-process.js';
 
 const PID_FILE_NAME = '.llm-server.json';
 const LOG_FILE_NAME = 'llm-server.log';
 const LOG_TAIL_BYTES = 256 * 1024;
 
-function resolveLogFilePath() {
-  return path.join(readDataRoot(), 'logs', LOG_FILE_NAME);
+export interface LlmProcessManagerOptions {
+  readonly dataRoot: string;
+  readonly httpFetch: HttpFetch;
+  readonly logger: LogPort;
+  readonly projectRoot: string;
 }
 
-function readLogFileTail(): string[] {
+function readLogFileTail(logFilePath: string): string[] {
   try {
-    const logFilePath = resolveLogFilePath();
     const { size } = fs.statSync(logFilePath);
     const start = Math.max(0, size - LOG_TAIL_BYTES);
     const handle = fs.openSync(logFilePath, 'r');
@@ -49,11 +50,6 @@ function readLogFileTail(): string[] {
 
 type RuntimeLifecycleStatus = RuntimeStatusSnapshot['status'];
 
-export interface LlmStartConfig extends Omit<RuntimeConfigSnapshot, 'modelsDirs'> {
-  mmprojPath?: string | undefined;
-  modelPath: string;
-}
-
 interface PidFileData {
   pid: number;
   port: number;
@@ -68,8 +64,7 @@ interface RuntimeBinaryLocation {
   runtimeRoot: string;
 }
 
-export function resolveRuntimeRoots() {
-  const projectRoot = getPrimaryRuntimeRoot();
+function resolveRuntimeRoots(projectRoot: string): string[] {
   const roots = [projectRoot];
   const basename = path.basename(projectRoot);
   const legacySiblingName = basename.endsWith('_engineering') ? basename.replace(/_engineering$/, '') : null;
@@ -85,12 +80,8 @@ export function resolveRuntimeRoots() {
   return roots;
 }
 
-export function getPrimaryRuntimeRoot() {
-  return findProjectRoot(import.meta.dirname);
-}
-
-function findBinary(): RuntimeBinaryLocation | null {
-  for (const runtimeRoot of resolveRuntimeRoots()) {
+function findBinary(projectRoot: string): RuntimeBinaryLocation | null {
+  for (const runtimeRoot of resolveRuntimeRoots(projectRoot)) {
     const searchPaths = [
       path.join(runtimeRoot, 'bin', 'llama-server.exe'),
       path.join(runtimeRoot, 'bin', 'llama-server'),
@@ -111,22 +102,8 @@ function findBinary(): RuntimeBinaryLocation | null {
   return null;
 }
 
-function getPidFilePath() {
-  return path.join(readDataRoot(), PID_FILE_NAME);
-}
-
-function savePidFile(data: PidFileData) {
+function readPidFile(pidFilePath: string): PidFileData | null {
   try {
-    fs.writeFileSync(getPidFilePath(), JSON.stringify(data), 'utf8');
-  } catch (error) {
-    getSharedApiLogger().error({ err: error }, 'llm-process: failed to save PID file');
-  }
-}
-
-function readPidFile(): PidFileData | null {
-  try {
-    const pidFilePath = getPidFilePath();
-
     if (!fs.existsSync(pidFilePath)) {
       return null;
     }
@@ -137,31 +114,7 @@ function readPidFile(): PidFileData | null {
   }
 }
 
-let malformedLaunchConfigPid: number | null = null;
-
-function readPidFileLaunchConfig(data: PidFileData): RuntimeLaunchConfig | null {
-  if (data.launchConfig === undefined) {
-    return null;
-  }
-
-  const parsed = RuntimeLaunchConfigSchema.safeParse(data.launchConfig);
-
-  if (parsed.success) {
-    return parsed.data;
-  }
-
-  if (malformedLaunchConfigPid !== data.pid) {
-    malformedLaunchConfigPid = data.pid;
-    getSharedApiLogger().warn(
-      { issues: parsed.error.issues, pid: data.pid },
-      'llm-process: PID file holds a malformed launchConfig; reporting it as unknown',
-    );
-  }
-
-  return null;
-}
-
-function toLaunchConfig(config: LlmStartConfig): RuntimeLaunchConfig {
+function toLaunchConfig(config: RuntimeStartConfig): RuntimeLaunchConfig {
   return {
     contextSize: config.contextSize,
     flashAttention: config.flashAttention,
@@ -170,10 +123,8 @@ function toLaunchConfig(config: LlmStartConfig): RuntimeLaunchConfig {
   };
 }
 
-function removePidFile() {
+function removePidFile(pidFilePath: string) {
   try {
-    const pidFilePath = getPidFilePath();
-
     if (fs.existsSync(pidFilePath)) {
       fs.unlinkSync(pidFilePath);
     }
@@ -182,9 +133,9 @@ function removePidFile() {
   }
 }
 
-async function isLlamaServerHealthy(port: number, timeoutMs: number): Promise<boolean> {
+async function isLlamaServerHealthy(httpFetch: HttpFetch, port: number, timeoutMs: number): Promise<boolean> {
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(timeoutMs) });
+    const response = await httpFetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(timeoutMs) });
     if (!response.ok) {
       return false;
     }
@@ -205,7 +156,7 @@ function isProcessAlive(pid: number) {
   }
 }
 
-async function killByPid(pid: number) {
+async function killByPid(pid: number, logger: LogPort) {
   if (!isProcessAlive(pid)) {
     return;
   }
@@ -226,13 +177,20 @@ async function killByPid(pid: number) {
       process.kill(pid, 'SIGKILL');
     }
   } catch (error) {
-    getSharedApiLogger().error({ err: error, pid }, 'llm-process: failed to kill process');
+    logger.error({ err: error, pid }, 'llm-process: failed to kill process');
   }
 }
 
 const MAX_LOG_LINES = 100;
 
-export class LlmProcessManager {
+export class LlmProcessManager implements RuntimeProcess {
+  private readonly projectRoot: string;
+  private readonly httpFetch: HttpFetch;
+  private readonly logger: LogPort;
+  private readonly pidFilePath: string;
+  private readonly logFilePath: string;
+  private malformedLaunchConfigPid: number | null = null;
+  private disposed = false;
   private childProcess: ChildProcess | null = null;
   private visionProjectorPath: string | null = null;
   private healthPollTimer: ReturnType<typeof setInterval> | null = null;
@@ -249,13 +207,21 @@ export class LlmProcessManager {
     launchConfig: null,
   };
 
+  constructor({ dataRoot, httpFetch, logger, projectRoot }: LlmProcessManagerOptions) {
+    this.projectRoot = projectRoot;
+    this.httpFetch = httpFetch;
+    this.logger = logger;
+    this.pidFilePath = path.join(dataRoot, PID_FILE_NAME);
+    this.logFilePath = path.join(dataRoot, 'logs', LOG_FILE_NAME);
+  }
+
   getEngineInfo(): RuntimeEngineInfo {
-    const binary = findBinary();
+    const binary = findBinary(this.projectRoot);
 
     return {
       found: binary !== null,
       executablePath: binary?.executablePath ?? null,
-      defaultModelsDir: path.join(binary?.runtimeRoot ?? getPrimaryRuntimeRoot(), 'models'),
+      defaultModelsDir: path.join(binary?.runtimeRoot ?? this.projectRoot, 'models'),
     };
   }
 
@@ -293,7 +259,7 @@ export class LlmProcessManager {
       error: null,
       port: detachedState.port,
       pid: detachedState.pid,
-      launchConfig: readPidFileLaunchConfig(detachedState),
+      launchConfig: this.readPidFileLaunchConfig(detachedState),
     };
   }
 
@@ -302,14 +268,14 @@ export class LlmProcessManager {
       return null;
     }
 
-    return this.visionProjectorPath ?? readPidFile()?.mmprojPath ?? null;
+    return this.visionProjectorPath ?? readPidFile(this.pidFilePath)?.mmprojPath ?? null;
   }
 
-  getLogs() {
-    return this.logBuffer.length > 0 ? [...this.logBuffer] : readLogFileTail();
+  getLogs(): string[] {
+    return this.logBuffer.length > 0 ? [...this.logBuffer] : readLogFileTail(this.logFilePath);
   }
 
-  async start(config: LlmStartConfig) {
+  async start(config: RuntimeStartConfig): Promise<void> {
     if (
       this.state.status === 'running' ||
       this.state.status === 'starting' ||
@@ -319,7 +285,7 @@ export class LlmProcessManager {
       await this.stop();
     }
 
-    const binary = findBinary();
+    const binary = findBinary(this.projectRoot);
 
     if (!binary) {
       throw new RuntimeBinaryMissingError();
@@ -373,7 +339,7 @@ export class LlmProcessManager {
     this.state.pid = spawned.pid ?? null;
 
     if (this.state.pid) {
-      savePidFile({
+      this.savePidFile({
         pid: this.state.pid,
         port: config.port,
         model: this.state.model ?? path.basename(config.modelPath),
@@ -401,7 +367,7 @@ export class LlmProcessManager {
         error: `Не удалось запустить llama-server: ${error.message}`,
         pid: null,
       });
-      removePidFile();
+      removePidFile(this.pidFilePath);
       this.cleanupTimers();
     });
 
@@ -423,7 +389,7 @@ export class LlmProcessManager {
         });
       }
 
-      removePidFile();
+      removePidFile(this.pidFilePath);
       this.cleanupTimers();
     });
 
@@ -431,20 +397,20 @@ export class LlmProcessManager {
     this.startHealthPoll(config.port);
   }
 
-  async stop() {
+  async stop(): Promise<void> {
     this.setStateStatus('stopping');
     await this.killCurrentProcess();
   }
 
-  async reconnectToDetachedRuntime() {
-    const pidFile = readPidFile();
+  async reconnect(): Promise<void> {
+    const pidFile = readPidFile(this.pidFilePath);
 
     if (!pidFile) {
       return;
     }
 
     if (!isProcessAlive(pidFile.pid)) {
-      removePidFile();
+      removePidFile(this.pidFilePath);
       return;
     }
 
@@ -455,10 +421,10 @@ export class LlmProcessManager {
       error: null,
       port: pidFile.port,
       pid: pidFile.pid,
-      launchConfig: readPidFileLaunchConfig(pidFile),
+      launchConfig: this.readPidFileLaunchConfig(pidFile),
     });
 
-    if (await isLlamaServerHealthy(pidFile.port, 3000)) {
+    if (await isLlamaServerHealthy(this.httpFetch, pidFile.port, 3000)) {
       this.setStateStatus('running', {
         error: null,
       });
@@ -466,6 +432,42 @@ export class LlmProcessManager {
     }
 
     this.startHealthPoll(pidFile.port);
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    this.cleanupTimers();
+    this.closeLogFile();
+  }
+
+  private savePidFile(data: PidFileData) {
+    try {
+      fs.writeFileSync(this.pidFilePath, JSON.stringify(data), 'utf8');
+    } catch (error) {
+      this.logger.error({ err: error }, 'llm-process: failed to save PID file');
+    }
+  }
+
+  private readPidFileLaunchConfig(data: PidFileData): RuntimeLaunchConfig | null {
+    if (data.launchConfig === undefined) {
+      return null;
+    }
+
+    const parsed = RuntimeLaunchConfigSchema.safeParse(data.launchConfig);
+
+    if (parsed.success) {
+      return parsed.data;
+    }
+
+    if (this.malformedLaunchConfigPid !== data.pid) {
+      this.malformedLaunchConfigPid = data.pid;
+      this.logger.warn(
+        { issues: parsed.error.issues, pid: data.pid },
+        'llm-process: PID file holds a malformed launchConfig; reporting it as unknown',
+      );
+    }
+
+    return null;
   }
 
   private setStateStatus(status: RuntimeLifecycleStatus, overrides: Partial<RuntimeStatusSnapshot> = {}) {
@@ -482,7 +484,7 @@ export class LlmProcessManager {
     try {
       this.logStream?.write(`${line}\n`);
     } catch (error) {
-      getSharedApiLogger().warn({ err: error }, 'Failed to write llm-server log line');
+      this.logger.warn({ err: error }, 'Failed to write llm-server log line');
     }
   }
 
@@ -490,11 +492,10 @@ export class LlmProcessManager {
     this.closeLogFile();
 
     try {
-      const logFilePath = resolveLogFilePath();
-      fs.mkdirSync(path.dirname(logFilePath), { recursive: true });
-      this.logStream = fs.createWriteStream(logFilePath, { flags: 'w' });
+      fs.mkdirSync(path.dirname(this.logFilePath), { recursive: true });
+      this.logStream = fs.createWriteStream(this.logFilePath, { flags: 'w' });
     } catch (error) {
-      getSharedApiLogger().warn({ err: error }, 'Failed to open llm-server log file');
+      this.logger.warn({ err: error }, 'Failed to open llm-server log file');
       this.logStream = null;
     }
   }
@@ -519,8 +520,12 @@ export class LlmProcessManager {
   private startHealthPoll(port: number) {
     this.cleanupTimers();
 
+    if (this.disposed) {
+      return;
+    }
+
     this.healthPollTimer = setInterval(async () => {
-      if (await isLlamaServerHealthy(port, 2000)) {
+      if (await isLlamaServerHealthy(this.httpFetch, port, 2000)) {
         this.setStateStatus('running', {
           error: null,
         });
@@ -542,14 +547,14 @@ export class LlmProcessManager {
   }
 
   private getDetachedRuntimeState() {
-    const pidFile = readPidFile();
+    const pidFile = readPidFile(this.pidFilePath);
 
     if (!pidFile) {
       return null;
     }
 
     if (!isProcessAlive(pidFile.pid)) {
-      removePidFile();
+      removePidFile(this.pidFilePath);
       return null;
     }
 
@@ -578,12 +583,12 @@ export class LlmProcessManager {
         proc.kill('SIGTERM');
       });
     } else if (activePid) {
-      await killByPid(activePid);
+      await killByPid(activePid, this.logger);
     } else {
-      const pidFile = readPidFile();
+      const pidFile = readPidFile(this.pidFilePath);
 
       if (pidFile) {
-        await killByPid(pidFile.pid);
+        await killByPid(pidFile.pid, this.logger);
       }
     }
 
@@ -596,16 +601,6 @@ export class LlmProcessManager {
       pid: null,
       launchConfig: null,
     });
-    removePidFile();
+    removePidFile(this.pidFilePath);
   }
-}
-
-let sharedManager: LlmProcessManager | null = null;
-
-export function getLlmProcessManager(): LlmProcessManager {
-  if (!sharedManager) {
-    sharedManager = new LlmProcessManager();
-  }
-
-  return sharedManager;
 }
