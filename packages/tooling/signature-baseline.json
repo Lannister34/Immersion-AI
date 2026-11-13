@@ -63,7 +63,6 @@
   "apps/web/src/modules/server-control/api/get-runtime-overview.ts": "explicit-return-type:1",
   "apps/web/src/modules/server-control/api/pick-runtime-directory.ts": "explicit-return-type:1",
   "apps/web/src/modules/server-control/api/probe-provider-models.ts": "explicit-return-type:1",
-  "apps/web/src/modules/server-control/api/save-provider-settings.ts": "explicit-return-type:1",
   "apps/web/src/modules/server-control/api/save-runtime-config.ts": "explicit-return-type:1",
   "apps/web/src/modules/server-control/api/start-runtime.ts": "explicit-return-type:1",
   "apps/web/src/modules/server-control/api/stop-runtime.ts": "explicit-return-type:1",
