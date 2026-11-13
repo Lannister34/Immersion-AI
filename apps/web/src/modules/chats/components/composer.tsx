@@ -14,11 +14,13 @@ import {
 } from '../../../shared/ui/icons';
 import { formatContextEstimate } from '../view-models/context-estimate';
 import type { ContextStats } from '../view-models/context-stats';
+import { isImageFile } from '../view-models/is-image-file';
 
 export interface ComposerProps {
   attachments: ChatMessageAttachmentDto[];
   attachmentsHint: string;
   attachmentsError: string | null;
+  attachmentsNotice: string | null;
   blockReason?: string | undefined;
   canAttachImages: boolean;
   isUploadingAttachment: boolean;
@@ -45,6 +47,7 @@ export function Composer({
   attachments,
   attachmentsError,
   attachmentsHint,
+  attachmentsNotice,
   blockReason,
   canAttachImages,
   isUploadingAttachment,
@@ -80,7 +83,7 @@ export function Composer({
       return;
     }
 
-    const pasted = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith('image/'));
+    const pasted = Array.from(event.clipboardData.files).filter(isImageFile);
 
     if (pasted.length > 0) {
       event.preventDefault();
@@ -204,6 +207,11 @@ export function Composer({
       {sendHint ? (
         <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
           {sendHint}
+        </div>
+      ) : null}
+      {attachmentsNotice ? (
+        <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
+          {attachmentsNotice}
         </div>
       ) : null}
       {attachmentsError ? (

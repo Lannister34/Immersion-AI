@@ -41,6 +41,7 @@ import type { MessageEditTarget } from '../view-models/message-edit-target';
 import { BubbleMessage } from './bubble-message';
 import { ChatHeader } from './chat-header';
 import { Composer } from './composer';
+import { ImageDropZone } from './image-drop-zone';
 import { RightPanel } from './right-panel';
 import { StreamingReply } from './streaming-reply';
 
@@ -72,6 +73,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const [draftMessage, setDraftMessage] = useState('');
   const [editing, setEditing] = useState<MessageEditTarget | null>(null);
   const attachmentsDraft = useChatAttachments(chatId);
+  const [dropNotice, setDropNotice] = useState<string | null>(null);
   const debouncedDraftMessage = useDebouncedValue(draftMessage, 400);
   const panelTab = useUiShellStore((state) => state.chatRightPanelTab);
   const setPanelTab = useUiShellStore((state) => state.setChatRightPanelTab);
@@ -205,6 +207,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const blockReason = generationAvailability.blockReason;
   const isStreaming = Boolean(chatReplyGeneration.activeJob);
   const vision = describeVisionSupport(generationReadinessQuery.data?.visionSupport);
+  const canAttachImages = vision.allowsImages && !blockReason;
   const showReasoning = settingsOverviewQuery.data?.profile.thinkingEnabled ?? true;
   const messageActions = deriveMessageActions({
     blockReason,
@@ -236,11 +239,17 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
     const attachmentIds = attachmentsDraft.attachments.map((attachment) => attachment.id);
     setDraftMessage('');
     attachmentsDraft.clear();
+    setDropNotice(null);
     try {
       await chatReplyGeneration.start(message, attachmentIds);
     } catch {
       setDraftMessage(message);
     }
+  };
+
+  const attachFiles = (files: readonly File[]) => {
+    setDropNotice(null);
+    attachmentsDraft.attach(files);
   };
 
   const onContinue = async () => {
@@ -377,13 +386,17 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
             </>
           }
         />
-        <div
+        <ImageDropZone
+          canAttachImages={canAttachImages}
+          onAttachFiles={attachFiles}
+          onNotice={setDropNotice}
           style={{
             display: 'grid',
             gridTemplateRows: 'auto minmax(0, 1fr) auto',
             minHeight: 0,
             overflow: 'hidden',
           }}
+          unavailableReason={blockReason ?? vision.hint}
         >
           <ChatHeader
             avatarUrl={session.characterAvatarUrl}
@@ -501,10 +514,11 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                 attachments={attachmentsDraft.attachments}
                 attachmentsError={attachmentsDraft.error}
                 attachmentsHint={vision.hint}
+                attachmentsNotice={dropNotice}
                 blockReason={blockReason}
-                canAttachImages={vision.allowsImages && !blockReason}
+                canAttachImages={canAttachImages}
                 isUploadingAttachment={attachmentsDraft.isUploading}
-                onAttachFiles={attachmentsDraft.attach}
+                onAttachFiles={attachFiles}
                 onRemoveAttachment={attachmentsDraft.remove}
                 canAnswer={canAnswer}
                 canContinue={canContinue}
@@ -524,7 +538,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
               />
             </div>
           </div>
-        </div>
+        </ImageDropZone>
       </main>
       {isPanelOpen ? (
         <RightPanel
