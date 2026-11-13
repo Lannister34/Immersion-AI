@@ -102,6 +102,7 @@ test('shows a failed model start with its error and logs and lets it be retried'
   };
   let serverStatus: RuntimeStatusSnapshot = {
     error: null,
+    launchConfig: null,
     model: 'secondary.gguf',
     modelPath: failedModel.path,
     pid: 4242,

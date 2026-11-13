@@ -17,6 +17,7 @@ const FAILED_START: RuntimeOverviewResponse = {
   serverConfig: { contextSize: 8192, flashAttention: true, gpuLayers: 99, modelsDirs: [], port: 5001, threads: 0 },
   serverStatus: {
     error: START_FAILURE,
+    launchConfig: null,
     model: 'secondary.gguf',
     modelPath: MODEL_PATH,
     pid: null,

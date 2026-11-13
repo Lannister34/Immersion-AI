@@ -46,7 +46,16 @@ function overviewWith(
       port: 5001,
       threads: 0,
     },
-    serverStatus: { error: null, model: null, modelPath: null, pid: null, port: 5001, status: 'idle', ...serverStatus },
+    serverStatus: {
+      error: null,
+      launchConfig: null,
+      model: null,
+      modelPath: null,
+      pid: null,
+      port: 5001,
+      status: 'idle',
+      ...serverStatus,
+    },
   };
 }
 
