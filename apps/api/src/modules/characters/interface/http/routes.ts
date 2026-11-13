@@ -6,7 +6,9 @@ import {
 } from '@immersion/contracts/characters';
 import type { FastifyPluginAsync } from 'fastify';
 
+import type { Clock } from '../../../../platform/clock/clock.js';
 import { parseRequest } from '../../../../platform/http/parse-request.js';
+import type { CharacterStore } from '../../application/character-store.js';
 import { deleteCharacter } from '../../application/delete-character.js';
 import { deleteCharacterAvatar } from '../../application/delete-character-avatar.js';
 import { getCharacter } from '../../application/get-character.js';
@@ -18,7 +20,9 @@ import { uploadCharacterAvatar } from '../../application/upload-character-avatar
 import { CharacterRouteParamsSchema } from './request-schemas.js';
 
 export interface CharactersRoutesDependencies {
+  readonly characterStore: CharacterStore;
   readonly chatStats: CharacterChatStatsPort;
+  readonly clock: Clock;
 }
 
 export function createCharactersRoutes(dependencies: CharactersRoutesDependencies): FastifyPluginAsync {
@@ -27,21 +31,21 @@ export function createCharactersRoutes(dependencies: CharactersRoutesDependencie
 
     app.post('/', async (request, reply) => {
       const command = parseRequest(SaveCharacterCommandSchema, request.body);
-      const character = await createCharacter(command);
+      const character = await createCharacter(command, dependencies);
 
       return reply.status(201).send(CharacterDetailResponseSchema.parse({ character }));
     });
 
     app.post('/import', async (request, reply) => {
       const command = parseRequest(ImportCharacterCardCommandSchema, request.body);
-      const character = await importCharacterCard(command);
+      const character = await importCharacterCard(command, dependencies);
 
       return reply.status(201).send(CharacterDetailResponseSchema.parse({ character }));
     });
 
     app.get('/:characterId', async (request) => {
       const { characterId } = parseRequest(CharacterRouteParamsSchema, request.params);
-      const character = await getCharacter(characterId);
+      const character = await getCharacter(characterId, dependencies);
 
       return CharacterDetailResponseSchema.parse({ character });
     });
@@ -49,14 +53,14 @@ export function createCharactersRoutes(dependencies: CharactersRoutesDependencie
     app.put('/:characterId', async (request) => {
       const { characterId } = parseRequest(CharacterRouteParamsSchema, request.params);
       const command = parseRequest(SaveCharacterCommandSchema, request.body);
-      const character = await updateCharacter(characterId, command);
+      const character = await updateCharacter(characterId, command, dependencies);
 
       return CharacterDetailResponseSchema.parse({ character });
     });
 
     app.delete('/:characterId', async (request, reply) => {
       const { characterId } = parseRequest(CharacterRouteParamsSchema, request.params);
-      await deleteCharacter(characterId);
+      await deleteCharacter(characterId, dependencies);
 
       return reply.status(204).send();
     });
@@ -64,21 +68,21 @@ export function createCharactersRoutes(dependencies: CharactersRoutesDependencie
     app.put('/:characterId/avatar', async (request) => {
       const { characterId } = parseRequest(CharacterRouteParamsSchema, request.params);
       const command = parseRequest(UploadCharacterAvatarCommandSchema, request.body);
-      const character = await uploadCharacterAvatar(characterId, command);
+      const character = await uploadCharacterAvatar(characterId, command, dependencies);
 
       return CharacterDetailResponseSchema.parse({ character });
     });
 
     app.delete('/:characterId/avatar', async (request, reply) => {
       const { characterId } = parseRequest(CharacterRouteParamsSchema, request.params);
-      await deleteCharacterAvatar(characterId);
+      await deleteCharacterAvatar(characterId, dependencies);
 
       return reply.status(204).send();
     });
 
     app.get('/:characterId/avatar', async (request, reply) => {
       const { characterId } = parseRequest(CharacterRouteParamsSchema, request.params);
-      const payload = await getCharacterAvatar(characterId);
+      const payload = await getCharacterAvatar(characterId, dependencies);
 
       reply.header('Content-Type', payload.contentType);
       reply.header('Cache-Control', 'private, max-age=300');

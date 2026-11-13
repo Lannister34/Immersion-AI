@@ -1,26 +1,29 @@
-import type { LorebookDetailDto, LorebookEntryDto } from '@immersion/contracts/lorebooks';
+import type { LorebookDetailDto } from '@immersion/contracts/lorebooks';
 
-import {
-  createLorebookFile,
-  readLorebookDetail,
-  writeLorebookFile,
-} from '../infrastructure/file-lorebook-repository.js';
+import type { Clock } from '../../../platform/clock/clock.js';
 import { LorebookNotFoundError } from './get-lorebook.js';
+import type { LorebookFields, LorebookStore } from './lorebook-store.js';
 
-export interface SaveLorebookInput {
-  entries: LorebookEntryDto[];
-  name: string;
-  tags: string[];
+export interface SaveLorebookDependencies {
+  readonly clock: Clock;
+  readonly lorebookStore: Pick<LorebookStore, 'createLorebook' | 'readLorebookDetail' | 'writeLorebook'>;
 }
 
-export async function updateLorebook(id: string, input: SaveLorebookInput): Promise<LorebookDetailDto> {
-  const existing = await readLorebookDetail(id);
+export async function updateLorebook(
+  id: string,
+  fields: LorebookFields,
+  { clock, lorebookStore }: SaveLorebookDependencies,
+): Promise<LorebookDetailDto> {
+  const existing = await lorebookStore.readLorebookDetail(id);
   if (!existing) {
     throw new LorebookNotFoundError(id);
   }
-  return writeLorebookFile(id, input);
+  return lorebookStore.writeLorebook(id, fields, clock.now().toISOString());
 }
 
-export async function createLorebook(input: SaveLorebookInput): Promise<LorebookDetailDto> {
-  return createLorebookFile(input);
+export async function createLorebook(
+  fields: LorebookFields,
+  { clock, lorebookStore }: SaveLorebookDependencies,
+): Promise<LorebookDetailDto> {
+  return lorebookStore.createLorebook(fields, clock.now().toISOString());
 }

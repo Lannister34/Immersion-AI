@@ -1,7 +1,11 @@
 export const charactersModuleId = 'characters' as const;
 
-export { findCharacter } from './application/find-character.js';
-export { getCharacter } from './application/get-character.js';
+export type { CharacterStore } from './application/character-store.js';
 export { CharacterNotFoundError } from './application/get-character-avatar.js';
+export {
+  type CharactersModule,
+  type CharactersModuleDependencies,
+  createCharactersModule,
+} from './characters-module.js';
+export { createFileCharacterStore } from './infrastructure/file-character-store.js';
 export { charactersProblems } from './interface/http/characters-problems.js';
-export { createCharactersRoutes } from './interface/http/routes.js';

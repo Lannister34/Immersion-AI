@@ -1,7 +1,5 @@
-import fs from 'node:fs/promises';
-
-import { findCharacterAvatarFilePath, findCharacterFile } from '../infrastructure/file-character-repository.js';
 import { avatarContentTypeOf } from './avatar-image-format.js';
+import type { CharacterStore } from './character-store.js';
 
 export class CharacterNotFoundError extends Error {
   constructor(characterId: string) {
@@ -22,17 +20,23 @@ export interface CharacterAvatarPayload {
   contentType: string;
 }
 
-export async function getCharacterAvatar(characterId: string): Promise<CharacterAvatarPayload> {
-  const summary = await findCharacterFile(characterId);
+export interface GetCharacterAvatarDependencies {
+  readonly characterStore: Pick<CharacterStore, 'findCharacterSummary' | 'readCharacterAvatar'>;
+}
+
+export async function getCharacterAvatar(
+  characterId: string,
+  { characterStore }: GetCharacterAvatarDependencies,
+): Promise<CharacterAvatarPayload> {
+  const summary = await characterStore.findCharacterSummary(characterId);
   if (!summary) {
     throw new CharacterNotFoundError(characterId);
   }
 
-  const avatarFilePath = await findCharacterAvatarFilePath(summary.id);
-  if (!avatarFilePath) {
+  const body = await characterStore.readCharacterAvatar(summary.id);
+  if (!body) {
     throw new CharacterAvatarNotFoundError(characterId);
   }
-  const body = await fs.readFile(avatarFilePath);
   return {
     body,
     contentType: avatarContentTypeOf(body),

@@ -1,12 +1,8 @@
 import type { CharacterDetailDto, UploadCharacterAvatarCommand } from '@immersion/contracts/characters';
 import { IMAGE_UPLOAD_MAX_BYTES, IMAGE_UPLOAD_MAX_MEGABYTES } from '@immersion/contracts/common';
 
-import {
-  findCharacterFile,
-  readCharacterDetail,
-  writeCharacterAvatarFile,
-} from '../infrastructure/file-character-repository.js';
 import { detectAvatarImageFormat } from './avatar-image-format.js';
+import type { CharacterStore } from './character-store.js';
 import { CharacterNotFoundError } from './get-character-avatar.js';
 
 export class InvalidAvatarImageError extends Error {
@@ -16,11 +12,19 @@ export class InvalidAvatarImageError extends Error {
   }
 }
 
+export interface UploadCharacterAvatarDependencies {
+  readonly characterStore: Pick<
+    CharacterStore,
+    'findCharacterSummary' | 'readCharacterDetail' | 'writeCharacterAvatar'
+  >;
+}
+
 export async function uploadCharacterAvatar(
   characterId: string,
   command: UploadCharacterAvatarCommand,
+  { characterStore }: UploadCharacterAvatarDependencies,
 ): Promise<CharacterDetailDto> {
-  const summary = await findCharacterFile(characterId);
+  const summary = await characterStore.findCharacterSummary(characterId);
   if (!summary) {
     throw new CharacterNotFoundError(characterId);
   }
@@ -38,9 +42,9 @@ export async function uploadCharacterAvatar(
     throw new InvalidAvatarImageError('Содержимое файла не совпадает с заявленным форматом изображения.');
   }
 
-  await writeCharacterAvatarFile(summary.id, bytes, format.extension);
+  await characterStore.writeCharacterAvatar(summary.id, bytes, format.extension);
 
-  const detail = await readCharacterDetail(summary.id);
+  const detail = await characterStore.readCharacterDetail(summary.id);
   if (!detail) {
     throw new CharacterNotFoundError(characterId);
   }

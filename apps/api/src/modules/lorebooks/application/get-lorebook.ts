@@ -1,6 +1,6 @@
 import type { LorebookDetailDto } from '@immersion/contracts/lorebooks';
 
-import { readLorebookDetail } from '../infrastructure/file-lorebook-repository.js';
+import type { LorebookStore } from './lorebook-store.js';
 
 export class LorebookNotFoundError extends Error {
   constructor(lorebookId: string) {
@@ -9,8 +9,12 @@ export class LorebookNotFoundError extends Error {
   }
 }
 
-export async function getLorebook(id: string): Promise<LorebookDetailDto> {
-  const detail = await readLorebookDetail(id);
+export interface GetLorebookDependencies {
+  readonly lorebookStore: Pick<LorebookStore, 'readLorebookDetail'>;
+}
+
+export async function getLorebook(id: string, { lorebookStore }: GetLorebookDependencies): Promise<LorebookDetailDto> {
+  const detail = await lorebookStore.readLorebookDetail(id);
   if (!detail) {
     throw new LorebookNotFoundError(id);
   }
