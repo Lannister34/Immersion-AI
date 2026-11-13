@@ -15,6 +15,7 @@ import { heuristicTokenCounter } from '../modules/prompting/index.js';
 import type { VisionProbe } from '../modules/providers/index.js';
 import { LlmProcessManager, ModelDirectoryScanner } from '../modules/runtime/index.js';
 import { createFileScenarioStore } from '../modules/scenarios/index.js';
+import { UserSettingsFile } from '../modules/settings/index.js';
 import type { Clock } from '../platform/clock/clock.js';
 import { systemClock } from '../platform/clock/system-clock.js';
 import { createKeyedSerialQueue } from '../platform/concurrency/keyed-serial-queue.js';
@@ -30,6 +31,7 @@ import { createManualClock } from '../test-support/manual-clock.js';
 import { openAiChatCompletion } from '../test-support/provider-responses.js';
 import { readStoredChatFile } from '../test-support/stored-chat-file.js';
 import { createTemporaryProject } from '../test-support/temporary-project.js';
+import { createTestApi } from '../test-support/test-api.js';
 import { createApiDependencies } from './api-dependencies.js';
 import { createApiModules } from './create-api-modules.js';
 
@@ -146,6 +148,71 @@ describe('createApiDependencies', () => {
     expect(second.runtimeProcess).not.toBe(first.runtimeProcess);
     expect(first.modelScanner).toBeInstanceOf(ModelDirectoryScanner);
     expect(second.modelScanner).not.toBe(first.modelScanner);
+    expect(first.userSettings).toBeInstanceOf(UserSettingsFile);
+    expect(second.userSettings).not.toBe(first.userSettings);
+  });
+
+  it('reads user settings from <dataRoot>/user-settings.json', async () => {
+    const config = await claimConfig();
+    await fs.writeFile(
+      path.join(config.dataRoot, 'user-settings.json'),
+      JSON.stringify({ userName: 'Тестер', backendMode: 'builtin' }),
+      'utf8',
+    );
+    const dependencies = createApiDependencies(config, { logger: createCapturingLogger().logger });
+    const modules = createApiModules(dependencies);
+
+    expect(dependencies.userSettings.read()).toEqual({ backendMode: 'builtin', userName: 'Тестер' });
+    expect(modules.settings.getProfileUserName()).toBe('Тестер');
+    await expect(modules.providers.getProviderSettings()).resolves.toMatchObject({ mode: 'builtin' });
+  });
+
+  it('sends the settings, provider and runtime writes of one app through its one settings document', async () => {
+    const userSettings = createInMemoryUserSettings({ userName: 'Тестер' });
+    const { app } = await createTestApi({ overrides: { userSettings } });
+
+    const responses = await Promise.all([
+      app.inject({ method: 'PATCH', url: '/api/providers/settings', payload: { mode: 'builtin' } }),
+      app.inject({ method: 'PUT', url: '/api/runtime/config', payload: { contextSize: 4096 } }),
+      app.inject({
+        method: 'PUT',
+        url: '/api/settings/profile',
+        payload: {
+          messageFormatting: { actionsItalic: true, quotesHighlighted: false },
+          responseLanguage: 'ru',
+          streamingEnabled: true,
+          systemPromptTemplate: '',
+          thinkingEnabled: false,
+          userName: 'Переименован',
+          userPersona: '',
+        },
+      }),
+    ]);
+
+    expect(responses.map((response) => response.statusCode)).toEqual([200, 200, 200]);
+    expect(userSettings.writes).toHaveLength(3);
+    expect(userSettings.read()).toMatchObject({
+      backendMode: 'builtin',
+      llmServerConfig: { contextSize: 4096 },
+      userName: 'Переименован',
+    });
+  });
+
+  it("two apps with different data roots never see each other's settings", async () => {
+    const firstConfig = await claimConfig();
+    const secondConfig = await claimConfig();
+    const logger = createCapturingLogger().logger;
+    const firstDependencies = createApiDependencies(firstConfig, { logger });
+    const first = createApiModules(firstDependencies);
+    const second = createApiModules(createApiDependencies(secondConfig, { logger }));
+
+    await firstDependencies.userSettings.update((current) => ({ ...current, userName: 'Первый' }));
+
+    expect(first.settings.getProfileUserName()).toBe('Первый');
+    expect(second.settings.getProfileUserName()).toBe('User');
+    await expect(fs.stat(path.join(secondConfig.dataRoot, 'user-settings.json'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
   });
 
   it('looks for llama-server under the configured project root and reads its PID file from the configured data root', async () => {

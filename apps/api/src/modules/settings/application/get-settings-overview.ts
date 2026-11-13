@@ -1,7 +1,11 @@
 import { type SettingsOverviewResponse, SettingsOverviewResponseSchema } from '@immersion/contracts/settings';
 
-import { readLegacyUserSettingsSource } from '../../../shared/infrastructure/legacy-settings-source.js';
 import { DEFAULT_USER_NAME } from './get-profile-user-name.js';
+import type { UserSettingsDocument } from './user-settings-document.js';
+
+export interface GetSettingsOverviewDependencies {
+  readonly userSettings: Pick<UserSettingsDocument, 'read'>;
+}
 
 const DEFAULT_SAMPLER_PRESET = {
   contextTrimStrategy: 'trim_middle',
@@ -94,8 +98,8 @@ function getModelBindings(
   });
 }
 
-export function getSettingsOverview(): SettingsOverviewResponse {
-  const source = readLegacyUserSettingsSource();
+export function getSettingsOverview({ userSettings }: GetSettingsOverviewDependencies): SettingsOverviewResponse {
+  const source = userSettings.read();
 
   const samplerPresets = Array.isArray(source.samplerPresets) ? source.samplerPresets : [];
   const presets = samplerPresets.flatMap((preset) => {

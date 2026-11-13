@@ -6,7 +6,6 @@
   "apps/api/src/modules/generation/infrastructure/provider-clients/openai/request.ts": "explicit-return-type:2",
   "apps/api/src/modules/providers/application/generation-provider.ts": "explicit-return-type:3",
   "apps/api/src/platform/storage/atomic-file.ts": "explicit-return-type:2",
-  "apps/api/src/shared/infrastructure/legacy-settings-source.ts": "explicit-return-type:2",
   "apps/web/src/app/query-client.ts": "explicit-return-type:1",
   "apps/web/src/modules/characters/api/character-avatar.ts": "explicit-return-type:2",
   "apps/web/src/modules/characters/api/get-character.ts": "explicit-return-type:1",
