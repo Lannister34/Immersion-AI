@@ -57,29 +57,51 @@ value stops the client from loading, with an error in the browser console that n
 Earlier versions started with `npm run dev:api` or `start.bat` kept data in `apps/data`: move that
 folder to `data` in the repository root to keep your library.
 
-### Opening the app to your local network
+### Password and local network
 
-By default the Vite dev server listens on `127.0.0.1` only. To use the app from a phone or another
-computer on the same network, create `apps/web/.env.local` (ignored by git) with:
+To ask for a password in the browser, create `apps/web/.env.local` (ignored by git) with:
+
+```
+IMMERSION_WEB_PASSWORD=your-password-or-PIN
+```
+
+The password is at least 4 characters, so a PIN works; use 6 digits or more, since a 4-digit PIN
+can be guessed within a day or two from the network. Once it is set, every browser that opens the
+app through the dev server, this computer included, gets a login page, and every page load asks
+again: a reload, a new tab or a reopened browser shows the login. Opening the app in a new tab
+signs the other tabs of that browser out: each returns to the login page at its next request.
+Wrong passwords make that address wait longer after each attempt, up to 5 minutes, and after 30
+wrong passwords in 10 minutes from anywhere every login waits. To log out without reloading, open
+`/__web/logout`. With no password set, nothing asks for one.
+
+By default the dev server listens on `127.0.0.1` only. To use the app from a phone or another
+computer on the same network, add:
 
 ```
 IMMERSION_WEB_LAN=1
 ```
 
-The dev server restarts by itself and listens on every IPv4 interface; `pm2 restart immersion-web`
-does the same. Open `http://<this computer's IP>:4788` on the other device: the address, not the
-computer's name, which the dev server refuses. Delete the line or set `0` to close it again. The
-variable accepts `1`, `true`, `yes`, `on`, `0`, `false`, `no` or `off`; a non-blank value in the
-process environment wins over the file, and any other value, an unknown `IMMERSION_` key or a UTF-16
-file stops the dev server at startup. The API stays on loopback and is reached through the dev
-server's `/api` proxy, so leave `VITE_API_BASE_URL` unset; the dev server also reads
-`IMMERSION_API_PROXY_TARGET` (default `http://127.0.0.1:4787`) from the same file.
+LAN access requires the password: without it the dev server refuses to start. The dev server
+restarts by itself when the file changes, and listens on every IPv4 interface; `pm2 restart
+immersion-web` does the same. Open `http://<this computer's IP>:4788` on the other device: the
+address, not the computer's name, which the dev server refuses. Delete the line or set `0` to close
+it again. The variable accepts `1`, `true`, `yes`, `on`, `0`, `false`, `no` or `off`; a value set
+in the process environment wins over the file (a blank one meaning unset), and any other value, an
+unknown `IMMERSION_` key or a UTF-16 file stops the dev server at startup. The API stays on loopback
+and is reached through the dev server's `/api` proxy, so leave `VITE_API_BASE_URL` unset; the dev
+server also reads `IMMERSION_API_PROXY_TARGET` (default `http://127.0.0.1:4787`) from the same
+file.
 
 Only callers from loopback and the private and link-local ranges (`10.0.0.0/8`, `172.16.0.0/12`,
-`192.168.0.0/16`, `169.254.0.0/16`) are served; a connection from any other address is dropped. There
-is no password: everyone on the network can use the app as you do. Stored provider keys are never
-returned, but anyone there can replace them, clear them or point a provider at another server. The
-file stays on when a laptop joins another network, such as a café's Wi-Fi.
+`192.168.0.0/16`, `169.254.0.0/16`) are served; a connection from any other address is dropped.
+The password crosses the network unencrypted, as plain HTTP, so use it on a network you trust.
+Anyone who knows it can use the app as you do: stored provider keys are never returned, but they
+can be replaced, cleared or sent to another server through a changed provider address. The file
+stays on when a laptop joins another network, such as a café's Wi-Fi.
+
+The password guards the browser path only. The API on `127.0.0.1:4787`, which the ComfyUI nodes
+and other local programs call directly, asks for nothing: any program on this computer can read
+`data/` anyway.
 
 ## Using Immersion as a backend
 
@@ -216,30 +238,52 @@ Vite. Если она не задана или пуста, клиент шлёт
 Прежние версии, запущенные через `npm run dev:api` или `start.bat`, хранили данные в `apps/data`:
 перенесите эту папку в `data` в корне репозитория, чтобы не потерять библиотеку.
 
-### Доступ из локальной сети
+### Пароль и локальная сеть
 
-По умолчанию dev-сервер Vite слушает только `127.0.0.1`. Чтобы пользоваться приложением с телефона
-или другого компьютера в той же сети, создайте `apps/web/.env.local` (git его игнорирует) со
-строкой:
+Чтобы браузер спрашивал пароль, создайте `apps/web/.env.local` (git его игнорирует) со строкой:
+
+```
+IMMERSION_WEB_PASSWORD=ваш-пароль-или-PIN
+```
+
+Пароль — не короче 4 символов, так что подойдёт и PIN; берите 6 цифр и больше: 4-значный PIN из
+сети можно подобрать за день-два. Когда он задан, любой браузер,
+открывающий приложение через dev-сервер, включая этот компьютер, видит страницу входа, и каждая
+загрузка страницы спрашивает пароль заново: после обновления, в новой вкладке и после перезапуска
+браузера. Открытие приложения в новой вкладке выводит из системы другие вкладки этого браузера:
+каждая возвращается на страницу входа при следующем запросе. После каждого неверного пароля адрес
+ждёт дольше, вплоть до 5 минут, а после 30 неверных паролей за 10 минут с любых адресов ждут все
+входы. Чтобы выйти без обновления, откройте `/__web/logout`. Без пароля ничего не спрашивается.
+
+По умолчанию dev-сервер слушает только `127.0.0.1`. Чтобы пользоваться приложением с телефона или
+другого компьютера в той же сети, добавьте:
 
 ```
 IMMERSION_WEB_LAN=1
 ```
 
-Dev-сервер перезапустится сам и будет слушать все IPv4-интерфейсы; `pm2 restart immersion-web`
-делает то же. На другом устройстве откройте `http://<IP этого компьютера>:4788` — именно адрес, а не
-имя компьютера: имя dev-сервер отклоняет. Чтобы снова закрыть доступ, удалите строку или поставьте
-`0`. Переменная принимает `1`, `true`, `yes`, `on`, `0`, `false`, `no` или `off`; непустое значение
-из окружения процесса важнее файла, а любое другое значение, неизвестный ключ `IMMERSION_` или файл
-в UTF-16 останавливают dev-сервер при запуске. API остаётся на loopback, и до него доходят через
-прокси `/api` dev-сервера, поэтому `VITE_API_BASE_URL` не задавайте; из того же файла dev-сервер
-читает и `IMMERSION_API_PROXY_TARGET` (по умолчанию `http://127.0.0.1:4787`).
+Доступ из сети требует пароля: без него dev-сервер не запустится. Dev-сервер сам перезапускается,
+когда файл меняется, и слушает все IPv4-интерфейсы; `pm2 restart immersion-web` делает то же. На
+другом устройстве откройте `http://<IP этого компьютера>:4788` — именно адрес, а не имя
+компьютера: имя dev-сервер отклоняет. Чтобы снова закрыть доступ, удалите строку или поставьте
+`0`. Переменная принимает `1`, `true`, `yes`, `on`, `0`, `false`, `no` или `off`; значение из
+окружения процесса важнее файла (пустое значит «не задано»), а любое другое значение, неизвестный
+ключ `IMMERSION_` или файл в UTF-16 останавливают dev-сервер при запуске. API остаётся на loopback,
+и до него доходят через прокси `/api` dev-сервера, поэтому `VITE_API_BASE_URL` не задавайте; из
+того же файла dev-сервер читает и `IMMERSION_API_PROXY_TARGET` (по умолчанию
+`http://127.0.0.1:4787`).
 
 Обслуживаются только запросы с loopback и из частных и link-local диапазонов (`10.0.0.0/8`,
 `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`); соединение с любого другого адреса
-сбрасывается. Пароля нет: любой в сети может пользоваться приложением так же, как вы. Сохранённые
-ключи провайдеров не отдаются, но их можно заменить, удалить или направить провайдера на другой
-сервер. Файл остаётся в силе, когда ноутбук подключается к другой сети, например к Wi-Fi в кафе.
+сбрасывается. Пароль идёт по сети без шифрования, по обычному HTTP, поэтому пользуйтесь им в сети,
+которой доверяете. Кто знает пароль, может пользоваться приложением так же, как вы: сохранённые
+ключи провайдеров не отдаются, но их можно заменить, удалить или отправить на другой сервер,
+сменив адрес провайдера. Файл остаётся в силе, когда ноутбук подключается к другой сети, например
+к Wi-Fi в кафе.
+
+Пароль защищает только путь через браузер. API на `127.0.0.1:4787`, к которому напрямую обращаются
+узлы ComfyUI и другие локальные программы, ничего не спрашивает: любая программа на этом
+компьютере и так может прочитать `data/`.
 
 ## Immersion как бэкенд
 

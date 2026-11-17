@@ -35,6 +35,8 @@ export default defineConfig({
       cwd: configDirectory,
       env: {
         IMMERSION_API_PROXY_TARGET: 'http://127.0.0.1:4797',
+        IMMERSION_WEB_LAN: '0',
+        IMMERSION_WEB_PASSWORD: '',
       },
       reuseExistingServer: false,
       timeout: 120_000,

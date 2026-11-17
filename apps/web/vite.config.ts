@@ -7,6 +7,7 @@ import { defineConfig } from 'vite';
 import { readDevServerConfig } from './dev-server/read-dev-server-config.js';
 import { refuseCrossSiteEditorLaunch } from './dev-server/refuse-cross-site-editor-launch.js';
 import { refuseForeignNetworkCallers } from './dev-server/refuse-foreign-network-callers.js';
+import { requireWebLogin } from './dev-server/require-web-login.js';
 
 const devServerConfig = readDevServerConfig();
 const webRoot = fileURLToPath(new URL('.', import.meta.url));
@@ -14,7 +15,13 @@ const workspaceRoot = fileURLToPath(new URL('../..', import.meta.url));
 const contractsSource = join(workspaceRoot, 'packages', 'contracts', 'src');
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), refuseForeignNetworkCallers(), refuseCrossSiteEditorLaunch()],
+  plugins: [
+    requireWebLogin({ password: devServerConfig.password }),
+    react(),
+    tailwindcss(),
+    refuseForeignNetworkCallers(),
+    refuseCrossSiteEditorLaunch(),
+  ],
   resolve: {
     alias: {
       '@immersion/contracts': contractsSource,

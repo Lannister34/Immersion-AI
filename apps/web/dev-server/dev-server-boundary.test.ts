@@ -90,6 +90,7 @@ function devServerConfig(cacheDir: string, port: number, upstreamOrigin: string)
 
 async function resolveWithLanAccess(lanAccess: '0' | '1'): Promise<ResolvedConfig> {
   vi.stubEnv('IMMERSION_WEB_LAN', lanAccess);
+  vi.stubEnv('IMMERSION_WEB_PASSWORD', 'boundary-test-password');
 
   try {
     return await resolveConfig({ configFile, root: webRoot, logLevel: 'silent' }, 'serve');
@@ -115,6 +116,14 @@ describe('the LAN opt-in of vite.config.ts', () => {
     expect(on.plugins.map((plugin) => plugin.name)).toEqual(off.plugins.map((plugin) => plugin.name));
     expect(on.plugins.map((plugin) => plugin.name)).toContain('immersion:refuse-foreign-network-callers');
   }, 60_000);
+
+  it('puts the password login ahead of every other plugin, so its middleware runs before the app, the proxy and the editor', async () => {
+    const on = await resolveWithLanAccess('1');
+
+    expect(on.plugins.findIndex((plugin) => plugin.configureServer)).toBe(
+      on.plugins.findIndex((plugin) => plugin.name === 'immersion:require-web-login'),
+    );
+  }, 60_000);
 });
 
 describe('the dev server that vite.config.ts configures', () => {
@@ -133,6 +142,7 @@ describe('the dev server that vite.config.ts configures', () => {
     upstreamOrigin = `http://${LOOPBACK}:${await listen(upstream)}`;
 
     vi.stubEnv('IMMERSION_WEB_LAN', '0');
+    vi.stubEnv('IMMERSION_WEB_PASSWORD', '');
     try {
       devServer = await createServer(devServerConfig(cacheDir, 0, upstreamOrigin));
     } finally {
@@ -270,6 +280,7 @@ describe('the dev server that vite.config.ts configures', () => {
     const occupant = createHttpServer();
     const taken = await listen(occupant);
     vi.stubEnv('IMMERSION_WEB_LAN', '0');
+    vi.stubEnv('IMMERSION_WEB_PASSWORD', '');
     const contender = await createServer(devServerConfig(cacheDir, taken, upstreamOrigin)).finally(() =>
       vi.unstubAllEnvs(),
     );

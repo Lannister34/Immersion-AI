@@ -20,12 +20,18 @@ function issuesOf(env: Record<string, string>): readonly string[] {
 
 describe('parseDevServerConfig', () => {
   it('binds loopback and proxies to the local API when nothing is set', () => {
-    expect(parseDevServerConfig({})).toEqual({ apiProxyTarget: 'http://127.0.0.1:4787', host: LOOPBACK_HOST });
+    expect(parseDevServerConfig({})).toEqual({
+      apiProxyTarget: 'http://127.0.0.1:4787',
+      host: LOOPBACK_HOST,
+      password: null,
+    });
   });
 
   it('opens every IPv4 interface only for an explicit yes, in any case', () => {
     for (const value of ['1', 'true', 'TRUE', ' True ', 'yes', 'On']) {
-      expect(parseDevServerConfig({ IMMERSION_WEB_LAN: value }).host).toBe(ALL_IPV4_INTERFACES_HOST);
+      expect(parseDevServerConfig({ IMMERSION_WEB_LAN: value, IMMERSION_WEB_PASSWORD: '4821' }).host).toBe(
+        ALL_IPV4_INTERFACES_HOST,
+      );
     }
   });
 
@@ -40,6 +46,28 @@ describe('parseDevServerConfig', () => {
       'IMMERSION_WEB_LAN: must be one of 1, true, yes, on, 0, false, no, off',
     ]);
     expect(issuesOf({ IMMERSION_WEB_LAN: '192.168.1.10' })).toHaveLength(1);
+  });
+
+  it('refuses to open the LAN without a password, in English and Russian', () => {
+    expect(issuesOf({ IMMERSION_WEB_LAN: '1' })).toEqual([
+      'IMMERSION_WEB_PASSWORD: required when IMMERSION_WEB_LAN is on; set a password of at least 4 characters ' +
+        '(доступ из сети включён без пароля: задайте IMMERSION_WEB_PASSWORD не короче 4 символов)',
+    ]);
+    expect(issuesOf({ IMMERSION_WEB_LAN: '1', IMMERSION_WEB_PASSWORD: '   ' })).toHaveLength(1);
+  });
+
+  it('accepts a 4-digit PIN and refuses anything shorter', () => {
+    expect(parseDevServerConfig({ IMMERSION_WEB_LAN: '1', IMMERSION_WEB_PASSWORD: '0042' }).password).toBe('0042');
+    expect(issuesOf({ IMMERSION_WEB_LAN: '1', IMMERSION_WEB_PASSWORD: '123' })).toEqual([
+      'IMMERSION_WEB_PASSWORD: must be at least 4 characters (пароль не короче 4 символов)',
+    ]);
+  });
+
+  it('applies a set password with the LAN off too, so this computer asks for it as well', () => {
+    expect(parseDevServerConfig({ IMMERSION_WEB_PASSWORD: '4821' })).toMatchObject({
+      host: LOOPBACK_HOST,
+      password: '4821',
+    });
   });
 
   it('takes the API proxy target from its key and refuses one that is not an http(s) URL', () => {

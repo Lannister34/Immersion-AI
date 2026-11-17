@@ -23,14 +23,20 @@ describe('readDevServerConfig', () => {
     expect(readDevServerConfig(envFile, {}).host).toBe('127.0.0.1');
   });
 
-  it('opens the LAN when the local env file says so', () => {
-    writeFileSync(envFile, 'IMMERSION_WEB_LAN=1\n');
+  it('opens the LAN with the password the local env file sets', () => {
+    writeFileSync(envFile, 'IMMERSION_WEB_LAN=1\nIMMERSION_WEB_PASSWORD=4821\n');
 
-    expect(readDevServerConfig(envFile, {}).host).toBe('0.0.0.0');
+    expect(readDevServerConfig(envFile, {})).toMatchObject({ host: '0.0.0.0', password: '4821' });
   });
 
-  it('lets a non-blank process value close what the file opened', () => {
+  it('refuses to open the LAN when the file sets no password', () => {
     writeFileSync(envFile, 'IMMERSION_WEB_LAN=1\n');
+
+    expect(() => readDevServerConfig(envFile, {})).toThrow(/IMMERSION_WEB_PASSWORD: required/u);
+  });
+
+  it('lets a process value close what the file opened', () => {
+    writeFileSync(envFile, 'IMMERSION_WEB_LAN=1\nIMMERSION_WEB_PASSWORD=4821\n');
 
     expect(readDevServerConfig(envFile, { IMMERSION_WEB_LAN: '0' }).host).toBe('127.0.0.1');
   });

@@ -13,6 +13,7 @@ import { formatContextEstimate } from '../view-models/context-estimate';
 import { toContextStats } from '../view-models/context-stats';
 import { renderMessageContent } from '../view-models/message-content';
 import { planMessageEditSave } from '../view-models/message-edit-save';
+import { AttachmentViewer } from './attachment-viewer';
 import { ReasoningBlock } from './reasoning-block';
 
 export interface BubbleMessageProps {
@@ -67,6 +68,7 @@ export function BubbleMessage({
   const [draft, setDraft] = useState(text);
   const [branchDraft, setBranchDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [viewedAttachmentUrl, setViewedAttachmentUrl] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const debouncedDraft = useDebouncedValue(draft, 400);
   const trimmedDraft = debouncedDraft.trim();
@@ -271,14 +273,23 @@ export function BubbleMessage({
               {attachments.length > 0 ? (
                 <div className="bubble__images">
                   {attachments.map((attachment) => (
-                    <a href={createApiUrl(attachment.url)} key={attachment.id} rel="noreferrer" target="_blank">
+                    <button
+                      aria-label="Открыть вложение"
+                      className="bubble__image-button"
+                      key={attachment.id}
+                      onClick={() => setViewedAttachmentUrl(createApiUrl(attachment.url))}
+                      type="button"
+                    >
                       <img alt="Вложение сообщения" className="bubble__image" src={createApiUrl(attachment.url)} />
-                    </a>
+                    </button>
                   ))}
                 </div>
               ) : null}
               {renderMessageContent(text, formatting)}
             </div>
+            {viewedAttachmentUrl ? (
+              <AttachmentViewer onClose={() => setViewedAttachmentUrl(null)} url={viewedAttachmentUrl} />
+            ) : null}
           </>
         )}
         {isEditing ? null : (
