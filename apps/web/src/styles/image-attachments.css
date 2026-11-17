@@ -38,6 +38,37 @@
   margin-bottom: 8px;
 }
 
+.bubble__image-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.attachment-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+}
+
+.attachment-viewer__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgb(0 0 0 / 85%);
+  cursor: zoom-out;
+}
+
+.attachment-viewer__image {
+  position: relative;
+  max-width: 95vw;
+  max-height: 95vh;
+  border-radius: var(--r-sm);
+  pointer-events: none;
+}
+
 .bubble__image {
   display: block;
   max-width: 220px;

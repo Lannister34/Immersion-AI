@@ -1,4 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
+
+import { stubFetch } from '../../test-support/stub-fetch';
+
+const reloadIntoLogin = vi.hoisted(() => vi.fn());
+
+vi.mock('./reload-into-login', () => ({ reloadIntoLogin }));
 
 async function importClientBuiltWith(apiBaseUrl: string | undefined) {
   vi.stubEnv('VITE_API_BASE_URL', apiBaseUrl);
@@ -27,5 +34,44 @@ describe('createApiUrl', () => {
     const { createApiUrl } = await importClientBuiltWith(undefined);
 
     expect(createApiUrl('/api/chats')).toBe('/api/chats');
+  });
+});
+
+describe('a request whose web session has ended', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    reloadIntoLogin.mockClear();
+  });
+
+  function answer(status: number, body: unknown): void {
+    stubFetch().mockResolvedValue(Response.json(body, { status }));
+  }
+
+  it('reloads the page into the login screen, as a page load always asks for the password', async () => {
+    const { apiGet } = await import('./client');
+    answer(401, { code: 'web_login_required', message: 'Сеанс закончился: обновите страницу и введите пароль.' });
+
+    await expect(apiGet('/api/chats', z.unknown())).rejects.toMatchObject({
+      statusCode: 401,
+    });
+    expect(reloadIntoLogin).toHaveBeenCalledTimes(1);
+  });
+
+  it('reloads on a delete that answers without a body too', async () => {
+    const { apiDeleteNoContent } = await import('./client');
+    answer(401, { code: 'web_login_required', message: 'Сеанс закончился: обновите страницу и введите пароль.' });
+
+    await expect(apiDeleteNoContent('/api/chats/x')).rejects.toMatchObject({ statusCode: 401 });
+    expect(reloadIntoLogin).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves other errors, a plain 401 among them, to the caller', async () => {
+    const { apiGet } = await import('./client');
+    answer(401, { code: 'unauthorized', message: 'Нет доступа.' });
+
+    await expect(apiGet('/api/chats', z.unknown())).rejects.toMatchObject({
+      statusCode: 401,
+    });
+    expect(reloadIntoLogin).not.toHaveBeenCalled();
   });
 });

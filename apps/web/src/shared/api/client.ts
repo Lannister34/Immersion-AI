@@ -2,6 +2,9 @@ import { ApiProblemSchema } from '@immersion/contracts/common';
 import type { ZodType } from 'zod';
 
 import { webConfig } from '../config/web-config';
+import { reloadIntoLogin } from './reload-into-login';
+
+const WEB_LOGIN_REQUIRED = 'web_login_required';
 
 export class ApiError extends Error {
   constructor(
@@ -23,17 +26,25 @@ async function readJson(response: Response) {
   return text.length > 0 ? (JSON.parse(text) as unknown) : null;
 }
 
+function toApiError(response: Response, payload: unknown): ApiError {
+  const problem = ApiProblemSchema.safeParse(payload);
+
+  if (response.status === 401 && problem.success && problem.data.code === WEB_LOGIN_REQUIRED) {
+    reloadIntoLogin();
+  }
+
+  return new ApiError(
+    problem.success ? problem.data.message : `HTTP ${response.status}`,
+    response.status,
+    problem.success ? problem.data.code : undefined,
+  );
+}
+
 async function parseResponse<T>(response: Response, schema: ZodType<T>) {
   const payload = await readJson(response);
 
   if (!response.ok) {
-    const problem = ApiProblemSchema.safeParse(payload);
-
-    throw new ApiError(
-      problem.success ? problem.data.message : `HTTP ${response.status}`,
-      response.status,
-      problem.success ? problem.data.code : undefined,
-    );
+    throw toApiError(response, payload);
   }
 
   return schema.parse(payload);
@@ -140,11 +151,5 @@ export async function apiDeleteNoContent(path: string): Promise<void> {
     return;
   }
 
-  const payload = await readJson(response);
-  const problem = ApiProblemSchema.safeParse(payload);
-  throw new ApiError(
-    problem.success ? problem.data.message : `HTTP ${response.status}`,
-    response.status,
-    problem.success ? problem.data.code : undefined,
-  );
+  throw toApiError(response, await readJson(response));
 }
