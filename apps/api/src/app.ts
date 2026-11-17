@@ -9,7 +9,6 @@ import Fastify, {
 import type { ApiDependencies } from './composition/api-dependencies.js';
 import { apiProblems } from './composition/api-problems.js';
 import type { ApiModules } from './composition/create-api-modules.js';
-import { settingsRoutes } from './modules/settings/index.js';
 import { installNotFoundHandler, installProblemHandler } from './platform/http/problem-handler.js';
 import type { ApiLogger } from './platform/logging/api-logger.js';
 
@@ -39,7 +38,7 @@ export function buildApiApp(dependencies: ApiDependencies, modules: ApiModules):
   app.register(modules.generation.routes, { prefix: '/api/generation' });
   app.register(modules.lorebooks.routes, { prefix: '/api/lorebooks' });
   app.register(modules.scenarios.routes, { prefix: '/api/scenarios' });
-  app.register(settingsRoutes, { prefix: '/api/settings' });
+  app.register(modules.settings.routes, { prefix: '/api/settings' });
   app.register(modules.providers.routes, { prefix: '/api/providers' });
   app.register(modules.runtime.routes, { prefix: '/api/runtime' });
   app.register(modules.openAiCompat.routes, { prefix: '/v1' });

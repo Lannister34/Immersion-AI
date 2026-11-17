@@ -6,12 +6,17 @@ import {
 } from '@immersion/contracts/settings';
 import type { z } from 'zod';
 
-import { updateLegacyUserSettingsSource } from '../../../shared/infrastructure/legacy-settings-source.js';
+import type { UserSettingsDocument } from './user-settings-document.js';
 
 type SettingsProfile = z.infer<typeof SettingsProfileSchema>;
 
+export interface UpdateSettingsProfileDependencies {
+  readonly userSettings: Pick<UserSettingsDocument, 'update'>;
+}
+
 export async function updateSettingsProfile(
   command: UpdateSettingsProfileCommand,
+  { userSettings }: UpdateSettingsProfileDependencies,
 ): Promise<UpdateSettingsProfileResponse> {
   const nextProfile: SettingsProfile = {
     userName: command.userName.trim(),
@@ -23,7 +28,7 @@ export async function updateSettingsProfile(
     messageFormatting: command.messageFormatting,
   };
 
-  await updateLegacyUserSettingsSource((existing) => ({
+  await userSettings.update((existing) => ({
     ...existing,
     userName: nextProfile.userName,
     userPersona: nextProfile.userPersona,

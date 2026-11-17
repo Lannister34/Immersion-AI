@@ -7,11 +7,15 @@ import type {
 } from '@immersion/contracts/settings';
 import { replyLimitExceedsContext } from '@immersion/domain/prompting';
 
-import { updateLegacyUserSettingsSource } from '../../../shared/infrastructure/legacy-settings-source.js';
 import { getSettingsOverview } from './get-settings-overview.js';
 import { ReplyLimitExceedsContextError } from './reply-limit-exceeds-context-error.js';
 import { encodeSamplerPreset, type StoredSamplerPreset } from './sampler-preset-encoding.js';
 import { generateUniquePresetId } from './sampler-preset-id.js';
+import type { UserSettingsDocument } from './user-settings-document.js';
+
+export interface SamplerPresetMutationDependencies {
+  readonly userSettings: UserSettingsDocument;
+}
 
 export class SamplerPresetNotFoundError extends Error {
   constructor(presetId: string) {
@@ -58,8 +62,11 @@ function assertReplyLimitBelowContext(input: CreateSamplerPresetCommand | Update
   }
 }
 
-function projectMutationResponse(presetId: string): SamplerPresetMutationResponse {
-  const overview = getSettingsOverview();
+function projectMutationResponse(
+  presetId: string,
+  dependencies: SamplerPresetMutationDependencies,
+): SamplerPresetMutationResponse {
+  const overview = getSettingsOverview(dependencies);
   const preset = overview.sampler.presets.find((entry) => entry.id === presetId);
   if (!preset) {
     throw new SamplerPresetNotFoundError(presetId);
@@ -70,11 +77,14 @@ function projectMutationResponse(presetId: string): SamplerPresetMutationRespons
   };
 }
 
-export async function createSamplerPreset(input: CreateSamplerPresetCommand): Promise<SamplerPresetMutationResponse> {
+export async function createSamplerPreset(
+  input: CreateSamplerPresetCommand,
+  dependencies: SamplerPresetMutationDependencies,
+): Promise<SamplerPresetMutationResponse> {
   assertReplyLimitBelowContext(input);
   let id = '';
 
-  await updateLegacyUserSettingsSource((source) => {
+  await dependencies.userSettings.update((source) => {
     const existing = readStoredPresets(source);
     const existingIds = new Set(existing.map((preset) => preset.id));
     id = generateUniquePresetId(input.name, existingIds);
@@ -86,15 +96,16 @@ export async function createSamplerPreset(input: CreateSamplerPresetCommand): Pr
     };
   });
 
-  return projectMutationResponse(id);
+  return projectMutationResponse(id, dependencies);
 }
 
 export async function updateSamplerPreset(
   presetId: string,
   input: UpdateSamplerPresetCommand,
+  dependencies: SamplerPresetMutationDependencies,
 ): Promise<SamplerPresetMutationResponse> {
   assertReplyLimitBelowContext(input);
-  await updateLegacyUserSettingsSource((source) => {
+  await dependencies.userSettings.update((source) => {
     const existing = readStoredPresets(source);
     const index = existing.findIndex((preset) => preset.id === presetId);
     if (index < 0) {
@@ -109,11 +120,14 @@ export async function updateSamplerPreset(
     };
   });
 
-  return projectMutationResponse(presetId);
+  return projectMutationResponse(presetId, dependencies);
 }
 
-export async function deleteSamplerPreset(presetId: string): Promise<DeleteSamplerPresetResponse> {
-  await updateLegacyUserSettingsSource((source) => {
+export async function deleteSamplerPreset(
+  presetId: string,
+  dependencies: SamplerPresetMutationDependencies,
+): Promise<DeleteSamplerPresetResponse> {
+  await dependencies.userSettings.update((source) => {
     const existing = readStoredPresets(source);
     const index = existing.findIndex((preset) => preset.id === presetId);
     if (index < 0) {
@@ -146,11 +160,14 @@ export async function deleteSamplerPreset(presetId: string): Promise<DeleteSampl
     return nextSource;
   });
 
-  return { sampler: getSettingsOverview().sampler };
+  return { sampler: getSettingsOverview(dependencies).sampler };
 }
 
-export async function setActiveSamplerPreset(presetId: string): Promise<SetActiveSamplerPresetResponse> {
-  await updateLegacyUserSettingsSource((source) => {
+export async function setActiveSamplerPreset(
+  presetId: string,
+  dependencies: SamplerPresetMutationDependencies,
+): Promise<SetActiveSamplerPresetResponse> {
+  await dependencies.userSettings.update((source) => {
     const existing = readStoredPresets(source);
     if (!existing.some((preset) => preset.id === presetId)) {
       throw new SamplerPresetNotFoundError(presetId);
@@ -162,5 +179,5 @@ export async function setActiveSamplerPreset(presetId: string): Promise<SetActiv
     };
   });
 
-  return { sampler: getSettingsOverview().sampler };
+  return { sampler: getSettingsOverview(dependencies).sampler };
 }

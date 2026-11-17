@@ -7,7 +7,7 @@ import { createPromptingModule, type PromptingModule } from '../modules/promptin
 import { createProvidersModule, type ProvidersModule } from '../modules/providers/index.js';
 import { createRuntimeModule, type RuntimeModule } from '../modules/runtime/index.js';
 import { createScenariosModule, type ScenariosModule } from '../modules/scenarios/index.js';
-import { getProfileUserName, getSettingsOverview, resolveSamplerPresetForModel } from '../modules/settings/index.js';
+import { createSettingsModule, type SettingsModule } from '../modules/settings/index.js';
 import { createSystemModule, type SystemModule } from '../modules/system/index.js';
 import type { ApiDependencies } from './api-dependencies.js';
 
@@ -16,6 +16,7 @@ export interface ApiModules {
   readonly characters: CharactersModule;
   readonly providers: ProvidersModule;
   readonly runtime: RuntimeModule;
+  readonly settings: SettingsModule;
   readonly lorebooks: LorebooksModule;
   readonly scenarios: ScenariosModule;
   readonly prompting: PromptingModule;
@@ -43,6 +44,7 @@ export function createApiModules(dependencies: ApiDependencies): ApiModules {
     userSettings,
     visionProbe,
   } = dependencies;
+  const settings = createSettingsModule({ userSettings });
   const runtime = createRuntimeModule({
     dataRoot: config.dataRoot,
     httpFetch,
@@ -64,10 +66,7 @@ export function createApiModules(dependencies: ApiDependencies): ApiModules {
     characters,
     lorebooks,
     scenarios,
-    // TODO: wire to modules.settings once it is composed (F-42)
-    settings: {
-      getSettingsOverview: () => getSettingsOverview(),
-    },
+    settings,
   });
   const chats = createChatsModule({
     chatRepository,
@@ -75,13 +74,8 @@ export function createApiModules(dependencies: ApiDependencies): ApiModules {
     chatIndex,
     characters,
     scenarios,
-    // TODO: wire to modules.settings once it is composed (F-42)
-    profile: { getProfileUserName: () => getProfileUserName() },
-    // TODO: wire to modules.settings once it is composed (F-42)
-    samplerPresets: {
-      findSamplerPreset: (presetId) =>
-        getSettingsOverview().sampler.presets.find((preset) => preset.id === presetId) ?? null,
-    },
+    profile: settings,
+    samplerPresets: settings,
   });
 
   return {
@@ -91,6 +85,7 @@ export function createApiModules(dependencies: ApiDependencies): ApiModules {
     scenarios,
     providers,
     runtime,
+    settings,
     prompting,
     chats,
     generation: createGenerationModule({
@@ -103,19 +98,13 @@ export function createApiModules(dependencies: ApiDependencies): ApiModules {
       prompting,
       providers,
       runtime,
-      // TODO: wire to modules.settings once it is composed (F-42)
-      settings: {
-        getSettingsOverview: () => getSettingsOverview(),
-      },
+      settings,
     }),
     openAiCompat: createOpenAiCompatModule({
       chatCompletionClient,
       clock,
       providers,
-      // TODO: wire to modules.settings once it is composed (F-42)
-      settings: {
-        resolveSamplerPresetForModel: (modelName) => resolveSamplerPresetForModel(getSettingsOverview(), modelName),
-      },
+      settings,
       tokenCounter,
     }),
   };

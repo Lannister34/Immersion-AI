@@ -28,7 +28,7 @@ import {
   type RuntimeProcess,
 } from '../modules/runtime/index.js';
 import { createFileScenarioStore, type ScenarioStore } from '../modules/scenarios/index.js';
-import type { UserSettingsDocument } from '../modules/settings/index.js';
+import { type UserSettingsDocument, UserSettingsFile } from '../modules/settings/index.js';
 import type { Clock } from '../platform/clock/clock.js';
 import { systemClock } from '../platform/clock/system-clock.js';
 import { createKeyedSerialQueue } from '../platform/concurrency/keyed-serial-queue.js';
@@ -36,10 +36,6 @@ import { createSerialQueue } from '../platform/concurrency/serial-queue.js';
 import { type ApiLogger, createApiLogger } from '../platform/logging/api-logger.js';
 import { globalHttpFetch } from '../platform/outbound-http/global-http-fetch.js';
 import type { HttpFetch } from '../platform/outbound-http/http-fetch.js';
-import {
-  readLegacyUserSettingsSource,
-  updateLegacyUserSettingsSource,
-} from '../shared/infrastructure/legacy-settings-source.js';
 import { createBuiltinTokenizeTargetResolver } from './resolve-builtin-tokenize-target.js';
 
 export interface ApiDependencies {
@@ -67,11 +63,13 @@ export function createApiDependencies(config: ApiConfig, overrides: ApiDependenc
   const clock = overrides.clock ?? systemClock;
   const httpFetch = overrides.httpFetch ?? globalHttpFetch;
   const logger = overrides.logger ?? createApiLogger(config.logLevel);
-  const userSettings = overrides.userSettings ?? {
-    // TODO: replace the process-wide legacy source with one settings file per app (F-42)
-    read: readLegacyUserSettingsSource,
-    update: updateLegacyUserSettingsSource,
-  };
+  const userSettings =
+    overrides.userSettings ??
+    new UserSettingsFile({
+      filePath: path.join(config.dataRoot, 'user-settings.json'),
+      logger,
+      queue: createSerialQueue(),
+    });
   const providerSettings = new ProviderSettingsRepository({ document: userSettings });
   const runtimeProcess =
     overrides.runtimeProcess ??

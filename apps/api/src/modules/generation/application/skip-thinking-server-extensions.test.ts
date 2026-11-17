@@ -10,7 +10,7 @@ import {
 import { openAiChatCompletion } from '../../../test-support/provider-responses.js';
 import { resolveChatGenerationSettings } from '../../prompting/index.js';
 import { createProvidersModule } from '../../providers/index.js';
-import { getSettingsOverview, type UserSettingsRecord } from '../../settings/index.js';
+import { createSettingsModule, type UserSettingsRecord } from '../../settings/index.js';
 import { createChatCompletionClient } from '../infrastructure/provider-clients/create-chat-completion-client.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import { generateCharacterAvatarPrompt } from './generate-character-avatar-prompt.js';
@@ -55,7 +55,7 @@ function onProviderSettings(chatCompletionClient: ChatCompletionClient): DraftGe
       runtimeEndpoint: { getRunningEndpoint: () => Promise.resolve(null) },
       settingsDocument: storedProviderSettings,
     }),
-    settings: { getSettingsOverview },
+    settings: createSettingsModule({ userSettings: storedProviderSettings }),
   };
 }
 
