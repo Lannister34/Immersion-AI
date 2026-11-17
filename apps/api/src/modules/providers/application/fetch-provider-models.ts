@@ -1,5 +1,9 @@
 import type { ProviderApiKind, ProviderConnectionResponse } from '@immersion/contracts/providers';
 
+import {
+  fetchRefusingRedirects,
+  RedirectRefusedError,
+} from '../../../platform/outbound-http/fetch-refusing-redirects.js';
 import type { HttpFetch } from '../../../platform/outbound-http/http-fetch.js';
 import { type ConnectionSubject, createErrorResponse, createOkResponse } from './provider-connection-response.js';
 import { ProviderModelsPayloadSchema } from './provider-models-payload-schema.js';
@@ -33,11 +37,15 @@ export async function fetchProviderModels(
   let response: Response;
 
   try {
-    response = await dependencies.httpFetch(endpoint, {
+    response = await fetchRefusingRedirects(dependencies.httpFetch, endpoint, {
       headers: buildProviderModelsRequestHeaders(apiKind, apiKey),
       signal: AbortSignal.timeout(dependencies.timeoutMs ?? 5000),
     });
   } catch (error) {
+    if (error instanceof RedirectRefusedError) {
+      return createErrorResponse(subject, 'provider_http_error', error.message, endpoint);
+    }
+
     return createErrorResponse(subject, 'provider_unreachable', describeFetchFailure(error), endpoint);
   }
 

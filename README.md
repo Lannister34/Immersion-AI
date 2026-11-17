@@ -163,7 +163,10 @@ an empty `model` clears the model. Keys are write-only: no response carries a st
 provider, and only when the `url` has the same origin as the saved one; an empty `apiKey` asks
 with no key. A key is visible ASCII without spaces. A key stays with the server it was entered for:
 changing a provider's `url` to another origin (scheme, host or port) without sending `apiKey` in the
-same request clears the stored key; a change within the same origin keeps it.
+same request clears the stored key; a change within the same origin keeps it. Requests that can
+carry the key (generation, the connection test and the model list) do not follow HTTP redirects, so the
+provider's server cannot pass the key on to another one: set the provider's final address, since a
+redirect is reported as an error that names its target.
 
 The API listens on 127.0.0.1 and has no authentication. Keep it on loopback, or put a
 reverse proxy in front of it before exposing it to a network.
@@ -347,7 +350,9 @@ curl -X PATCH http://127.0.0.1:4787/api/providers/settings   -H 'Content-Type: a
 пустой `apiKey` запрашивает без ключа. Ключ — видимые ASCII-символы без пробелов. Ключ остаётся
 при сервере, для которого его ввели: смена `url` провайдера на другой origin (схема, хост или порт)
 без `apiKey` в том же запросе удаляет сохранённый ключ, смена в пределах того же origin его
-сохраняет.
+сохраняет. Запросы, которые могут нести ключ (генерация, проверка связи и список моделей), не следуют
+HTTP-перенаправлениям, чтобы сервер провайдера не мог передать ключ другому серверу: указывайте
+конечный адрес провайдера, а перенаправление приходит ошибкой с его целью.
 
 API слушает 127.0.0.1 и не проверяет авторизацию. Держите его на loopback либо ставьте
 перед ним обратный прокси, прежде чем открывать в сеть.

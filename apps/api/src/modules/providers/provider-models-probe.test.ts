@@ -1,6 +1,9 @@
+import type { ProviderType } from '@immersion/contracts/providers';
 import { describe, expect, it } from 'vitest';
 
+import { globalHttpFetch } from '../../platform/outbound-http/global-http-fetch.js';
 import { createHttpStub } from '../../test-support/http-stub.js';
+import { startRedirectingServers } from '../../test-support/redirecting-servers.js';
 import { probeProviderModels } from './application/probe-provider-models.js';
 import { getProviderApiKind, getProviderDefaultModel, isProviderApiKeyRequired } from './domain/provider-catalog.js';
 import { createDefaultProviderSettings } from './domain/provider-settings.js';
@@ -150,5 +153,34 @@ describe('probeProviderModels', () => {
     );
 
     expect(response.issue?.message).toBe('Провайдер недоступен (ECONNREFUSED).');
+  });
+
+  it.each<ProviderType>([
+    'anthropic',
+    'openai',
+    'custom',
+    'koboldcpp',
+  ])('refuses a redirect from the saved %s origin, so the stored key never reaches the redirect target', async (provider) => {
+    const servers = await startRedirectingServers();
+
+    const response = await probeProviderModels(
+      { provider, url: `${servers.redirectingOrigin}/v1` },
+      {
+        httpFetch: globalHttpFetch,
+        providerSettings: storedProviderSettings({
+          [provider]: { apiKey: 'sk-canary-stored', url: `${servers.redirectingOrigin}/v1` },
+        }),
+      },
+    );
+
+    expect(response.issue).toEqual({
+      code: 'provider_http_error',
+      message: expect.stringContaining(`HTTP 307 на ${servers.collectorOrigin}/v1/models`),
+    });
+    const keyHeaders = servers.redirected.map(
+      (request) => request.headers['x-api-key'] ?? request.headers.authorization,
+    );
+    expect(keyHeaders).toEqual([provider === 'anthropic' ? 'sk-canary-stored' : 'Bearer sk-canary-stored']);
+    expect(servers.collected).toEqual([]);
   });
 });
