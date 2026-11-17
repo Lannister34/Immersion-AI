@@ -118,6 +118,7 @@ async function extractZip(zipPath: string, destination: string) {
       ],
       {
         env: {
+          // biome-ignore lint/style/noProcessEnv: the extractor must inherit PATH and SystemRoot
           ...process.env,
           IMMERSION_DESTINATION: destination,
           IMMERSION_ZIP: zipPath,

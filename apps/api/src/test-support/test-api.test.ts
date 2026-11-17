@@ -7,7 +7,6 @@ import { HealthResponseSchema } from '@immersion/contracts';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
 import { findProjectRoot } from '../config/find-project-root.js';
-import { readDataRoot } from '../config/read-api-config.js';
 import { requestOverSocket } from './socket-request.js';
 import { createTestApi } from './test-api.js';
 
@@ -55,12 +54,20 @@ describe('createTestApi', () => {
     expect(fs.readFileSync(committedSmokeSettings, 'utf8')).toBe(committedBefore);
   });
 
-  it('points the data-root variable that unmigrated modules still read at the harness, and leaves the global fetch alone', async () => {
+  it('building a test API leaves process.env and globalThis.fetch untouched', async () => {
+    const environmentBefore = { ...process.env };
     const globalFetch = globalThis.fetch;
+    const api = await createTestApi({ fixture: 'smoke' });
+    const overview = await api.app.inject({ method: 'GET', url: '/api/runtime/overview' });
+
+    expect(overview.statusCode).toBe(200);
+    expect({ ...process.env }).toEqual(environmentBefore);
+    expect(globalThis.fetch).toBe(globalFetch);
+  });
+
+  it('hands the app the harness HTTP stub, clock and logger', async () => {
     const api = await createTestApi();
 
-    expect(readDataRoot()).toBe(api.dataRoot);
-    expect(globalThis.fetch).toBe(globalFetch);
     expect(api.dependencies.httpFetch).toBe(api.http.fetch);
     expect(api.dependencies.clock).toBe(api.clock);
     expect(api.dependencies.logger).toBe(api.logs.logger);

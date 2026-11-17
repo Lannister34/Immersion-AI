@@ -104,6 +104,7 @@ export function buildLinuxPickerInvocation(initialPath: string, baseEnv: NodeJS.
 export function buildPickerInvocation(
   platform: NodeJS.Platform,
   initialPath: string,
+  // biome-ignore lint/style/noProcessEnv: the dialog process must inherit PATH, SystemRoot and DISPLAY
   baseEnv: NodeJS.ProcessEnv = process.env,
 ): PickerInvocation {
   if (platform === 'win32') {
