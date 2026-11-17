@@ -1,7 +1,7 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 import type { ContextBudgetStatus } from '@immersion/contracts/generation';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
-import { type PromptCharacterSnapshot, replyLimitExceedsContext } from '@immersion/domain/prompting';
+import { computePromptBudget, type PromptBudget, type PromptCharacterSnapshot } from '@immersion/domain/prompting';
 
 import type { ActiveSamplerPreset } from '../../settings/application/active-sampler-preset.js';
 import { assembleBasePrompt, type BasePromptAssemblyResult } from './assemble-base-prompt.js';
@@ -44,6 +44,7 @@ export interface BuildChatReplyPromptInput {
   characterScenarioContent?: string | null;
   lorebookSections?: string[];
   samplerPreset: ActiveSamplerPreset;
+  serverContextSize?: number | null;
   session: ChatSessionDto;
   settings: SettingsOverviewResponse;
   messageImages?: ReadonlyMap<string, string[]>;
@@ -159,85 +160,115 @@ function trimFromMiddle(messages: CountedPromptMessage[], tokenBudget: number, p
   return messages.filter((_, index) => keptIndexes.has(index));
 }
 
-function trimTranscriptToContextBudget(
-  countedMessages: CountedPromptMessage[],
-  samplerPreset: ActiveSamplerPreset,
-  pinnedTailCount: number,
-): {
+interface BudgetedTranscript {
+  budgetStatus: ContextBudgetStatus;
   messages: ChatReplyPromptMessage[];
   tokenEstimate: ChatReplyPromptTokenEstimate;
   trimmedMessageCount: number;
-} {
+}
+
+function keepAll(
+  countedMessages: CountedPromptMessage[],
+  budgetStatus: ContextBudgetStatus,
+  promptBudget: number,
+  replyReservation: number,
+): BudgetedTranscript {
+  const systemTokens = sumTokens(countedMessages.filter((counted) => counted.message.role === 'system'));
+  const transcriptTokens = sumTokens(countedMessages.filter((counted) => counted.message.role !== 'system'));
+
+  return {
+    budgetStatus,
+    messages: toMessages(countedMessages),
+    tokenEstimate: {
+      finalTotal: systemTokens + transcriptTokens,
+      promptBudget,
+      replyReservation,
+      system: systemTokens,
+      transcriptAfterTrim: transcriptTokens,
+      transcriptBeforeTrim: transcriptTokens,
+    },
+    trimmedMessageCount: 0,
+  };
+}
+
+function keepFixedParts(
+  countedMessages: CountedPromptMessage[],
+  budgetStatus: ContextBudgetStatus,
+  promptBudget: number,
+  replyReservation: number,
+  pinnedTailCount: number,
+): BudgetedTranscript {
+  const systemMessages = countedMessages.filter((counted) => counted.message.role === 'system');
+  const transcriptMessages = countedMessages.filter((counted) => counted.message.role !== 'system');
+  const pinnedTail = transcriptMessages.slice(-pinnedTailCount);
+  const systemTokens = sumTokens(systemMessages);
+  const pinnedTokens = sumTokens(pinnedTail);
+
+  return {
+    budgetStatus,
+    messages: toMessages([...systemMessages, ...pinnedTail]),
+    tokenEstimate: {
+      finalTotal: systemTokens + pinnedTokens,
+      promptBudget,
+      replyReservation,
+      system: systemTokens,
+      transcriptAfterTrim: pinnedTokens,
+      transcriptBeforeTrim: sumTokens(transcriptMessages),
+    },
+    trimmedMessageCount: transcriptMessages.length - pinnedTail.length,
+  };
+}
+
+function trimTranscriptToContextBudget(
+  countedMessages: CountedPromptMessage[],
+  budget: PromptBudget,
+  trimStrategy: ActiveSamplerPreset['contextTrimStrategy'],
+  pinnedTailCount: number,
+): BudgetedTranscript {
+  if (budget.kind === 'unbounded') {
+    return keepAll(countedMessages, 'unlimited', 0, 0);
+  }
+
+  if (budget.kind === 'reply-exceeds-context') {
+    return keepFixedParts(countedMessages, 'reply-exceeds-context', 0, budget.maxTokens, pinnedTailCount);
+  }
+
+  const { promptBudget, replyReservation } = budget;
   const systemMessages = countedMessages.filter((counted) => counted.message.role === 'system');
   const transcriptMessages = countedMessages.filter((counted) => counted.message.role !== 'system');
   const systemTokens = sumTokens(systemMessages);
   const transcriptBeforeTrimTokens = sumTokens(transcriptMessages);
-  const promptBudget =
-    samplerPreset.maxContextLength <= 0 ? 0 : Math.max(1, samplerPreset.maxContextLength - samplerPreset.maxTokens);
+  const fixedTokens = systemTokens + sumTokens(transcriptMessages.slice(-pinnedTailCount));
 
-  if (samplerPreset.maxContextLength <= 0) {
-    const trimmedMessages = countedMessages.slice(-pinnedTailCount);
-    const transcriptAfterTrimTokens = sumTokens(trimmedMessages.filter((counted) => counted.message.role !== 'system'));
-
-    return {
-      messages: toMessages(trimmedMessages),
-      tokenEstimate: {
-        finalTotal: sumTokens(trimmedMessages),
-        promptBudget,
-        replyReservation: samplerPreset.maxTokens,
-        system: 0,
-        transcriptAfterTrim: transcriptAfterTrimTokens,
-        transcriptBeforeTrim: transcriptBeforeTrimTokens,
-      },
-      trimmedMessageCount: Math.max(0, transcriptMessages.length - trimmedMessages.length),
-    };
+  if (fixedTokens > promptBudget) {
+    return keepFixedParts(countedMessages, 'system-exceeds-budget', promptBudget, replyReservation, pinnedTailCount);
   }
 
-  const totalEstimatedTokens = systemTokens + transcriptBeforeTrimTokens;
-
-  if (totalEstimatedTokens <= promptBudget) {
-    return {
-      messages: toMessages(countedMessages),
-      tokenEstimate: {
-        finalTotal: totalEstimatedTokens,
-        promptBudget,
-        replyReservation: samplerPreset.maxTokens,
-        system: systemTokens,
-        transcriptAfterTrim: transcriptBeforeTrimTokens,
-        transcriptBeforeTrim: transcriptBeforeTrimTokens,
-      },
-      trimmedMessageCount: 0,
-    };
+  if (systemTokens + transcriptBeforeTrimTokens <= promptBudget) {
+    return keepAll(countedMessages, 'fits', promptBudget, replyReservation);
   }
 
   const transcriptBudget = Math.max(1, promptBudget - systemTokens);
   const trimmedTranscript =
-    samplerPreset.contextTrimStrategy === 'trim_start'
+    trimStrategy === 'trim_start'
       ? trimFromStart(transcriptMessages, transcriptBudget, pinnedTailCount)
       : trimFromMiddle(transcriptMessages, transcriptBudget, pinnedTailCount);
-  const trimmedMessages = [...systemMessages, ...trimmedTranscript];
   const transcriptAfterTrimTokens = sumTokens(trimmedTranscript);
+  const trimmedMessageCount = transcriptMessages.length - trimmedTranscript.length;
 
   return {
-    messages: toMessages(trimmedMessages),
+    budgetStatus: trimmedMessageCount > 0 ? 'trimmed' : 'fits',
+    messages: toMessages([...systemMessages, ...trimmedTranscript]),
     tokenEstimate: {
       finalTotal: systemTokens + transcriptAfterTrimTokens,
       promptBudget,
-      replyReservation: samplerPreset.maxTokens,
+      replyReservation,
       system: systemTokens,
       transcriptAfterTrim: transcriptAfterTrimTokens,
       transcriptBeforeTrim: transcriptBeforeTrimTokens,
     },
-    trimmedMessageCount: transcriptMessages.length - trimmedTranscript.length,
+    trimmedMessageCount,
   };
-}
-
-function toContextBudgetStatus(samplerPreset: ActiveSamplerPreset, trimmedMessageCount: number): ContextBudgetStatus {
-  if (replyLimitExceedsContext(samplerPreset)) {
-    return 'reply-exceeds-context';
-  }
-
-  return trimmedMessageCount > 0 ? 'trimmed' : 'fits';
 }
 
 function resolveDefaultSystemPromptTemplate(
@@ -358,11 +389,21 @@ function toBudgetedBundle(
     tokens: counts[index] ?? fallbackCounts[index] ?? 1,
   }));
   const pinnedTailCount = input.trailingUserInstruction?.trim() ? 2 : 1;
-  const budgetedPrompt = trimTranscriptToContextBudget(countedMessages, input.samplerPreset, pinnedTailCount);
+  const budget = computePromptBudget({
+    maxContextLength: input.samplerPreset.maxContextLength,
+    maxTokens: input.samplerPreset.maxTokens,
+    serverContextSize: input.serverContextSize ?? null,
+  });
+  const budgetedPrompt = trimTranscriptToContextBudget(
+    countedMessages,
+    budget,
+    input.samplerPreset.contextTrimStrategy,
+    pinnedTailCount,
+  );
 
   return {
     diagnostics: {
-      budgetStatus: toContextBudgetStatus(input.samplerPreset, budgetedPrompt.trimmedMessageCount),
+      budgetStatus: budgetedPrompt.budgetStatus,
       promptSource: untrimmed.basePrompt.source,
       renderer: untrimmed.basePrompt.diagnostics,
       tokenCountMethod,

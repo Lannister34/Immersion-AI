@@ -22,8 +22,16 @@ describe('FakeChatCompletionClient', () => {
       .reply({ content: 'первый' })
       .reply({ content: '', reasoning: 'мысль' });
 
-    await expect(client.completeChat(REQUEST)).resolves.toEqual({ content: 'первый', reasoning: '' });
-    await expect(client.completeChat(REQUEST)).resolves.toEqual({ content: '', reasoning: 'мысль' });
+    await expect(client.completeChat(REQUEST)).resolves.toEqual({
+      content: 'первый',
+      reasoning: '',
+      stoppedAtTokenLimit: false,
+    });
+    await expect(client.completeChat(REQUEST)).resolves.toEqual({
+      content: '',
+      reasoning: 'мысль',
+      stoppedAtTokenLimit: false,
+    });
     expect(client.requests).toEqual([REQUEST, REQUEST]);
   });
 

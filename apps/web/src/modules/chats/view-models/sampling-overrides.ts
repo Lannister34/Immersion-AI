@@ -1,4 +1,5 @@
 import { type ChatSamplingOverridesDto, ChatSamplingOverridesDtoSchema } from '@immersion/contracts/chats';
+import { type ReplyTokenLimit, ReplyTokenLimitSchema, UNLIMITED_REPLY_TOKENS } from '@immersion/contracts/common';
 import type { ChatReplyPromptPreviewResponse } from '@immersion/contracts/generation';
 
 import { numberLimitsOf } from '../../../shared/lib/schema-limits';
@@ -17,8 +18,13 @@ export interface NumericSamplingField extends SamplerParameterField {
   integer: boolean;
 }
 
+const NUMERIC_OVERRIDE_SCHEMAS = {
+  ...ChatSamplingOverridesDtoSchema.shape,
+  maxTokens: ReplyTokenLimitSchema.options[0],
+};
+
 export const NUMERIC_SAMPLING_FIELDS: readonly NumericSamplingField[] = SAMPLER_PARAMETER_FIELDS.map((field) => {
-  const limits = numberLimitsOf(ChatSamplingOverridesDtoSchema.shape[field.key]);
+  const limits = numberLimitsOf(NUMERIC_OVERRIDE_SCHEMAS[field.key]);
 
   return { ...field, contractMinimum: limits.minimum, integer: limits.integer };
 });
@@ -32,8 +38,12 @@ export const SAMPLING_OVERRIDE_KEYS: SamplingOverrideKey[] = [
   ...NUMERIC_SAMPLING_FIELDS.map((field) => field.key),
 ];
 
-function toFieldText(value: number | null | undefined): string {
+function toFieldText(value: ReplyTokenLimit | null | undefined): string {
   return value === null || value === undefined ? '' : String(value);
+}
+
+function toNumber(value: ReplyTokenLimit | null | undefined): number | undefined {
+  return typeof value === 'number' ? value : undefined;
 }
 
 export function toSamplingDraft(overrides: ChatSamplingOverridesDto): SamplingOverridesDraft {
@@ -82,10 +92,11 @@ export function stepSamplingValue(
   field: NumericSamplingField,
   currentText: string,
   direction: 1 | -1,
-  inherited: number | undefined,
+  inherited: ReplyTokenLimit | undefined,
 ): string {
+  const inheritedNumber = toNumber(inherited);
   const parsed = Number(currentText.trim().replace(',', '.'));
-  const current = Number.isFinite(parsed) && currentText.trim().length > 0 ? parsed : (inherited ?? 0);
+  const current = Number.isFinite(parsed) && currentText.trim().length > 0 ? parsed : (inheritedNumber ?? 0);
   const raw = current + direction * field.step;
   const rounded = Number(raw.toFixed(decimalsOf(field.step)));
   const lowerBound =
@@ -100,6 +111,7 @@ export interface SamplingFieldViewModel {
   field: NumericSamplingField;
   inheritedText: string;
   isOverridden: boolean;
+  isUnlimited: boolean;
   value: string;
 }
 
@@ -111,14 +123,24 @@ export function toSamplingFieldViewModels(
   return NUMERIC_SAMPLING_FIELDS.map((field) => {
     const raw = draft[field.key];
     const isOverridden = raw.trim().length > 0;
-    const inheritedText = toFieldText(inherited?.[field.key]);
+    const inheritedValue = inherited?.[field.key];
+    const isUnlimited = isOverridden
+      ? raw.trim() === UNLIMITED_REPLY_TOKENS
+      : inheritedValue === UNLIMITED_REPLY_TOKENS;
+    const inheritedText = inheritedValue === UNLIMITED_REPLY_TOKENS ? 'без лимита' : toFieldText(inheritedValue);
+    let value = isOverridden ? raw : inheritedText;
+
+    if (isUnlimited) {
+      value = '';
+    }
 
     return {
       error: errors[field.key],
       field,
       inheritedText,
       isOverridden,
-      value: isOverridden ? raw : inheritedText,
+      isUnlimited,
+      value,
     };
   });
 }
@@ -143,6 +165,11 @@ export function parseSamplingDraft(draft: SamplingOverridesDraft): SamplingDraft
 
     if (raw.length === 0) {
       candidate[field.key] = null;
+      continue;
+    }
+
+    if (field.key === 'maxTokens' && raw === UNLIMITED_REPLY_TOKENS) {
+      candidate[field.key] = UNLIMITED_REPLY_TOKENS;
       continue;
     }
 

@@ -78,6 +78,7 @@ function withDraftUserMessage(session: ChatSessionDto, draftUserMessage: string 
         createdAt,
         id: `preview:${session.chat.id}`,
         role: 'user',
+        stoppedAtTokenLimit: false,
       },
     ],
   };

@@ -1,6 +1,7 @@
 import { type SettingsOverviewResponse, SettingsOverviewResponseSchema } from '@immersion/contracts/settings';
 
 import { DEFAULT_USER_NAME } from './get-profile-user-name.js';
+import { readStoredReplyTokenLimit } from './stored-reply-token-limit.js';
 import type { UserSettingsDocument } from './user-settings-document.js';
 
 export interface GetSettingsOverviewDependencies {
@@ -11,7 +12,7 @@ const DEFAULT_SAMPLER_PRESET = {
   contextTrimStrategy: 'trim_middle',
   id: 'default',
   maxContextLength: 8192,
-  maxTokens: 600,
+  maxTokens: 'unlimited',
   minP: 0.02,
   name: 'Default',
   presencePenalty: 0,
@@ -51,12 +52,6 @@ function getNonNegativeInteger(value: unknown, fallback: number) {
   const parsed = getFiniteNumber(value, fallback);
 
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
-}
-
-function getPositiveInteger(value: unknown, fallback: number) {
-  const parsed = getFiniteNumber(value, fallback);
-
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function getNonNegativeNumber(value: unknown, fallback: number) {
@@ -120,7 +115,7 @@ export function getSettingsOverview({ userSettings }: GetSettingsOverviewDepende
         contextTrimStrategy: getContextTrimStrategy(candidate.context_trim_strategy),
         id,
         maxContextLength: getNonNegativeInteger(candidate.max_context_length, DEFAULT_SAMPLER_PRESET.maxContextLength),
-        maxTokens: getPositiveInteger(candidate.max_length, DEFAULT_SAMPLER_PRESET.maxTokens),
+        maxTokens: readStoredReplyTokenLimit(candidate.max_length) ?? DEFAULT_SAMPLER_PRESET.maxTokens,
         minP: getNonNegativeNumber(candidate.min_p, DEFAULT_SAMPLER_PRESET.minP),
         name,
         presencePenalty: getFiniteNumber(candidate.presence_penalty, DEFAULT_SAMPLER_PRESET.presencePenalty),

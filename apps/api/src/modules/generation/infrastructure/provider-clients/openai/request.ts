@@ -18,7 +18,7 @@ function buildMessagePayload(message: ChatCompletionRequest['messages'][number])
 function buildGenerationPayload(request: ChatCompletionRequest) {
   if (request.endpoint.apiKind !== 'openai-cloud') {
     return {
-      max_tokens: request.maxTokens,
+      ...(request.maxTokens === null ? {} : { max_tokens: request.maxTokens }),
       min_p: request.sampling.minP,
       presence_penalty: request.sampling.presencePenalty,
       rep_pen: request.sampling.repeatPenalty,
@@ -32,7 +32,7 @@ function buildGenerationPayload(request: ChatCompletionRequest) {
   const isReasoningModel = isOpenAiReasoningModel(request.endpoint.model);
 
   return {
-    max_completion_tokens: request.maxTokens,
+    ...(request.maxTokens === null ? {} : { max_completion_tokens: request.maxTokens }),
     ...(isReasoningModel
       ? {}
       : {

@@ -1,3 +1,4 @@
+import type { ReplyTokenLimit } from '@immersion/contracts/common';
 import {
   type ChatReplyPromptPreviewResponse,
   ChatReplyPromptPreviewResponseSchema,
@@ -9,7 +10,8 @@ export interface ChatReplyPromptPreviewFixture {
   budgetStatus: ContextBudgetStatus;
   contextWindow?: PromptContextWindow;
   maxContextLength: number;
-  maxTokens: number;
+  maxTokens: ReplyTokenLimit;
+  replyReservation?: number;
   transcriptMessageCount: number;
   trimmedMessageCount: number;
   finalTotal?: number;
@@ -58,7 +60,7 @@ export function buildChatReplyPromptPreview(fixture: ChatReplyPromptPreviewFixtu
       tokenEstimate: {
         finalTotal: fixture.finalTotal ?? 120,
         promptBudget: 1,
-        replyReservation: fixture.maxTokens,
+        replyReservation: fixture.replyReservation ?? (fixture.maxTokens === 'unlimited' ? 1024 : fixture.maxTokens),
         system: 80,
         transcriptAfterTrim: 40,
         transcriptBeforeTrim: 4000,
@@ -94,7 +96,7 @@ export function buildChatReplyPromptPreview(fixture: ChatReplyPromptPreviewFixtu
       },
     },
     request: {
-      maxTokens: fixture.maxTokens,
+      maxTokens: fixture.maxTokens === 'unlimited' ? null : fixture.maxTokens,
       messages: [
         { content: 'Ты капитан шхуны.', role: 'system' },
         { content: 'Держим курс на маяк.', role: 'user' },

@@ -1,3 +1,5 @@
+import type { ReplyTokenLimit } from './reply-token-limit.js';
+
 export type PromptContextTrimStrategy = 'trim_middle' | 'trim_start';
 
 export type PromptResponseLanguage = 'en' | 'none' | 'ru';
@@ -59,7 +61,7 @@ export interface PromptSettingsSnapshot {
 
 export interface PromptGenerationSnapshot {
   maxContextTokens: number;
-  replyMaxTokens: number;
+  replyMaxTokens: ReplyTokenLimit;
   trimStrategy: PromptContextTrimStrategy;
 }
 

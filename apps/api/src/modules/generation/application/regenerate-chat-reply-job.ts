@@ -7,28 +7,13 @@ import {
 } from '@immersion/contracts/generation';
 
 import { ChatNotFoundError } from '../../chats/index.js';
-import { completeChatReplyForSession } from './chat-reply-generation.js';
+import { assertChatReplyFitsContext, completeChatReplyForSession } from './chat-reply-generation.js';
 import { planChatReplyRegeneration } from './chat-reply-regeneration.js';
-import type { ChatSessionPort, PromptPlanPort } from './generation-ports.js';
+import type { ChatSessionPort } from './generation-ports.js';
 import type { StartChatReplyGenerationJobDependencies } from './start-chat-reply-generation-job.js';
 
 export interface RegenerateChatReplyJobDependencies extends StartChatReplyGenerationJobDependencies {
   readonly chats: StartChatReplyGenerationJobDependencies['chats'] & Pick<ChatSessionPort, 'truncateChatMessages'>;
-  readonly prompting: StartChatReplyGenerationJobDependencies['prompting'] &
-    Pick<PromptPlanPort, 'resolveChatGenerationSettings'>;
-}
-
-async function assertChatReplyCanBeGenerated(
-  session: ChatSessionDto,
-  dependencies: RegenerateChatReplyJobDependencies,
-): Promise<void> {
-  const endpoint = await dependencies.providers.resolveGenerationProviderEndpoint();
-
-  dependencies.prompting.resolveChatGenerationSettings(
-    dependencies.settings.getSettingsOverview(),
-    endpoint.model,
-    session.generationSettings,
-  );
 }
 
 export async function regenerateChatReplyJob(
@@ -43,7 +28,10 @@ export async function regenerateChatReplyJob(
 
   const regeneration = planChatReplyRegeneration(session);
 
-  await assertChatReplyCanBeGenerated(session, dependencies);
+  await assertChatReplyFitsContext(
+    { ...session, messages: session.messages.slice(0, regeneration.firstDroppedMessageIndex - 1) },
+    dependencies,
+  );
 
   const startCommand: StartChatReplyCommand = {
     chatId: command.chatId,

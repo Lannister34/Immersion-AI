@@ -97,7 +97,7 @@ export function createApiDependencies(config: ApiConfig, overrides: ApiDependenc
     userSettings,
     runtimeProcess,
     modelScanner,
-    chatCompletionClient: overrides.chatCompletionClient ?? createChatCompletionClient({ httpFetch }),
+    chatCompletionClient: overrides.chatCompletionClient ?? createChatCompletionClient({ httpFetch, logger }),
     characterStore:
       overrides.characterStore ??
       createFileCharacterStore({ directory: path.join(config.dataRoot, 'characters'), logger }),

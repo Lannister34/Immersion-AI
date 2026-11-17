@@ -3,6 +3,7 @@ import {
   type ChatSamplingOverridesDto,
   ChatSamplingOverridesDtoSchema,
 } from '@immersion/contracts/chats';
+import { ReplyTokenLimitSchema } from '@immersion/contracts/common';
 import { describe, expect, it } from 'vitest';
 
 import { numberLimitsOf } from '../../../shared/lib/schema-limits';
@@ -46,8 +47,10 @@ const EMPTY_OVERRIDES: ChatSamplingOverridesDto = {
   topP: null,
 };
 
+const CHAT_NUMBER_SCHEMAS = { ...ChatSamplingOverridesDtoSchema.shape, maxTokens: ReplyTokenLimitSchema.options[0] };
+
 function chatLimitsOf(field: NumericSamplingField) {
-  return numberLimitsOf(ChatSamplingOverridesDtoSchema.shape[field.key]);
+  return numberLimitsOf(CHAT_NUMBER_SCHEMAS[field.key]);
 }
 
 describe('chat sampling fields', () => {
@@ -289,5 +292,48 @@ describe('countSamplingOverrides', () => {
     const draft = { ...createEmptySamplingDraft(), contextTrimStrategy: 'trim_start', temperature: '0.7', topK: '  ' };
 
     expect(countSamplingOverrides(draft)).toBe(2);
+  });
+});
+
+describe('reply limit override', () => {
+  it('round-trips no limit through the draft and the parser', () => {
+    const draft = toSamplingDraft({ ...EMPTY_OVERRIDES, maxTokens: 'unlimited' });
+
+    expect(draft.maxTokens).toBe('unlimited');
+    expect(parseSamplingDraft(draft).overrides?.maxTokens).toBe('unlimited');
+  });
+
+  it('keeps a number, an empty field and no limit apart: limit, inherit, no limit', () => {
+    const parse = (maxTokens: string) =>
+      parseSamplingDraft({ ...createEmptySamplingDraft(), maxTokens }).overrides?.maxTokens;
+
+    expect(parse('32256')).toBe(32_256);
+    expect(parse('')).toBeNull();
+    expect(parse('unlimited')).toBe('unlimited');
+  });
+
+  it('refuses a reply limit of 0 instead of reading it as no limit', () => {
+    expect(parseSamplingDraft({ ...createEmptySamplingDraft(), maxTokens: '0' }).errors.maxTokens).toBe('Минимум 1');
+  });
+
+  it('shows an inherited no limit as an empty unlimited field and steps up from zero', () => {
+    const inherited = {
+      contextTrimStrategy: 'trim_middle',
+      maxContextLength: 32_256,
+      maxTokens: 'unlimited',
+      minP: 0,
+      presencePenalty: 0,
+      repeatPenalty: 1,
+      repeatPenaltyRange: 0,
+      temperature: 1,
+      topK: 0,
+      topP: 1,
+    } as const;
+    const row = toSamplingFieldViewModels(createEmptySamplingDraft(), {}, inherited).find(
+      (candidate) => candidate.field.key === 'maxTokens',
+    );
+
+    expect(row).toMatchObject({ inheritedText: 'без лимита', isOverridden: false, isUnlimited: true, value: '' });
+    expect(row ? stepSamplingValue(row.field, row.value, 1, 'unlimited') : null).toBe('16');
   });
 });

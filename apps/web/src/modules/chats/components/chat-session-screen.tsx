@@ -289,6 +289,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
           attachments={message.attachments}
           reasoning={message.reasoning}
           showReasoning={showReasoning}
+          stoppedAtTokenLimit={message.stoppedAtTokenLimit}
           branchTitleDefault={defaultBranchTitle}
           canChangeMessages={messageActions.canChangeMessages}
           canRegenerate={messageIndex === messageActions.regenerableMessageIndex}

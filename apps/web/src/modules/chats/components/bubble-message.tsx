@@ -14,6 +14,7 @@ import { toContextStats } from '../view-models/context-stats';
 import { renderMessageContent } from '../view-models/message-content';
 import { planMessageEditSave } from '../view-models/message-edit-save';
 import { AttachmentViewer } from './attachment-viewer';
+import { CutOffReplyMark } from './cut-off-reply-mark';
 import { ReasoningBlock } from './reasoning-block';
 
 export interface BubbleMessageProps {
@@ -36,6 +37,7 @@ export interface BubbleMessageProps {
   onRegenerate: () => Promise<void>;
   onSave: (content: string) => Promise<void>;
   onStartEdit: () => void;
+  stoppedAtTokenLimit: boolean;
   text: string;
   time: string;
   who: string;
@@ -61,6 +63,7 @@ export function BubbleMessage({
   onRegenerate,
   onSave,
   onStartEdit,
+  stoppedAtTokenLimit,
   text,
   time,
   who,
@@ -287,6 +290,7 @@ export function BubbleMessage({
               ) : null}
               {renderMessageContent(text, formatting)}
             </div>
+            {stoppedAtTokenLimit && !isUser ? <CutOffReplyMark /> : null}
             {viewedAttachmentUrl ? (
               <AttachmentViewer onClose={() => setViewedAttachmentUrl(null)} url={viewedAttachmentUrl} />
             ) : null}

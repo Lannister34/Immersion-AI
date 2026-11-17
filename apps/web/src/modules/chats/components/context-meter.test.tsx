@@ -98,4 +98,33 @@ describe('ContextMeter', () => {
 
     expect(screen.queryByText('окно ограничено сервером')).toBeNull();
   });
+
+  it('names no limit in place of a number and shows the room left for the reply', async () => {
+    await renderMeter({
+      budgetStatus: 'fits',
+      maxContextLength: 32_256,
+      maxTokens: 'unlimited',
+      replyReservation: 15_744,
+      transcriptMessageCount: 4,
+      trimmedMessageCount: 0,
+    });
+
+    fireEvent.click(screen.getByTitle('Подробности о контексте'));
+
+    expect(rowText('лимит ответа')).toBe('лимит ответабез лимита');
+    expect(rowText('место под ответ')).toBe(`место под ответ${(15_744).toLocaleString('ru-RU')}`);
+  });
+
+  it('warns without opening when the system prompt and the last message do not fit the budget', async () => {
+    await renderMeter({
+      budgetStatus: 'system-exceeds-budget',
+      maxContextLength: 4096,
+      maxTokens: 4000,
+      transcriptMessageCount: 1,
+      trimmedMessageCount: 10,
+    });
+
+    expect(screen.getByText('промпт не помещается')).toBeTruthy();
+    expect(screen.queryByText(ONLY_LAST_MESSAGE)).toBeNull();
+  });
 });

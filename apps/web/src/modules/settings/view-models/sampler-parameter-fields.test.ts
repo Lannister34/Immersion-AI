@@ -1,3 +1,4 @@
+import { ReplyTokenLimitSchema } from '@immersion/contracts/common';
 import { SamplerPresetInputSchema } from '@immersion/contracts/settings';
 import { describe, expect, it } from 'vitest';
 
@@ -6,8 +7,10 @@ import { SAMPLER_PARAMETER_FIELDS, type SamplerParameterField } from './sampler-
 
 const NON_NUMERIC_PRESET_KEYS = new Set(['contextTrimStrategy', 'name']);
 
+const PRESET_NUMBER_SCHEMAS = { ...SamplerPresetInputSchema.shape, maxTokens: ReplyTokenLimitSchema.options[0] };
+
 function presetLimitsOf(field: SamplerParameterField) {
-  return numberLimitsOf(SamplerPresetInputSchema.shape[field.key]);
+  return numberLimitsOf(PRESET_NUMBER_SCHEMAS[field.key]);
 }
 
 describe('SAMPLER_PARAMETER_FIELDS', () => {

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { base64LengthFor } from '../common/base64-length.js';
 import { createFileIdSchema } from '../common/file-id.js';
+import { ReplyTokenLimitSchema } from '../common/reply-token-limit.js';
 import { CHAT_IMPORT_MAX_BYTES, IMAGE_UPLOAD_MAX_BYTES } from '../common/upload-limits.js';
 
 export const ChatIdSchema = z.string().regex(/^[A-Za-z0-9_-]+$/);
@@ -46,6 +47,7 @@ export const ChatMessageDtoSchema = z.object({
   content: z.string(),
   createdAt: z.string().min(1),
   reasoning: z.string().nullable(),
+  stoppedAtTokenLimit: z.boolean(),
 });
 export type ChatMessageDto = z.infer<typeof ChatMessageDtoSchema>;
 
@@ -66,7 +68,7 @@ export type ChatContextTrimStrategy = z.infer<typeof ChatContextTrimStrategySche
 export const ChatSamplingOverridesDtoSchema = z.object({
   contextTrimStrategy: ChatContextTrimStrategySchema.nullable(),
   maxContextLength: z.number().int().positive().nullable(),
-  maxTokens: z.number().int().positive().nullable(),
+  maxTokens: ReplyTokenLimitSchema.nullable(),
   minP: z.number().nonnegative().nullable(),
   presencePenalty: z.number().nullable(),
   repeatPenalty: z.number().nonnegative().nullable(),

@@ -8,6 +8,7 @@ import { isErrnoCode } from '../../../platform/errno-code.js';
 import type { LogPort } from '../../../platform/logging/log-port.js';
 import { writeFileAtomically } from '../../../platform/storage/atomic-file.js';
 import { resolveContainedFilePath } from '../../../platform/storage/contained-path.js';
+import { readStoredReplyTokenLimit } from '../../settings/index.js';
 import {
   ChatLastMessageChangedError,
   ChatTitleConflictError,
@@ -154,7 +155,7 @@ function parseStoredGenerationSettings(value: unknown, filePath: string): ChatGe
           ? samplingSource.context_trim_strategy
           : null,
       maxContextLength: getNullableNumber(samplingSource.max_context_length),
-      maxTokens: getNullableNumber(samplingSource.max_length),
+      maxTokens: readStoredReplyTokenLimit(samplingSource.max_length),
       minP: getNullableNumber(samplingSource.min_p),
       presencePenalty: getNullableNumber(samplingSource.presence_penalty),
       repeatPenalty: getNullableNumber(samplingSource.rep_pen),
@@ -298,6 +299,29 @@ function getStoredReasoning(line: StoredChatLine): string | null {
   return getNullableString((extra as Record<string, unknown>).reasoning);
 }
 
+function getStoredStoppedAtTokenLimit(line: StoredChatLine): boolean {
+  const extra = line.extra;
+
+  if (!extra || typeof extra !== 'object' || Array.isArray(extra)) {
+    return false;
+  }
+
+  return (extra as Record<string, unknown>).stopped_at_token_limit === true;
+}
+
+function withStoppedAtTokenLimit(extra: unknown, stoppedAtTokenLimit: boolean): unknown {
+  const isForeignShape = extra !== undefined && (typeof extra !== 'object' || extra === null || Array.isArray(extra));
+
+  if (isForeignShape) {
+    return extra;
+  }
+
+  const { stopped_at_token_limit: _previous, ...rest } = getRecord(extra);
+  const next = stoppedAtTokenLimit ? { ...rest, stopped_at_token_limit: true } : rest;
+
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
 function getMessageRole(line: StoredChatLine): ChatMessageRoleRecord {
   if (line.extra && typeof line.extra === 'object' && !Array.isArray(line.extra)) {
     const extraSource = line.extra as Record<string, unknown>;
@@ -318,6 +342,7 @@ function createStoredChatLine(message: AppendChatMessageInput): StoredChatLine {
   const extra = {
     ...(attachments.length > 0 ? { attachments } : {}),
     ...(reasoning ? { reasoning } : {}),
+    ...(message.stoppedAtTokenLimit ? { stopped_at_token_limit: true } : {}),
   };
 
   if (message.role === 'system') {
@@ -505,6 +530,7 @@ async function readChatFile(filePath: string, chatId: string): Promise<ChatSessi
         id: `${chatId}:${index + 1}`,
         reasoning: getStoredReasoning(storedLine),
         role: getMessageRole(storedLine),
+        stoppedAtTokenLimit: getStoredStoppedAtTokenLimit(storedLine),
         content: storedLine.mes ?? '',
         createdAt: storedLine.send_date || fallbackCreatedAt,
       } satisfies ChatMessageRecord,
@@ -639,8 +665,11 @@ export class FileChatRepository implements ChatRepository {
         throw new ChatLastMessageChangedError(chatId);
       }
 
+      const { extra: _previousExtra, ...targetLineWithoutExtra } = targetLine;
+      const extra = withStoppedAtTokenLimit(targetLine.extra, input.stoppedAtTokenLimit);
       const updatedLine = {
-        ...targetLine,
+        ...targetLineWithoutExtra,
+        ...(extra !== undefined ? { extra } : {}),
         mes: joinContinuationContent(lastMessage.content, input.continuation),
       };
       existingMessageLines[targetIndex] = JSON.stringify(updatedLine);
@@ -1096,8 +1125,11 @@ export class FileChatRepository implements ChatRepository {
         return null;
       }
 
+      const { extra: _previousExtra, ...targetLineWithoutExtra } = targetLine;
+      const extra = withStoppedAtTokenLimit(targetLine.extra, false);
       const updatedLine = {
-        ...targetLine,
+        ...targetLineWithoutExtra,
+        ...(extra !== undefined ? { extra } : {}),
         mes: content,
       };
       existingMessageLines[targetIndex] = JSON.stringify(updatedLine);

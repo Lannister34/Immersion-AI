@@ -2,6 +2,7 @@ import type { ProviderApiKind } from '@immersion/contracts/providers';
 import { describe, expect, it } from 'vitest';
 
 import { globalHttpFetch } from '../../../../platform/outbound-http/global-http-fetch.js';
+import { createCapturingLogger } from '../../../../test-support/capturing-logger.js';
 import { createHttpStub } from '../../../../test-support/http-stub.js';
 import { anthropicMessage, openAiChatCompletion } from '../../../../test-support/provider-responses.js';
 import { startRedirectingServers } from '../../../../test-support/redirecting-servers.js';
@@ -31,7 +32,7 @@ describe('createChatCompletionClient', () => {
     const http = createHttpStub();
     http.on('POST', 'https://api.anthropic.com/v1/messages', () => anthropicMessage('Claude.'));
     http.on('POST', 'http://127.0.0.1:5001/v1/chat/completions', () => openAiChatCompletion('Local.'));
-    const client = createChatCompletionClient({ httpFetch: http.fetch });
+    const client = createChatCompletionClient({ httpFetch: http.fetch, logger: createCapturingLogger().logger });
 
     const anthropicReply = await client.completeChat(
       requestFor({
@@ -65,7 +66,7 @@ describe('createChatCompletionClient', () => {
     ['openai-compatible', '/v1/chat/completions'],
   ])('refuses a redirect from the %s provider, so its key never reaches the redirect target', async (apiKind, path) => {
     const servers = await startRedirectingServers();
-    const client = createChatCompletionClient({ httpFetch: globalHttpFetch });
+    const client = createChatCompletionClient({ httpFetch: globalHttpFetch, logger: createCapturingLogger().logger });
 
     const failure = await client
       .completeChat(

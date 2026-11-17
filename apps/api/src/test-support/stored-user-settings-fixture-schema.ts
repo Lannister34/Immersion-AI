@@ -10,7 +10,7 @@ export const StoredSamplerPresetFixtureSchema = z.looseObject({
   rep_pen: z.number(),
   rep_pen_range: z.number(),
   presence_penalty: z.number(),
-  max_length: z.number(),
+  max_length: z.unknown(),
   max_context_length: z.number(),
   context_trim_strategy: z.enum(['trim_middle', 'trim_start']),
 });
