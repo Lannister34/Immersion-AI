@@ -1,7 +1,8 @@
-import { ProviderTypeSchema, type UpdateProviderSettingsCommand } from '@immersion/contracts/providers';
+import { ProviderTypeSchema } from '@immersion/contracts/providers';
 import type { z } from 'zod';
 
 import { createDefaultProviderConfig, createDefaultProviderSettings } from './provider-settings.js';
+import type { ProviderSettings } from './provider-settings-schema.js';
 import { storedProviderSettingsSchema } from './stored-provider-settings-schema.js';
 
 export interface StoredUserSettingsRecord extends Record<string, unknown> {
@@ -14,7 +15,7 @@ export interface StoredUserSettingsRecord extends Record<string, unknown> {
 
 function migrateLegacyConnectionPresets(
   settings: z.infer<typeof storedProviderSettingsSchema>,
-): Partial<UpdateProviderSettingsCommand> | null {
+): Partial<ProviderSettings> | null {
   if (!settings.connectionPresets || settings.connectionPresets.length === 0) {
     return null;
   }
@@ -42,9 +43,9 @@ function migrateLegacyConnectionPresets(
 }
 
 function mergeProviderConfigs(
-  defaults: UpdateProviderSettingsCommand['providerConfigs'],
-  ...overrides: Array<UpdateProviderSettingsCommand['providerConfigs'] | undefined>
-): UpdateProviderSettingsCommand['providerConfigs'] {
+  defaults: ProviderSettings['providerConfigs'],
+  ...overrides: Array<ProviderSettings['providerConfigs'] | undefined>
+): ProviderSettings['providerConfigs'] {
   const result = {
     ...defaults,
   };
@@ -69,7 +70,7 @@ function mergeProviderConfigs(
   return result;
 }
 
-export function normalizeStoredProviderSettings(raw: StoredUserSettingsRecord | null): UpdateProviderSettingsCommand {
+export function normalizeStoredProviderSettings(raw: StoredUserSettingsRecord | null): ProviderSettings {
   const defaults = createDefaultProviderSettings();
 
   if (!raw) {

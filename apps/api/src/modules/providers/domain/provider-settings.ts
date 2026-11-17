@@ -1,12 +1,7 @@
-import {
-  type ProviderConfig,
-  type ProviderConfigs,
-  type ProviderType,
-  ProviderTypeSchema,
-  type UpdateProviderSettingsCommand,
-} from '@immersion/contracts/providers';
+import { type ProviderType, ProviderTypeSchema } from '@immersion/contracts/providers';
 
 import { getProviderDefaultModel, getProviderDefaultUrl } from './provider-catalog.js';
+import type { ProviderConfig, ProviderConfigs, ProviderSettings } from './provider-settings-schema.js';
 
 export const DEFAULT_OPENAI_COMPATIBLE_MODEL = 'local-model';
 
@@ -29,7 +24,7 @@ function createDefaultProviderConfigs(): ProviderConfigs {
   return configs;
 }
 
-export function createDefaultProviderSettings(): UpdateProviderSettingsCommand {
+export function createDefaultProviderSettings(): ProviderSettings {
   return {
     mode: 'builtin',
     activeProvider: 'custom',

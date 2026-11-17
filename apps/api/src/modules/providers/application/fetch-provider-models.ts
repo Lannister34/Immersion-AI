@@ -5,6 +5,19 @@ import { type ConnectionSubject, createErrorResponse, createOkResponse } from '.
 import { ProviderModelsPayloadSchema } from './provider-models-payload-schema.js';
 import { buildProviderModelsRequestHeaders } from './provider-models-request-headers.js';
 
+function describeFetchFailure(error: unknown): string {
+  if (error instanceof Error && error.name === 'TimeoutError') {
+    return 'Провайдер не ответил вовремя.';
+  }
+
+  const cause = error instanceof Error ? error.cause : undefined;
+  const code = cause && typeof cause === 'object' && 'code' in cause ? cause.code : undefined;
+
+  return typeof code === 'string' && /^[A-Z_]+$/u.test(code)
+    ? `Провайдер недоступен (${code}).`
+    : 'Провайдер недоступен.';
+}
+
 export interface ProviderModelsFetchDependencies {
   readonly httpFetch: HttpFetch;
   readonly timeoutMs?: number;
@@ -25,12 +38,7 @@ export async function fetchProviderModels(
       signal: AbortSignal.timeout(dependencies.timeoutMs ?? 5000),
     });
   } catch (error) {
-    return createErrorResponse(
-      subject,
-      'provider_unreachable',
-      error instanceof Error ? error.message : 'Provider request failed.',
-      endpoint,
-    );
+    return createErrorResponse(subject, 'provider_unreachable', describeFetchFailure(error), endpoint);
   }
 
   if (!response.ok) {

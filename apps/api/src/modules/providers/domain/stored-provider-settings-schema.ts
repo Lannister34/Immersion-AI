@@ -1,5 +1,7 @@
-import { ProviderConfigsSchema, ProviderModeSchema, ProviderTypeSchema } from '@immersion/contracts/providers';
+import { ProviderModeSchema, ProviderTypeSchema } from '@immersion/contracts/providers';
 import { z } from 'zod';
+
+import { ProviderConfigsSchema } from './provider-settings-schema.js';
 
 export const storedProviderSettingsSchema = z
   .object({

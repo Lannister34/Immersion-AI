@@ -1,11 +1,7 @@
-import {
-  type PatchProviderSettingsCommand,
-  type ProviderConfig,
-  type ProviderSettingsSnapshot,
-  UpdateProviderSettingsCommandSchema,
-} from '@immersion/contracts/providers';
+import type { PatchProviderSettingsCommand, ProviderSettingsSnapshot } from '@immersion/contracts/providers';
 
 import { createDefaultProviderConfig } from '../domain/provider-settings.js';
+import { type ProviderConfig, ProviderSettingsSchema } from '../domain/provider-settings-schema.js';
 import { toProviderSettingsSnapshot } from '../domain/provider-settings-snapshot.js';
 import type { ProviderSettingsRepository } from './provider-settings-repository.js';
 
@@ -16,8 +12,12 @@ function mergeConfig(current: ProviderConfig, patch: PatchProviderSettingsComman
     next.url = patch.url;
   }
 
-  if (patch?.model) {
-    next.model = patch.model;
+  if (patch?.model !== undefined) {
+    if (patch.model.length > 0) {
+      next.model = patch.model;
+    } else {
+      delete next.model;
+    }
   }
 
   if (patch?.apiKey !== undefined) {
@@ -43,7 +43,7 @@ export async function patchProviderSettings(
     const activeProvider = command.activeProvider ?? current.activeProvider;
     const currentConfig = current.providerConfigs[activeProvider] ?? createDefaultProviderConfig(activeProvider);
 
-    return UpdateProviderSettingsCommandSchema.parse({
+    return ProviderSettingsSchema.parse({
       activeProvider,
       mode: command.mode ?? current.mode,
       providerConfigs: {

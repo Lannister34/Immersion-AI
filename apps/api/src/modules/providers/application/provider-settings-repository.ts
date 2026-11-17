@@ -1,15 +1,14 @@
-import type { UpdateProviderSettingsCommand } from '@immersion/contracts/providers';
-
 import type { UserSettingsDocument, UserSettingsRecord } from '../../settings/index.js';
 import { normalizeStoredProviderSettings } from '../domain/normalize-stored-provider-settings.js';
+import type { ProviderSettings } from '../domain/provider-settings-schema.js';
 
-export type ProviderSettingsChange = (current: UpdateProviderSettingsCommand) => UpdateProviderSettingsCommand;
+export type ProviderSettingsChange = (current: ProviderSettings) => ProviderSettings;
 
 export interface ProviderSettingsRepositoryOptions {
   readonly document: UserSettingsDocument;
 }
 
-function toStoredRecord(existing: UserSettingsRecord, next: UpdateProviderSettingsCommand): UserSettingsRecord {
+function toStoredRecord(existing: UserSettingsRecord, next: ProviderSettings): UserSettingsRecord {
   return {
     ...existing,
     backendMode: next.mode,
@@ -25,15 +24,15 @@ export class ProviderSettingsRepository {
     this.document = document;
   }
 
-  read(): UpdateProviderSettingsCommand {
+  read(): ProviderSettings {
     return normalizeStoredProviderSettings(this.document.read());
   }
 
-  async write(next: UpdateProviderSettingsCommand): Promise<void> {
+  async write(next: ProviderSettings): Promise<void> {
     await this.document.update((existing) => toStoredRecord(existing, next));
   }
 
-  async update(change: ProviderSettingsChange): Promise<UpdateProviderSettingsCommand> {
+  async update(change: ProviderSettingsChange): Promise<ProviderSettings> {
     const stored = await this.document.update((existing) =>
       toStoredRecord(existing, change(normalizeStoredProviderSettings(existing))),
     );

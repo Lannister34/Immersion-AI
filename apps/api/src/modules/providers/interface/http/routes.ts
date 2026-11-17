@@ -1,8 +1,4 @@
-import {
-  PatchProviderSettingsCommandSchema,
-  ProviderModelsProbeCommandSchema,
-  UpdateProviderSettingsCommandSchema,
-} from '@immersion/contracts/providers';
+import { PatchProviderSettingsCommandSchema, ProviderModelsProbeCommandSchema } from '@immersion/contracts/providers';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { parseRequest } from '../../../../platform/http/parse-request.js';
@@ -13,7 +9,6 @@ import { probeProviderModels } from '../../application/probe-provider-models.js'
 import type { ProviderSettingsRepository } from '../../application/provider-settings-repository.js';
 import { testProviderConnection } from '../../application/test-provider-connection.js';
 import type { TestProviderConnectionDependencies } from '../../application/test-provider-connection-dependencies.js';
-import { updateProviderSettings } from '../../application/update-provider-settings.js';
 import { providerDefinitions } from '../../domain/provider-catalog.js';
 
 export interface ProvidersRoutesDependencies extends TestProviderConnectionDependencies {
@@ -39,12 +34,6 @@ export function createProvidersRoutes(dependencies: ProvidersRoutesDependencies)
     });
 
     app.get('/settings', async () => getProviderSettings(dependencies));
-
-    app.put('/settings', async (request) => {
-      const command = parseRequest(UpdateProviderSettingsCommandSchema, request.body);
-
-      return updateProviderSettings(command, dependencies);
-    });
 
     app.patch('/settings', async (request) => {
       const command = parseRequest(PatchProviderSettingsCommandSchema, request.body);

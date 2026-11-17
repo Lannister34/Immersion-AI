@@ -95,7 +95,7 @@ A failure after a stream has started arrives as one more `data:` event in that s
 The provider is switched over the same API, without opening the web UI:
 
 ```
-GET   /api/providers/settings   # mode, active provider, configs (returns the stored key)
+GET   /api/providers/settings   # mode, active provider, configs (apiKeyConfigured, never the key)
 PATCH /api/providers/settings   # change only the fields you send
 POST  /api/providers/models     # list a provider's models without saving anything
 GET   /api/runtime/overview     # built-in llama-server: status, models, directories
@@ -111,7 +111,12 @@ and an optional `mmprojPath` — the multimodal projector passed to llama-server
 curl -X PATCH http://127.0.0.1:4787/api/providers/settings   -H 'Content-Type: application/json'   -d '{"mode":"external","activeProvider":"anthropic","config":{"apiKey":"sk-ant-…","model":"claude-sonnet-4-5"}}'
 ```
 
-`config` applies to the provider that becomes active; an empty `apiKey` clears the stored key.
+`config` applies to the provider that becomes active; an empty `apiKey` clears the stored key and
+an empty `model` clears the model. Keys are write-only: no response carries a stored key, only
+`apiKeyConfigured`. `POST /api/providers/models` without `apiKey` uses the stored key of that
+provider, and only when the `url` has the same origin as the saved one; an empty `apiKey` asks
+with no key. A key is visible ASCII without spaces. Changing a provider's `url` keeps its key, so
+the key goes to the new address.
 
 The API listens on 127.0.0.1 and has no authentication. Keep it on loopback, or put a
 reverse proxy in front of it before exposing it to a network.
@@ -225,7 +230,7 @@ OpenAI-совместимым серверам. Облакам OpenAI и Anthrop
 Провайдер переключается тем же API, без захода в веб-интерфейс:
 
 ```
-GET   /api/providers/settings   # режим, активный провайдер, конфиги (отдаёт и ключ)
+GET   /api/providers/settings   # режим, активный провайдер, конфиги (apiKeyConfigured, не ключ)
 PATCH /api/providers/settings   # меняет только присланные поля
 POST  /api/providers/models     # список моделей провайдера, ничего не сохраняя
 GET   /api/runtime/overview     # встроенный llama-server: статус, модели, каталоги
@@ -242,7 +247,11 @@ curl -X PATCH http://127.0.0.1:4787/api/providers/settings   -H 'Content-Type: a
 ```
 
 `config` применяется к провайдеру, который становится активным; пустой `apiKey` снимает
-сохранённый ключ.
+сохранённый ключ, пустой `model` снимает модель. Ключи только записываются: ни один ответ не
+содержит сохранённый ключ, только `apiKeyConfigured`. `POST /api/providers/models` без `apiKey`
+берёт сохранённый ключ этого провайдера, и только если `url` того же origin, что и сохранённый;
+пустой `apiKey` запрашивает без ключа. Ключ — видимые ASCII-символы без пробелов. Смена `url`
+провайдера оставляет ключ, и он уходит на новый адрес.
 
 API слушает 127.0.0.1 и не проверяет авторизацию. Держите его на loopback либо ставьте
 перед ним обратный прокси, прежде чем открывать в сеть.

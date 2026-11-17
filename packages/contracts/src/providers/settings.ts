@@ -28,39 +28,37 @@ export const ProviderDefinitionSchema = z.object({
 });
 export type ProviderDefinition = z.infer<typeof ProviderDefinitionSchema>;
 
-export const ProviderConfigSchema = z
-  .object({
-    url: z.string().min(1),
-    apiKey: z.string().min(1).optional(),
-    model: z.string().min(1).optional(),
-  })
-  .catchall(z.string().min(1));
-export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
+export const ProviderApiKeyTextSchema = z
+  .string()
+  .trim()
+  .regex(/^[!-~]*$/u, 'API-ключ может содержать только видимые латинские символы, цифры и знаки, без пробелов.');
 
-export const ProviderConfigsSchema = z
+export const ProviderApiKeyInputSchema = ProviderApiKeyTextSchema.max(500);
+
+export const ProviderConfigViewSchema = z.object({
+  url: z.string().min(1),
+  model: z.string().min(1).optional(),
+  apiKeyConfigured: z.boolean(),
+});
+export type ProviderConfigView = z.infer<typeof ProviderConfigViewSchema>;
+
+export const ProviderConfigViewsSchema = z
   .object({
-    koboldcpp: ProviderConfigSchema.optional(),
-    custom: ProviderConfigSchema.optional(),
-    openai: ProviderConfigSchema.optional(),
-    anthropic: ProviderConfigSchema.optional(),
+    koboldcpp: ProviderConfigViewSchema.optional(),
+    custom: ProviderConfigViewSchema.optional(),
+    openai: ProviderConfigViewSchema.optional(),
+    anthropic: ProviderConfigViewSchema.optional(),
   })
   .partial();
-export type ProviderConfigs = z.infer<typeof ProviderConfigsSchema>;
-
-export const UpdateProviderSettingsCommandSchema = z.object({
-  mode: ProviderModeSchema,
-  activeProvider: ProviderTypeSchema,
-  providerConfigs: ProviderConfigsSchema,
-});
-export type UpdateProviderSettingsCommand = z.infer<typeof UpdateProviderSettingsCommandSchema>;
+export type ProviderConfigViews = z.infer<typeof ProviderConfigViewsSchema>;
 
 export const PatchProviderSettingsCommandSchema = z
   .object({
     activeProvider: ProviderTypeSchema.optional(),
     config: z
       .object({
-        apiKey: z.string().max(500).optional(),
-        model: z.string().trim().min(1).max(200).optional(),
+        apiKey: ProviderApiKeyInputSchema.optional(),
+        model: z.string().trim().max(200).optional(),
         url: z.string().trim().min(1).max(2000).optional(),
       })
       .optional(),
@@ -71,7 +69,10 @@ export const PatchProviderSettingsCommandSchema = z
   });
 export type PatchProviderSettingsCommand = z.infer<typeof PatchProviderSettingsCommandSchema>;
 
-export const ProviderSettingsSnapshotSchema = UpdateProviderSettingsCommandSchema.extend({
+export const ProviderSettingsSnapshotSchema = z.object({
+  mode: ProviderModeSchema,
+  activeProvider: ProviderTypeSchema,
+  providerConfigs: ProviderConfigViewsSchema,
   providerDefinitions: z.array(ProviderDefinitionSchema),
 });
 export type ProviderSettingsSnapshot = z.infer<typeof ProviderSettingsSnapshotSchema>;

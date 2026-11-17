@@ -25,17 +25,12 @@ describe('user-settings.json writes', () => {
         },
       }),
       app.inject({
-        method: 'PUT',
+        method: 'PATCH',
         url: '/api/providers/settings',
         payload: {
           mode: 'external',
           activeProvider: 'custom',
-          providerConfigs: {
-            custom: {
-              url: 'http://127.0.0.1:9999',
-              model: 'concurrent-model',
-            },
-          },
+          config: { url: 'http://127.0.0.1:9999', model: 'concurrent-model' },
         },
       }),
     ]);

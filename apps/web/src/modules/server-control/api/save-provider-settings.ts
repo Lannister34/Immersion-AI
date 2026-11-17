@@ -1,17 +1,17 @@
 import {
+  type PatchProviderSettingsCommand,
+  PatchProviderSettingsCommandSchema,
   type ProviderSettingsSnapshot,
   ProviderSettingsSnapshotSchema,
-  type UpdateProviderSettingsCommand,
-  UpdateProviderSettingsCommandSchema,
 } from '@immersion/contracts/providers';
 
-import { apiPut } from '../../../shared/api/client';
+import { apiPatch } from '../../../shared/api/client';
 
-export function saveProviderSettings(command: UpdateProviderSettingsCommand) {
-  return apiPut<UpdateProviderSettingsCommand, ProviderSettingsSnapshot>(
+export function saveProviderSettings(command: PatchProviderSettingsCommand): Promise<ProviderSettingsSnapshot> {
+  return apiPatch<PatchProviderSettingsCommand, ProviderSettingsSnapshot>(
     '/api/providers/settings',
     command,
-    UpdateProviderSettingsCommandSchema,
+    PatchProviderSettingsCommandSchema,
     ProviderSettingsSnapshotSchema,
   );
 }

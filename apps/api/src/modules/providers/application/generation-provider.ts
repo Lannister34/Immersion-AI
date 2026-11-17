@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { getProviderApiKind } from '../domain/provider-catalog.js';
 import { findCloudProviderReadinessIssue, resolveProviderModel } from '../domain/provider-readiness.js';
 import { DEFAULT_OPENAI_COMPATIBLE_MODEL } from '../domain/provider-settings.js';
-import { type GetProviderSettingsDependencies, getProviderSettings } from './get-provider-settings.js';
+import { toProviderConfigView } from '../domain/provider-settings-snapshot.js';
+import { readUsableApiKey } from '../domain/usable-api-key.js';
+import type { GetProviderSettingsDependencies } from './get-provider-settings.js';
 import type { RuntimeEndpointPort } from './runtime-endpoint-port.js';
 
 export class GenerationProviderUnavailableError extends Error {
@@ -62,7 +64,7 @@ export interface ResolveGenerationProviderEndpointDependencies extends GetProvid
 export async function resolveGenerationProviderEndpoint(
   dependencies: ResolveGenerationProviderEndpointDependencies,
 ): Promise<GenerationProviderEndpoint> {
-  const settings = await getProviderSettings(dependencies);
+  const settings = dependencies.providerSettings.read();
 
   if (settings.mode === 'builtin') {
     const runtimeEndpoint = await dependencies.runtimeEndpoint.getRunningEndpoint();
@@ -95,7 +97,7 @@ export async function resolveGenerationProviderEndpoint(
     .parse(config);
 
   const provider = settings.activeProvider;
-  const issue = findCloudProviderReadinessIssue(provider, config);
+  const issue = findCloudProviderReadinessIssue(provider, toProviderConfigView(config));
 
   if (issue) {
     throw new GenerationProviderUnavailableError(issue.message);
@@ -108,7 +110,7 @@ export async function resolveGenerationProviderEndpoint(
   }
 
   return {
-    apiKey: parsedConfig.apiKey?.trim() || null,
+    apiKey: readUsableApiKey(parsedConfig.apiKey),
     apiKind: getProviderApiKind(provider),
     baseUrl: parsedConfig.url,
     contextSize: null,

@@ -1,34 +1,28 @@
-import type { ProviderConnectionResponse, ProviderSettingsSnapshot } from '@immersion/contracts/providers';
+import type { ProviderConnectionResponse } from '@immersion/contracts/providers';
 
+import type { ProviderSettings } from '../domain/provider-settings-schema.js';
+import { readUsableApiKey } from '../domain/usable-api-key.js';
 import { fetchProviderModels } from './fetch-provider-models.js';
 import { resolveVersionedUrl } from './generation-provider.js';
-import { getProviderSettings } from './get-provider-settings.js';
-import { probeProviderModels } from './probe-provider-models.js';
 import { type ConnectionSubject, createErrorResponse } from './provider-connection-response.js';
+import { requestProviderModels } from './request-provider-models.js';
 import type { TestProviderConnectionDependencies } from './test-provider-connection-dependencies.js';
 
-function toSubject(settings: ProviderSettingsSnapshot): ConnectionSubject {
+function toSubject(settings: ProviderSettings): ConnectionSubject {
   return { activeProvider: settings.activeProvider, mode: settings.mode };
 }
 
-function getConfiguredExternalUrl(settings: ProviderSettingsSnapshot) {
+function getConfiguredExternalUrl(settings: ProviderSettings) {
   const config = settings.providerConfigs[settings.activeProvider];
   const url = config?.url;
 
   return typeof url === 'string' ? url.trim() : '';
 }
 
-function getConfiguredExternalApiKey(settings: ProviderSettingsSnapshot) {
-  const config = settings.providerConfigs[settings.activeProvider];
-  const apiKey = config?.apiKey;
-
-  return typeof apiKey === 'string' && apiKey.trim().length > 0 ? apiKey.trim() : null;
-}
-
 export async function testProviderConnection(
   dependencies: TestProviderConnectionDependencies,
 ): Promise<ProviderConnectionResponse> {
-  const settings = await getProviderSettings(dependencies);
+  const settings = dependencies.providerSettings.read();
   const subject = toSubject(settings);
 
   if (settings.mode === 'builtin') {
@@ -53,13 +47,11 @@ export async function testProviderConnection(
     return createErrorResponse(subject, 'provider_url_missing', 'URL внешнего API не настроен.', null);
   }
 
-  const apiKey = getConfiguredExternalApiKey(settings);
-
-  return probeProviderModels(
+  return requestProviderModels(
     {
+      apiKey: readUsableApiKey(settings.providerConfigs[settings.activeProvider]?.apiKey),
       provider: settings.activeProvider,
       url: providerUrl,
-      ...(apiKey ? { apiKey } : {}),
     },
     dependencies,
   );
