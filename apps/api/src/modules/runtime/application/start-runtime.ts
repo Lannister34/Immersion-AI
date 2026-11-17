@@ -2,15 +2,22 @@ import fs from 'node:fs';
 
 import type { RuntimeOverviewResponse, RuntimeStartCommand } from '@immersion/contracts/runtime';
 
-import { getLlmProcessManager } from '../infrastructure/llm-process-manager.js';
-import { getRuntimeOverview } from './get-runtime-overview.js';
+import { type GetRuntimeOverviewDependencies, getRuntimeOverview } from './get-runtime-overview.js';
 import {
   RuntimeBinaryMissingError,
   RuntimeModelNotFoundError,
   RuntimeProjectorNotFoundError,
 } from './runtime-errors.js';
+import type { RuntimeProcess } from './runtime-process.js';
 
-export async function startRuntime(command: RuntimeStartCommand): Promise<RuntimeOverviewResponse> {
+export interface StartRuntimeDependencies extends GetRuntimeOverviewDependencies {
+  readonly runtimeProcess: Pick<RuntimeProcess, 'getEngineInfo' | 'getState' | 'start'>;
+}
+
+export async function startRuntime(
+  command: RuntimeStartCommand,
+  dependencies: StartRuntimeDependencies,
+): Promise<RuntimeOverviewResponse> {
   if (!fs.existsSync(command.modelPath)) {
     throw new RuntimeModelNotFoundError(command.modelPath);
   }
@@ -19,14 +26,11 @@ export async function startRuntime(command: RuntimeStartCommand): Promise<Runtim
     throw new RuntimeProjectorNotFoundError(command.mmprojPath);
   }
 
-  const manager = getLlmProcessManager();
-  const engine = manager.getEngineInfo();
-
-  if (!engine.found) {
+  if (!dependencies.runtimeProcess.getEngineInfo().found) {
     throw new RuntimeBinaryMissingError();
   }
 
-  await manager.start(command);
+  await dependencies.runtimeProcess.start(command);
 
-  return getRuntimeOverview();
+  return getRuntimeOverview(dependencies);
 }

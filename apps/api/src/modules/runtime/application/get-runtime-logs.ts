@@ -1,12 +1,14 @@
 import { type RuntimeLogsResponse, RuntimeLogsResponseSchema } from '@immersion/contracts/runtime';
 
-import { getLlmProcessManager } from '../infrastructure/llm-process-manager.js';
+import type { RuntimeProcess } from './runtime-process.js';
 
-export function getRuntimeLogs(): RuntimeLogsResponse {
-  const manager = getLlmProcessManager();
+export interface GetRuntimeLogsDependencies {
+  readonly runtimeProcess: Pick<RuntimeProcess, 'getLogs' | 'getState'>;
+}
 
+export function getRuntimeLogs({ runtimeProcess }: GetRuntimeLogsDependencies): RuntimeLogsResponse {
   return RuntimeLogsResponseSchema.parse({
-    lines: manager.getLogs(),
-    status: manager.getState().status,
+    lines: runtimeProcess.getLogs(),
+    status: runtimeProcess.getState().status,
   });
 }

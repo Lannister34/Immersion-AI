@@ -5,10 +5,11 @@ import { PassThrough } from 'node:stream';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getSharedApiLogger } from '../../../platform/logging/shared-api-logger.js';
-import { stubGlobalFetch } from '../../../test-support/global-fetch-stub.js';
+import { type CapturingLogger, createCapturingLogger } from '../../../test-support/capturing-logger.js';
+import { createHttpStub, type HttpStub } from '../../../test-support/http-stub.js';
 import { useTemporaryDataRoot } from '../../../test-support/use-temporary-data-root.js';
-import { LlmProcessManager, type LlmStartConfig } from './llm-process-manager.js';
+import type { RuntimeStartConfig } from '../application/runtime-process.js';
+import { LlmProcessManager } from './llm-process-manager.js';
 
 class FakeLlamaServer extends EventEmitter {
   readonly pid: number | undefined;
@@ -40,23 +41,25 @@ const spawnMock = vi.hoisted(() =>
     throw new Error('spawn is not available in tests');
   }),
 );
-const runtimeProjectRoot = vi.hoisted(() => ({ current: null as string | null }));
 
 vi.mock('node:child_process', () => ({ execSync: execSyncMock, spawn: spawnMock }));
-vi.mock('../../../config/find-project-root.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../config/find-project-root.js')>();
-
-  return {
-    ...actual,
-    findProjectRoot: (startDirectory: string) => runtimeProjectRoot.current ?? actual.findProjectRoot(startDirectory),
-  };
-});
 
 const DETACHED_PID = 2_147_483_647;
 const DETACHED_PORT = 59_999;
 
 describe('LlmProcessManager', () => {
   const dataRoot = useTemporaryDataRoot();
+  let http: HttpStub;
+  let logs: CapturingLogger;
+
+  function createManager(): LlmProcessManager {
+    return new LlmProcessManager({
+      dataRoot: dataRoot(),
+      httpFetch: http.fetch,
+      logger: logs.logger,
+      projectRoot: path.dirname(dataRoot()),
+    });
+  }
 
   async function recordDetachedRuntime() {
     await fs.writeFile(
@@ -102,7 +105,6 @@ describe('LlmProcessManager', () => {
     const projectRoot = path.dirname(dataRoot());
     await fs.mkdir(path.join(projectRoot, 'bin'), { recursive: true });
     await fs.writeFile(path.join(projectRoot, 'bin', 'llama-server'), '');
-    runtimeProjectRoot.current = projectRoot;
     vi.useFakeTimers();
 
     const servers: FakeLlamaServer[] = [];
@@ -112,7 +114,7 @@ describe('LlmProcessManager', () => {
       return server;
     });
 
-    const config: LlmStartConfig = {
+    const config: RuntimeStartConfig = {
       contextSize: 2048,
       flashAttention: false,
       gpuLayers: 0,
@@ -126,33 +128,82 @@ describe('LlmProcessManager', () => {
 
   beforeEach(() => {
     execSyncMock.mockReset();
+    http = createHttpStub();
+    logs = createCapturingLogger();
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    runtimeProjectRoot.current = null;
     spawnMock.mockReset();
   });
 
-  it('re-attaches to a llama-server left by a previous API process only when asked, never on import or construction', async () => {
+  it('re-attaches to a llama-server left by a previous API process only when asked, never on construction', async () => {
     await recordDetachedRuntime();
-    const http = stubGlobalFetch();
     http.on('GET', `http://127.0.0.1:${DETACHED_PORT}/health`, () => Response.json({ status: 'ok' }));
 
-    vi.resetModules();
-    const { getLlmProcessManager } = await import('./llm-process-manager.js');
-    const manager = getLlmProcessManager();
+    const manager = createManager();
 
     expect(http.requests).toEqual([]);
 
-    await manager.reconnectToDetachedRuntime();
+    await manager.reconnect();
+
+    expect(http.requestLines()).toEqual([`GET http://127.0.0.1:${DETACHED_PORT}/health`]);
+    expect(manager.getState()).toMatchObject({ status: 'running', pid: DETACHED_PID });
+  });
+
+  it('reconnects to nothing and asks nothing when no PID file was left behind', async () => {
+    const manager = createManager();
+
+    await manager.reconnect();
+
+    expect(http.requests).toEqual([]);
+    expect(manager.getState()).toMatchObject({ status: 'idle', pid: null });
+  });
+
+  it('keeps the PID file and the log in the data root it was given', async () => {
+    const { config } = await arrangeFakeLlamaServers([2_147_483_603]);
+    vi.spyOn(process, 'kill').mockReturnValue(true);
+    const manager = createManager();
+
+    await manager.start(config);
+    const pidFile = JSON.parse(await fs.readFile(path.join(dataRoot(), '.llm-server.json'), 'utf8'));
+    await manager.stop();
+
+    expect(pidFile).toMatchObject({ pid: 2_147_483_603, port: DETACHED_PORT });
+    await expect(fs.stat(path.join(dataRoot(), 'logs', 'llm-server.log'))).resolves.toBeDefined();
+  });
+
+  it('stops polling the health of a starting server once disposed, without stopping the server', async () => {
+    const { config, servers } = await arrangeFakeLlamaServers([2_147_483_604]);
+    vi.spyOn(process, 'kill').mockReturnValue(true);
+    const manager = createManager();
+
+    await manager.start(config);
+    manager.dispose();
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(http.requests).toEqual([]);
+    expect(servers[0]?.exitCode).toBeNull();
+    expect(manager.getState()).toMatchObject({ status: 'starting', pid: 2_147_483_604 });
+  });
+
+  it('arms no health poll after disposal, even when a reconnect finishes later', async () => {
+    await recordDetachedRuntime();
+    vi.useFakeTimers();
+    http.on('GET', `http://127.0.0.1:${DETACHED_PORT}/health`, () => Response.json({ status: 'loading' }));
+    const manager = createManager();
+
+    const reconnecting = manager.reconnect();
+    manager.dispose();
+    await reconnecting;
+    await vi.advanceTimersByTimeAsync(5_000);
 
     expect(http.requestLines()).toEqual([`GET http://127.0.0.1:${DETACHED_PORT}/health`]);
   });
 
   it('stops a llama-server left by a previous API process before starting another, which would otherwise be orphaned', async () => {
     await recordDetachedRuntime();
-    const manager = new LlmProcessManager();
+    const manager = createManager();
     vi.spyOn(manager, 'stop').mockRejectedValueOnce(new Error('stop requested before spawn'));
 
     await expect(
@@ -171,7 +222,7 @@ describe('LlmProcessManager', () => {
     const detached = await recordDetachedRuntime();
     vi.useFakeTimers();
 
-    const stopping = new LlmProcessManager().stop();
+    const stopping = createManager().stop();
     await vi.runAllTimersAsync();
     await stopping;
 
@@ -180,7 +231,7 @@ describe('LlmProcessManager', () => {
 
   it('reports a llama-server that exits while loading as an error instead of idle', async () => {
     const { config, servers } = await arrangeFakeLlamaServers();
-    const manager = new LlmProcessManager();
+    const manager = createManager();
 
     await manager.start(config);
     servers[0]?.exit(1);
@@ -200,7 +251,7 @@ describe('LlmProcessManager', () => {
 
   it('clears the previous crash when a model is started again', async () => {
     const { config, servers } = await arrangeFakeLlamaServers();
-    const manager = new LlmProcessManager();
+    const manager = createManager();
 
     await manager.start(config);
     servers[0]?.exit(1);
@@ -216,7 +267,7 @@ describe('LlmProcessManager', () => {
     const nextPid = 2_147_483_601;
     const { config, servers } = await arrangeFakeLlamaServers([crashedPid, nextPid]);
     const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
-    const manager = new LlmProcessManager();
+    const manager = createManager();
 
     await manager.start(config);
     servers[0]?.exit(1);
@@ -231,7 +282,7 @@ describe('LlmProcessManager', () => {
 
   it('returns to idle without the previous crash after stop', async () => {
     const { config, servers } = await arrangeFakeLlamaServers();
-    const manager = new LlmProcessManager();
+    const manager = createManager();
 
     await manager.start(config);
     servers[0]?.exit(1);
@@ -252,23 +303,22 @@ describe('LlmProcessManager', () => {
     const pid = 2_147_483_602;
     const { config } = await arrangeFakeLlamaServers([pid]);
     vi.spyOn(process, 'kill').mockReturnValue(true);
-    const manager = new LlmProcessManager();
+    const manager = createManager();
 
     await manager.start({ ...config, contextSize: 8192, flashAttention: true, gpuLayers: 99, threads: 6 });
 
     const expected = { contextSize: 8192, flashAttention: true, gpuLayers: 99, threads: 6 };
     expect(manager.getState().launchConfig).toEqual(expected);
-    expect(new LlmProcessManager().getState()).toMatchObject({ status: 'running', pid, launchConfig: expected });
+    expect(createManager().getState()).toMatchObject({ status: 'running', pid, launchConfig: expected });
 
     await manager.stop();
   });
 
   it('reports unknown launch parameters for a llama-server whose PID file predates them, instead of guessing', async () => {
     await recordDetachedRuntime();
-    const warn = vi.spyOn(getSharedApiLogger(), 'warn').mockImplementation(() => undefined);
 
-    expect(new LlmProcessManager().getState()).toMatchObject({ status: 'running', launchConfig: null });
-    expect(warn).not.toHaveBeenCalled();
+    expect(createManager().getState()).toMatchObject({ status: 'running', launchConfig: null });
+    expect(logs.lines).toEqual([]);
   });
 
   it('logs a malformed launchConfig in the PID file once and reports it as unknown, since the record is the server fault', async () => {
@@ -276,12 +326,10 @@ describe('LlmProcessManager', () => {
     const pidFilePath = path.join(dataRoot(), '.llm-server.json');
     const record = JSON.parse(await fs.readFile(pidFilePath, 'utf8')) as Record<string, unknown>;
     await fs.writeFile(pidFilePath, JSON.stringify({ ...record, launchConfig: { contextSize: 'восемь тысяч' } }));
-    const warn = vi.spyOn(getSharedApiLogger(), 'warn').mockImplementation(() => undefined);
-    const manager = new LlmProcessManager();
+    const manager = createManager();
 
     expect(manager.getState()).toMatchObject({ status: 'running', launchConfig: null });
     expect(manager.getState().launchConfig).toBeNull();
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith(expect.objectContaining({ pid: DETACHED_PID }), expect.any(String));
+    expect(logs.lines).toEqual([expect.objectContaining({ level: 'warn', pid: DETACHED_PID })]);
   });
 });

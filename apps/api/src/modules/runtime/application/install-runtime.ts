@@ -9,9 +9,9 @@ import { promisify } from 'node:util';
 
 import type { RuntimeInstallCommand, RuntimeOverviewResponse } from '@immersion/contracts/runtime';
 
-import { getSharedApiLogger } from '../../../platform/logging/shared-api-logger.js';
-import { getPrimaryRuntimeRoot } from '../infrastructure/llm-process-manager.js';
-import { getRuntimeOverview } from './get-runtime-overview.js';
+import type { LogPort } from '../../../platform/logging/log-port.js';
+import type { HttpFetch } from '../../../platform/outbound-http/http-fetch.js';
+import { type GetRuntimeOverviewDependencies, getRuntimeOverview } from './get-runtime-overview.js';
 import { type GitHubRelease, type GitHubReleaseAsset, GitHubReleaseListSchema } from './github-release-schema.js';
 import { readAssetSha256 } from './read-asset-sha256.js';
 import { RuntimeInstallError } from './runtime-errors.js';
@@ -19,6 +19,12 @@ import { type RuntimeInstallPlan, selectRuntimeInstallPlan } from './select-runt
 
 const LLAMA_CPP_RELEASES_URL = 'https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=30';
 const execFileAsync = promisify(execFile);
+
+export interface InstallRuntimeDependencies extends GetRuntimeOverviewDependencies {
+  readonly httpFetch: HttpFetch;
+  readonly logger: LogPort;
+  readonly projectRoot: string;
+}
 
 interface AssetDownload {
   asset: GitHubReleaseAsset;
@@ -37,9 +43,9 @@ async function runInstallStep<T>(failureMessage: string, step: () => Promise<T>)
   }
 }
 
-function fetchRecentReleases(): Promise<GitHubRelease[]> {
+function fetchRecentReleases(httpFetch: HttpFetch): Promise<GitHubRelease[]> {
   return runInstallStep('Не удалось получить список релизов llama.cpp.', async () => {
-    const response = await fetch(LLAMA_CPP_RELEASES_URL, {
+    const response = await httpFetch(LLAMA_CPP_RELEASES_URL, {
       headers: {
         Accept: 'application/vnd.github+json',
         'User-Agent': 'ImmersionAI-Rewrite',
@@ -62,9 +68,13 @@ function fetchRecentReleases(): Promise<GitHubRelease[]> {
   });
 }
 
-function downloadAsset({ asset, expectedSha256 }: AssetDownload, destination: string): Promise<void> {
+function downloadAsset(
+  { asset, expectedSha256 }: AssetDownload,
+  destination: string,
+  httpFetch: HttpFetch,
+): Promise<void> {
   return runInstallStep(`Не удалось скачать ${asset.name}.`, async () => {
-    const response = await fetch(asset.browser_download_url, {
+    const response = await httpFetch(asset.browser_download_url, {
       headers: {
         'User-Agent': 'ImmersionAI-Rewrite',
       },
@@ -162,25 +172,24 @@ async function copyDirectoryContents(source: string, destination: string) {
   }
 }
 
-async function removeInstallDirectory(directory: string): Promise<void> {
+async function removeInstallDirectory(directory: string, logger: LogPort): Promise<void> {
   try {
     await fs.rm(directory, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 });
   } catch (error) {
-    getSharedApiLogger().warn({ err: error, directory }, 'Failed to remove the temporary llama.cpp install directory');
+    logger.warn({ err: error, directory }, 'Failed to remove the temporary llama.cpp install directory');
   }
 }
 
-async function installPlan(plan: RuntimeInstallPlan) {
+async function installPlan(plan: RuntimeInstallPlan, { httpFetch, logger, projectRoot }: InstallRuntimeDependencies) {
   const downloads = plan.assets.map((asset) => ({ asset, expectedSha256: readAssetSha256(asset) }));
-  const runtimeRoot = getPrimaryRuntimeRoot();
-  const installDirectory = path.join(runtimeRoot, 'bin');
+  const installDirectory = path.join(projectRoot, 'bin');
   const tempDirectory = await runInstallStep('Не удалось создать временный каталог для установки llama.cpp.', () =>
-    fs.mkdtemp(path.join(runtimeRoot, '.llama-install-')),
+    fs.mkdtemp(path.join(projectRoot, '.llama-install-')),
   );
 
   try {
     for (const download of downloads) {
-      await downloadAsset(download, path.join(tempDirectory, download.asset.name));
+      await downloadAsset(download, path.join(tempDirectory, download.asset.name), httpFetch);
     }
 
     for (const { asset } of downloads) {
@@ -197,15 +206,18 @@ async function installPlan(plan: RuntimeInstallPlan) {
       );
     }
   } finally {
-    await removeInstallDirectory(tempDirectory);
+    await removeInstallDirectory(tempDirectory, logger);
   }
 }
 
-export async function installRuntime(command: RuntimeInstallCommand): Promise<RuntimeOverviewResponse> {
-  const releases = await fetchRecentReleases();
+export async function installRuntime(
+  command: RuntimeInstallCommand,
+  dependencies: InstallRuntimeDependencies,
+): Promise<RuntimeOverviewResponse> {
+  const releases = await fetchRecentReleases(dependencies.httpFetch);
   const plan = selectRuntimeInstallPlan(releases, command.variant);
 
-  await installPlan(plan);
+  await installPlan(plan, dependencies);
 
-  return getRuntimeOverview();
+  return getRuntimeOverview(dependencies);
 }

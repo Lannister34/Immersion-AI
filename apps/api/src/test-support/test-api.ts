@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import { onTestFinished } from 'vitest';
 
 import { buildApiApp } from '../app.js';
@@ -10,8 +12,8 @@ import { type ApiModules, createApiModules } from '../composition/create-api-mod
 import { type ApiEnvironment, parseApiConfig } from '../config/api-config.js';
 import { type CapturingLogger, createCapturingLogger } from './capturing-logger.js';
 import { claimTemporaryProject } from './claim-temporary-project.js';
-import { stubGlobalFetch } from './global-fetch-stub.js';
-import type { HttpStub } from './http-stub.js';
+import { FakeRuntimeProcess } from './fake-runtime-process.js';
+import { createHttpStub, type HttpStub } from './http-stub.js';
 import { createManualClock, type ManualClock, type ManualClockOptions } from './manual-clock.js';
 import type { ProjectFixture } from './temporary-project.js';
 import { createUserSettingsFixtureFile, type UserSettingsFixtureFile } from './user-settings-fixture.js';
@@ -20,7 +22,8 @@ export interface TestApiOptions {
   readonly fixture?: ProjectFixture;
   readonly environment?: ApiEnvironment;
   readonly clock?: ManualClockOptions;
-  readonly overrides?: Omit<ApiDependencyOverrides, 'clock' | 'httpFetch' | 'logger'>;
+  readonly overrides?: Omit<ApiDependencyOverrides, 'clock' | 'httpFetch' | 'logger' | 'runtimeProcess'>;
+  readonly runtime?: 'fake' | 'real';
 }
 
 export interface TestApi {
@@ -33,6 +36,7 @@ export interface TestApi {
   readonly clock: ManualClock;
   readonly logs: CapturingLogger;
   readonly settings: UserSettingsFixtureFile;
+  fakeRuntime(): FakeRuntimeProcess;
   listen(): Promise<string>;
 }
 
@@ -47,13 +51,18 @@ export async function createTestApi(options: TestApiOptions = {}): Promise<TestA
     { IMMERSION_LOG_LEVEL: 'silent', ...options.environment, IMMERSION_DATA_ROOT: project.dataRoot },
     project.projectRoot,
   );
-  const http = stubGlobalFetch();
+  const http = createHttpStub();
   const clock = createManualClock(options.clock);
   const logs = createCapturingLogger();
+  const fakeRuntime =
+    options.runtime === 'real'
+      ? null
+      : new FakeRuntimeProcess({ defaultModelsDir: path.join(project.projectRoot, 'models') });
   const dependencies = createApiDependencies(config, {
     clock,
     httpFetch: http.fetch,
     logger: logs.logger,
+    ...(fakeRuntime === null ? {} : { runtimeProcess: fakeRuntime }),
     ...options.overrides,
   });
   const modules = createApiModules(dependencies);
@@ -71,6 +80,13 @@ export async function createTestApi(options: TestApiOptions = {}): Promise<TestA
     clock,
     logs,
     settings: createUserSettingsFixtureFile(project.dataRoot),
+    fakeRuntime() {
+      if (fakeRuntime === null) {
+        throw new Error('This test api runs the real llama-server manager; create it without runtime: "real".');
+      }
+
+      return fakeRuntime;
+    },
     listen() {
       listening ??= app.listen({ host: '127.0.0.1', port: 0 });
 

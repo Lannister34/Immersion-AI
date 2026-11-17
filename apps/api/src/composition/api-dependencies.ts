@@ -19,7 +19,14 @@ import {
   ProviderVisionProbe,
   type VisionProbe,
 } from '../modules/providers/index.js';
-import { getRunningRuntimeEndpoint } from '../modules/runtime/index.js';
+import {
+  getRunningRuntimeEndpoint,
+  LlmProcessManager,
+  ModelDirectoryScanner,
+  type ModelScanner,
+  RuntimeConfigRepository,
+  type RuntimeProcess,
+} from '../modules/runtime/index.js';
 import { createFileScenarioStore, type ScenarioStore } from '../modules/scenarios/index.js';
 import type { UserSettingsDocument } from '../modules/settings/index.js';
 import type { Clock } from '../platform/clock/clock.js';
@@ -41,6 +48,8 @@ export interface ApiDependencies {
   readonly clock: Clock;
   readonly httpFetch: HttpFetch;
   readonly userSettings: UserSettingsDocument;
+  readonly runtimeProcess: RuntimeProcess;
+  readonly modelScanner: ModelScanner;
   readonly chatCompletionClient: ChatCompletionClient;
   readonly characterStore: CharacterStore;
   readonly lorebookStore: LorebookStore;
@@ -64,6 +73,16 @@ export function createApiDependencies(config: ApiConfig, overrides: ApiDependenc
     update: updateLegacyUserSettingsSource,
   };
   const providerSettings = new ProviderSettingsRepository({ document: userSettings });
+  const runtimeProcess =
+    overrides.runtimeProcess ??
+    new LlmProcessManager({ dataRoot: config.dataRoot, httpFetch, logger, projectRoot: config.projectRoot });
+  const modelScanner = overrides.modelScanner ?? new ModelDirectoryScanner({ clock });
+  const runtimeEndpoint = {
+    dataRoot: config.dataRoot,
+    modelScanner,
+    runtimeConfig: new RuntimeConfigRepository({ document: userSettings, runtimeProcess }),
+    runtimeProcess,
+  };
   const chatRepository =
     overrides.chatRepository ??
     new FileChatRepository({
@@ -78,6 +97,8 @@ export function createApiDependencies(config: ApiConfig, overrides: ApiDependenc
     clock,
     httpFetch,
     userSettings,
+    runtimeProcess,
+    modelScanner,
     chatCompletionClient: overrides.chatCompletionClient ?? createChatCompletionClient({ httpFetch }),
     characterStore:
       overrides.characterStore ??
@@ -100,7 +121,7 @@ export function createApiDependencies(config: ApiConfig, overrides: ApiDependenc
         resolveTokenizeTarget: createBuiltinTokenizeTargetResolver({
           log: logger,
           providers: { getProviderSettings: () => getProviderSettings({ providerSettings }) },
-          runtime: { getRunningRuntimeEndpoint: () => getRunningRuntimeEndpoint() },
+          runtime: { getRunningRuntimeEndpoint: () => getRunningRuntimeEndpoint(runtimeEndpoint) },
         }),
       }),
     visionProbe: overrides.visionProbe ?? new ProviderVisionProbe({ clock, httpFetch }),
