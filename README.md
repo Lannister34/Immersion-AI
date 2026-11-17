@@ -95,8 +95,8 @@ file.
 Only callers from loopback and the private and link-local ranges (`10.0.0.0/8`, `172.16.0.0/12`,
 `192.168.0.0/16`, `169.254.0.0/16`) are served; a connection from any other address is dropped.
 The password crosses the network unencrypted, as plain HTTP, so use it on a network you trust.
-Anyone who knows it can use the app as you do: stored provider keys are never returned, but they
-can be replaced, cleared or sent to another server through a changed provider address. The file
+Anyone who knows it can use the app as you do: stored provider keys are never returned and do not
+follow a changed provider address to another server, but they can be replaced or cleared. The file
 stays on when a laptop joins another network, such as a café's Wi-Fi.
 
 The password guards the browser path only. The API on `127.0.0.1:4787`, which the ComfyUI nodes
@@ -161,8 +161,9 @@ curl -X PATCH http://127.0.0.1:4787/api/providers/settings   -H 'Content-Type: a
 an empty `model` clears the model. Keys are write-only: no response carries a stored key, only
 `apiKeyConfigured`. `POST /api/providers/models` without `apiKey` uses the stored key of that
 provider, and only when the `url` has the same origin as the saved one; an empty `apiKey` asks
-with no key. A key is visible ASCII without spaces. Changing a provider's `url` keeps its key, so
-the key goes to the new address.
+with no key. A key is visible ASCII without spaces. A key stays with the server it was entered for:
+changing a provider's `url` to another origin (scheme, host or port) without sending `apiKey` in the
+same request clears the stored key; a change within the same origin keeps it.
 
 The API listens on 127.0.0.1 and has no authentication. Keep it on loopback, or put a
 reverse proxy in front of it before exposing it to a network.
@@ -277,8 +278,8 @@ IMMERSION_WEB_LAN=1
 `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`); соединение с любого другого адреса
 сбрасывается. Пароль идёт по сети без шифрования, по обычному HTTP, поэтому пользуйтесь им в сети,
 которой доверяете. Кто знает пароль, может пользоваться приложением так же, как вы: сохранённые
-ключи провайдеров не отдаются, но их можно заменить, удалить или отправить на другой сервер,
-сменив адрес провайдера. Файл остаётся в силе, когда ноутбук подключается к другой сети, например
+ключи провайдеров не отдаются и не уходят на другой сервер при смене адреса провайдера, но их
+можно заменить или удалить. Файл остаётся в силе, когда ноутбук подключается к другой сети, например
 к Wi-Fi в кафе.
 
 Пароль защищает только путь через браузер. API на `127.0.0.1:4787`, к которому напрямую обращаются
@@ -343,8 +344,10 @@ curl -X PATCH http://127.0.0.1:4787/api/providers/settings   -H 'Content-Type: a
 сохранённый ключ, пустой `model` снимает модель. Ключи только записываются: ни один ответ не
 содержит сохранённый ключ, только `apiKeyConfigured`. `POST /api/providers/models` без `apiKey`
 берёт сохранённый ключ этого провайдера, и только если `url` того же origin, что и сохранённый;
-пустой `apiKey` запрашивает без ключа. Ключ — видимые ASCII-символы без пробелов. Смена `url`
-провайдера оставляет ключ, и он уходит на новый адрес.
+пустой `apiKey` запрашивает без ключа. Ключ — видимые ASCII-символы без пробелов. Ключ остаётся
+при сервере, для которого его ввели: смена `url` провайдера на другой origin (схема, хост или порт)
+без `apiKey` в том же запросе удаляет сохранённый ключ, смена в пределах того же origin его
+сохраняет.
 
 API слушает 127.0.0.1 и не проверяет авторизацию. Держите его на loopback либо ставьте
 перед ним обратный прокси, прежде чем открывать в сеть.

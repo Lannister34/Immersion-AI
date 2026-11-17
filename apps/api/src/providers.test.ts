@@ -448,6 +448,90 @@ describe('provider settings routes', () => {
     expect(JSON.stringify(await api().settings.read())).not.toContain('sk-old');
   });
 
+  it('drops the stored key when the url moves to another server, so the connection test sends none there', async () => {
+    await api().settings.useExternalProvider({ apiKey: 'sk-stored', url: 'http://127.0.0.1:6001' });
+    const provider = answerProviderModels({ data: [{ id: 'local-model' }] });
+    const { app } = api();
+
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: '/api/providers/settings',
+      payload: { config: { url: 'http://127.0.0.1:6002' } },
+    });
+
+    expect(patched.statusCode).toBe(200);
+    expect(ProviderSettingsSnapshotSchema.parse(patched.json()).providerConfigs.custom).toMatchObject({
+      apiKeyConfigured: false,
+      url: 'http://127.0.0.1:6002',
+    });
+    expect(await fs.readFile(api().settings.path, 'utf8')).not.toContain('sk-stored');
+
+    const connection = await app.inject({ method: 'GET', url: '/api/providers/connection' });
+
+    expect(ProviderConnectionResponseSchema.parse(connection.json()).status).toBe('ok');
+    expect(provider.requests()).toEqual([{ authorization: null, url: 'http://127.0.0.1:6002/v1/models' }]);
+  });
+
+  it('keeps the stored key when the url changes only its path, case or default port', async () => {
+    await api().settings.write({
+      backendMode: 'external',
+      activeProvider: 'openai',
+      providerConfigs: { openai: { url: 'https://api.openai.com/v1', apiKey: 'sk-stored', model: 'gpt-4o' } },
+    });
+    const { app } = api();
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/providers/settings',
+      payload: { config: { url: 'https://API.openai.com:443/proxy/v1/' } },
+    });
+
+    expect(ProviderSettingsSnapshotSchema.parse(response.json()).providerConfigs.openai?.apiKeyConfigured).toBe(true);
+    expect((await api().settings.read()).providerConfigs).toMatchObject({
+      openai: { apiKey: 'sk-stored', url: 'https://API.openai.com:443/proxy/v1/' },
+    });
+  });
+
+  it('stores the key sent together with a move to another server', async () => {
+    await api().settings.useExternalProvider({ apiKey: 'sk-stored', url: 'http://127.0.0.1:6001' });
+    const { app } = api();
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/providers/settings',
+      payload: { config: { apiKey: 'sk-new', url: 'http://127.0.0.1:6002' } },
+    });
+
+    expect(ProviderSettingsSnapshotSchema.parse(response.json()).providerConfigs.custom?.apiKeyConfigured).toBe(true);
+    expect((await api().settings.read()).providerConfigs).toMatchObject({
+      custom: { apiKey: 'sk-new', url: 'http://127.0.0.1:6002' },
+    });
+    expect(await fs.readFile(api().settings.path, 'utf8')).not.toContain('sk-stored');
+  });
+
+  it('drops only the key of the provider whose url moves when the same patch switches to it', async () => {
+    await api().settings.write({
+      backendMode: 'external',
+      activeProvider: 'custom',
+      providerConfigs: {
+        custom: { url: 'http://127.0.0.1:6001', apiKey: 'sk-custom' },
+        openai: { url: 'https://api.openai.com/v1', apiKey: 'sk-openai', model: 'gpt-4o' },
+      },
+    });
+    const { app } = api();
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/providers/settings',
+      payload: { activeProvider: 'openai', config: { url: 'https://collector.example/v1' } },
+    });
+    const snapshot = ProviderSettingsSnapshotSchema.parse(response.json());
+
+    expect(snapshot.providerConfigs.openai?.apiKeyConfigured).toBe(false);
+    expect(snapshot.providerConfigs.custom?.apiKeyConfigured).toBe(true);
+    expect(await fs.readFile(api().settings.path, 'utf8')).not.toContain('sk-openai');
+  });
+
   it('clears the model on an empty string so the provider falls back to its default', async () => {
     await api().settings.write({
       backendMode: 'external',

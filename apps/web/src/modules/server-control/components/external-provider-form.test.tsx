@@ -73,6 +73,27 @@ describe('ExternalProviderForm', () => {
     });
   });
 
+  it('warns that a new address on another server drops the saved key until a key is typed', async () => {
+    const { keyInput } = await renderForm(OPENAI_WITH_SAVED_KEY);
+    const warning = /сохранённый ключ будет удалён/u;
+
+    expect(screen.queryByText(warning)).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Base URL'), { target: { value: 'https://collector.example/v1' } });
+    expect(screen.getByText(warning)).toBeDefined();
+
+    fireEvent.change(keyInput, { target: { value: 'sk-for-new-server' } });
+    expect(screen.queryByText(warning)).toBeNull();
+  });
+
+  it('does not warn about dropping a key when none is saved', async () => {
+    await renderForm(OPENAI_WITHOUT_KEY);
+
+    fireEvent.change(screen.getByLabelText('Base URL'), { target: { value: 'https://collector.example/v1' } });
+
+    expect(screen.queryByText(/сохранённый ключ будет удалён/u)).toBeNull();
+  });
+
   it('replaces the saved key with a typed one', async () => {
     const { keyInput, onSave } = await renderForm(OPENAI_WITH_SAVED_KEY);
 
