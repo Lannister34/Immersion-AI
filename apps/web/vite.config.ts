@@ -4,22 +4,24 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
+import { readDevServerConfig } from './dev-server/read-dev-server-config.js';
 import { refuseCrossSiteEditorLaunch } from './dev-server/refuse-cross-site-editor-launch.js';
+import { refuseForeignNetworkCallers } from './dev-server/refuse-foreign-network-callers.js';
 
-const apiProxyTarget = process.env.IMMERSION_API_PROXY_TARGET ?? 'http://127.0.0.1:4787';
+const devServerConfig = readDevServerConfig();
 const webRoot = fileURLToPath(new URL('.', import.meta.url));
 const workspaceRoot = fileURLToPath(new URL('../..', import.meta.url));
 const contractsSource = join(workspaceRoot, 'packages', 'contracts', 'src');
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), refuseCrossSiteEditorLaunch()],
+  plugins: [react(), tailwindcss(), refuseForeignNetworkCallers(), refuseCrossSiteEditorLaunch()],
   resolve: {
     alias: {
       '@immersion/contracts': contractsSource,
     },
   },
   server: {
-    host: '127.0.0.1',
+    host: devServerConfig.host,
     port: 4788,
     strictPort: true,
     cors: false,
@@ -28,7 +30,7 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: apiProxyTarget,
+        target: devServerConfig.apiProxyTarget,
         changeOrigin: true,
       },
     },

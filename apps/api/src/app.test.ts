@@ -69,6 +69,19 @@ describe('buildApiApp', () => {
     expect(refused.headers['access-control-allow-origin']).toBeUndefined();
   });
 
+  it('serves a write from an origin it does not list, as the dev server proxies a LAN page, only without CORS headers', async () => {
+    const { app } = await createTestApi();
+    const response = await app.inject({
+      headers: { host: '127.0.0.1:4787', origin: 'http://192.168.31.216:4788' },
+      method: 'PATCH',
+      payload: { mode: 'builtin' },
+      url: '/api/providers/settings',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
   it('stamps /health with the injected clock', async () => {
     const { app } = await createTestApi({ clock: { start: new Date('2026-10-15T09:30:00.000Z'), stepMs: 0 } });
     const response = await app.inject({ method: 'GET', url: '/health' });
