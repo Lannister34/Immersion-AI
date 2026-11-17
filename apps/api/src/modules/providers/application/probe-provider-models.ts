@@ -1,7 +1,7 @@
 import type { ProviderConnectionResponse, ProviderModelsProbeCommand } from '@immersion/contracts/providers';
 
 import type { ProviderSettings } from '../domain/provider-settings-schema.js';
-import { readProviderUrlOrigin } from '../domain/provider-url-origin.js';
+import { isSameProviderOrigin } from '../domain/provider-url-origin.js';
 import { readUsableApiKey } from '../domain/usable-api-key.js';
 import type { ProviderModelsFetchDependencies } from './fetch-provider-models.js';
 import type { ProviderSettingsRepository } from './provider-settings-repository.js';
@@ -19,9 +19,7 @@ function findStoredKeyForUrl(settings: ProviderSettings, command: ProviderModels
     return null;
   }
 
-  const storedOrigin = readProviderUrlOrigin(stored.url);
-
-  return storedOrigin !== null && storedOrigin === readProviderUrlOrigin(command.url) ? storedKey : null;
+  return isSameProviderOrigin(stored.url, command.url) ? storedKey : null;
 }
 
 export async function probeProviderModels(

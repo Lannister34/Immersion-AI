@@ -108,6 +108,8 @@ export function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalPro
   const apiKeyField = definition?.fields.find((field) => field.key === 'apiKey');
   const apiKeySaved = snapshot.providerConfigs[selectedProvider]?.apiKeyConfigured === true;
   const apiKeyPlaceholder = describeApiKeyPlaceholder(form.clearApiKey, apiKeySaved, apiKeyField?.placeholder);
+  const savedKeyMayBeDropped =
+    apiKeySaved && !form.clearApiKey && form.newApiKey.trim().length === 0 && form.url.trim() !== baseline.url.trim();
   const modelField = definition?.fields.find((field) => field.key === 'model');
 
   return (
@@ -147,6 +149,12 @@ export function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalPro
             type="url"
             value={form.url}
           />
+          {savedKeyMayBeDropped ? (
+            <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+              Если новый адрес ведёт на другой сервер (схема, хост или порт), сохранённый ключ будет удалён при
+              сохранении — введите ключ заново.
+            </span>
+          ) : null}
         </div>
         {apiKeyField ? (
           <div className="field">
