@@ -7,6 +7,7 @@ import type {
 export interface ScriptedChatCompletion {
   readonly content: string;
   readonly reasoning?: string;
+  readonly stoppedAtTokenLimit?: boolean;
 }
 
 export class FakeChatCompletionClient implements ChatCompletionClient {
@@ -31,6 +32,10 @@ export class FakeChatCompletionClient implements ChatCompletionClient {
       return Promise.reject(new Error('FakeChatCompletionClient has no scripted reply left.'));
     }
 
-    return Promise.resolve({ content: next.content, reasoning: next.reasoning ?? '' });
+    return Promise.resolve({
+      content: next.content,
+      reasoning: next.reasoning ?? '',
+      stoppedAtTokenLimit: next.stoppedAtTokenLimit ?? false,
+    });
   }
 }

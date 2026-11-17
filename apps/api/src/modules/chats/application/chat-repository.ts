@@ -28,6 +28,7 @@ export interface AppendContinuationToLastAssistantMessageInput {
   continuation: string;
   expectedContentPrefix: string;
   expectedMessageIndex: number;
+  stoppedAtTokenLimit: boolean;
   updatedAt: string;
 }
 

@@ -1,7 +1,9 @@
+import { type ReplyTokenLimit, UNLIMITED_REPLY_TOKENS } from '@immersion/contracts/common';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
+import { Fragment } from 'react';
 
 import { UndoIcon } from '../../../shared/ui/icons';
-import { CONTEXT_TRIM_FIELD } from '../../settings';
+import { CONTEXT_TRIM_FIELD, DEFAULT_REPLY_TOKEN_LIMIT, describeReplyBudget } from '../../settings';
 import {
   type AutoSavedGenerationSettings,
   INHERIT_PRESET_VALUE,
@@ -10,6 +12,7 @@ import {
   countSamplingOverrides,
   describeContextTrimStrategy,
   type InheritedSampling,
+  type SamplingFieldViewModel,
   stepSamplingValue,
   toSamplingFieldViewModels,
 } from '../view-models/sampling-overrides';
@@ -35,6 +38,45 @@ function UndoButton({ inheritedText, onClick }: UndoButtonProps) {
   );
 }
 
+interface ReplyLimitControlsProps {
+  contextLength: number;
+  inheritedLimit: ReplyTokenLimit | undefined;
+  onChange: (value: string) => void;
+  row: SamplingFieldViewModel;
+}
+
+function ReplyLimitControls({ contextLength, inheritedLimit, onChange, row }: ReplyLimitControlsProps) {
+  const parsed = Number(row.value);
+  let limit: ReplyTokenLimit | null = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+
+  if (row.isUnlimited) {
+    limit = UNLIMITED_REPLY_TOKENS;
+  }
+
+  const hint = limit === null ? null : describeReplyBudget(contextLength, limit);
+  const restoredLimit = typeof inheritedLimit === 'number' ? '' : String(DEFAULT_REPLY_TOKEN_LIMIT);
+
+  return (
+    <div className="col gap-4" style={{ padding: '0 0 8px' }}>
+      <label className="row gap-6" style={{ alignItems: 'center', fontSize: 'var(--fz-xs)' }}>
+        <input
+          checked={row.isUnlimited}
+          onChange={(event) => {
+            onChange(event.currentTarget.checked ? UNLIMITED_REPLY_TOKENS : restoredLimit);
+          }}
+          type="checkbox"
+        />
+        Без лимита
+      </label>
+      {hint ? (
+        <span className="rp-param__hint" style={hint.tone === 'warn' ? { color: 'var(--warn)' } : undefined}>
+          {hint.text}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 interface ModelTabProps {
   effectiveSampling: InheritedSampling | undefined;
   form: AutoSavedGenerationSettings;
@@ -51,6 +93,8 @@ export function ModelTab({ effectiveSampling, form, modelBindingPresetId, settin
   const baseline: InheritedSampling | undefined =
     presets.find((preset) => preset.id === baselinePresetId) ?? effectiveSampling;
   const rows = toSamplingFieldViewModels(form.draft.sampling, form.errors, baseline);
+  const contextRow = rows.find((row) => row.field.key === 'maxContextLength');
+  const effectiveContextLength = Number(contextRow?.value ?? baseline?.maxContextLength ?? 0) || 0;
   const hasOverrides = countSamplingOverrides(form.draft.sampling) > 0 || pinnedPresetId !== INHERIT_PRESET_VALUE;
 
   const trimRaw = form.draft.sampling.contextTrimStrategy;
@@ -97,61 +141,73 @@ export function ModelTab({ effectiveSampling, form, modelBindingPresetId, settin
       </div>
 
       <div className="col">
-        {rows.map(({ error, field, inheritedText, isOverridden, value }) => {
+        {rows.map((row) => {
+          const { error, field, inheritedText, isOverridden, isUnlimited, value } = row;
           const step = (direction: 1 | -1) => {
             form.setSampling(field.key, stepSamplingValue(field, value, direction, baseline?.[field.key]));
           };
 
           return (
-            <div className="rp-param" data-overridden={isOverridden ? 'true' : 'false'} key={field.key}>
-              <label htmlFor={`chat-sampling-${field.key}`} style={{ minWidth: 0 }}>
-                <span className="rp-param__name" style={{ display: 'block' }}>
-                  {field.label}
-                </span>
-                <span className="rp-param__hint" style={{ display: 'block' }}>
-                  {error ?? field.hint}
-                </span>
-              </label>
-              <div className="rp-param__stepper">
-                <button
-                  aria-label={`Уменьшить ${field.label} на ${field.step}`}
-                  className="rp-param__step"
-                  onClick={() => step(-1)}
-                  type="button"
-                >
-                  −
-                </button>
-                <input
-                  className="rp-param__value"
-                  id={`chat-sampling-${field.key}`}
-                  inputMode="decimal"
-                  onChange={(event) => {
-                    const { value: next } = event.currentTarget;
-                    form.setSampling(field.key, next);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-                      event.preventDefault();
-                      step(event.key === 'ArrowUp' ? 1 : -1);
-                    }
-                  }}
-                  type="text"
-                  value={value}
+            <Fragment key={field.key}>
+              <div className="rp-param" data-overridden={isOverridden ? 'true' : 'false'}>
+                <label htmlFor={`chat-sampling-${field.key}`} style={{ minWidth: 0 }}>
+                  <span className="rp-param__name" style={{ display: 'block' }}>
+                    {field.label}
+                  </span>
+                  <span className="rp-param__hint" style={{ display: 'block' }}>
+                    {error ?? field.hint}
+                  </span>
+                </label>
+                <div className="rp-param__stepper">
+                  <button
+                    aria-label={`Уменьшить ${field.label} на ${field.step}`}
+                    className="rp-param__step"
+                    onClick={() => step(-1)}
+                    type="button"
+                  >
+                    −
+                  </button>
+                  <input
+                    className="rp-param__value"
+                    id={`chat-sampling-${field.key}`}
+                    inputMode="decimal"
+                    onChange={(event) => {
+                      const { value: next } = event.currentTarget;
+                      form.setSampling(field.key, next);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                        event.preventDefault();
+                        step(event.key === 'ArrowUp' ? 1 : -1);
+                      }
+                    }}
+                    placeholder={isUnlimited ? 'без лимита' : undefined}
+                    type="text"
+                    value={value}
+                  />
+                  <button
+                    aria-label={`Увеличить ${field.label} на ${field.step}`}
+                    className="rp-param__step"
+                    onClick={() => step(1)}
+                    type="button"
+                  >
+                    +
+                  </button>
+                </div>
+                <UndoButton
+                  inheritedText={inheritedText}
+                  onClick={() => form.setSampling(field.key, '', { immediate: true })}
                 />
-                <button
-                  aria-label={`Увеличить ${field.label} на ${field.step}`}
-                  className="rp-param__step"
-                  onClick={() => step(1)}
-                  type="button"
-                >
-                  +
-                </button>
               </div>
-              <UndoButton
-                inheritedText={inheritedText}
-                onClick={() => form.setSampling(field.key, '', { immediate: true })}
-              />
-            </div>
+              {field.key === 'maxTokens' ? (
+                <ReplyLimitControls
+                  contextLength={effectiveContextLength}
+                  inheritedLimit={baseline?.maxTokens}
+                  onChange={(next) => form.setSampling('maxTokens', next, { immediate: true })}
+                  row={row}
+                />
+              ) : null}
+            </Fragment>
           );
         })}
         <div className="rp-param rp-param--wide" data-overridden={isTrimOverridden ? 'true' : 'false'}>

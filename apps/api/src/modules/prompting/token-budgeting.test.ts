@@ -89,6 +89,7 @@ function userMessage(id: string, content: string): ChatSessionDto['messages'][nu
     createdAt: '2026-01-01T00:00:00.000Z',
     id,
     reasoning: null,
+    stoppedAtTokenLimit: false,
     role: 'user',
   };
 }
@@ -301,5 +302,121 @@ describe('context budget status', () => {
 
     expect(bundle.diagnostics.budgetStatus).toBe('fits');
     expect(bundle.diagnostics.trimmedMessageCount).toBe(0);
+  });
+});
+
+describe('context budgeting without a reply limit', () => {
+  const history = [
+    userMessage('m1', 'OLDEST'),
+    userMessage('m2', 'MIDDLE'),
+    userMessage('m3', 'LATEST'),
+  ] satisfies ChatSessionDto['messages'];
+  const tokenCounter = (): RecordingTokenCounter =>
+    buildFakeTokenCounter({ LATEST: 10_000, MIDDLE: 10_000, OLDEST: 10_000, SYSCUSTOM: 1_000 });
+
+  it('budgets the whole preset context for history when the server window is larger, the Artemis 32256 on a 48000 server that forgot its chat', async () => {
+    const bundle = await buildChatReplyPromptBundleWithTokenCounter(
+      {
+        samplerPreset: { ...defaultSamplerPreset, maxContextLength: 32_256, maxTokens: 'unlimited' },
+        serverContextSize: 48_000,
+        session: buildSession(history, 'SYSCUSTOM prompt'),
+        settings,
+      },
+      tokenCounter(),
+    );
+
+    expect(bundle.diagnostics.budgetStatus).toBe('fits');
+    expect(bundle.diagnostics.tokenEstimate).toMatchObject({ promptBudget: 32_256, replyReservation: 15_744 });
+    expect(bundle.messages.map((message) => message.content)).toEqual([
+      'SYSCUSTOM prompt',
+      'OLDEST',
+      'MIDDLE',
+      'LATEST',
+    ]);
+  });
+
+  it('reserves about 1024 tokens for the reply when the preset context equals the server window', async () => {
+    const bundle = await buildChatReplyPromptBundleWithTokenCounter(
+      {
+        samplerPreset: { ...defaultSamplerPreset, maxContextLength: 32_768, maxTokens: 'unlimited' },
+        serverContextSize: 32_768,
+        session: buildSession(history, 'SYSCUSTOM prompt'),
+        settings,
+      },
+      tokenCounter(),
+    );
+
+    expect(bundle.diagnostics.tokenEstimate).toMatchObject({ promptBudget: 31_744, replyReservation: 1024 });
+    expect(bundle.diagnostics.budgetStatus).toBe('fits');
+  });
+
+  it('reserves about 1024 tokens for the reply when the server window is unknown, as with a cloud provider', async () => {
+    const bundle = await buildChatReplyPromptBundleWithTokenCounter(
+      {
+        samplerPreset: {
+          ...defaultSamplerPreset,
+          contextTrimStrategy: 'trim_start',
+          maxContextLength: 30_000,
+          maxTokens: 'unlimited',
+        },
+        serverContextSize: null,
+        session: buildSession(history, 'SYSCUSTOM prompt'),
+        settings,
+      },
+      tokenCounter(),
+    );
+
+    expect(bundle.diagnostics.tokenEstimate).toMatchObject({ promptBudget: 28_976, replyReservation: 1024 });
+    expect(bundle.diagnostics.budgetStatus).toBe('trimmed');
+    expect(bundle.messages.map((message) => message.content)).toEqual(['SYSCUSTOM prompt', 'MIDDLE', 'LATEST']);
+  });
+
+  it('keeps every message and reports unlimited when neither the preset nor the server gives a window', async () => {
+    const bundle = await buildChatReplyPromptBundleWithTokenCounter(
+      {
+        samplerPreset: { ...defaultSamplerPreset, maxContextLength: 0, maxTokens: 'unlimited' },
+        serverContextSize: null,
+        session: buildSession(history, 'SYSCUSTOM prompt'),
+        settings,
+      },
+      tokenCounter(),
+    );
+
+    expect(bundle.diagnostics.budgetStatus).toBe('unlimited');
+    expect(bundle.messages).toHaveLength(4);
+    expect(bundle.diagnostics.trimmedMessageCount).toBe(0);
+  });
+
+  it('keeps the explicit-limit reservation, so 32225 of 32256 leaves 31 tokens and reports the fixed parts that do not fit', async () => {
+    const bundle = await buildChatReplyPromptBundleWithTokenCounter(
+      {
+        samplerPreset: { ...defaultSamplerPreset, maxContextLength: 32_256, maxTokens: 32_225 },
+        serverContextSize: 48_000,
+        session: buildSession(history, 'SYSCUSTOM prompt'),
+        settings,
+      },
+      tokenCounter(),
+    );
+
+    expect(bundle.diagnostics.tokenEstimate).toMatchObject({
+      finalTotal: 11_000,
+      promptBudget: 31,
+      replyReservation: 32_225,
+    });
+    expect(bundle.diagnostics.budgetStatus).toBe('system-exceeds-budget');
+  });
+
+  it('reports a reply limit equal to the context as reply-exceeds-context and keeps only the fixed parts for the preview', async () => {
+    const bundle = await buildChatReplyPromptBundleWithTokenCounter(
+      {
+        samplerPreset: { ...defaultSamplerPreset, maxContextLength: 32_768, maxTokens: 32_768 },
+        session: buildSession(history, 'SYSCUSTOM prompt'),
+        settings,
+      },
+      tokenCounter(),
+    );
+
+    expect(bundle.diagnostics.budgetStatus).toBe('reply-exceeds-context');
+    expect(bundle.messages.map((message) => message.content)).toEqual(['SYSCUSTOM prompt', 'LATEST']);
   });
 });

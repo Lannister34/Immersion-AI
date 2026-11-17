@@ -22,7 +22,7 @@ describe('resetSamplerToDefaults', () => {
     expect(resetSamplerToDefaults(TUNED_PRESET)).toEqual({
       contextTrimStrategy: 'trim_middle',
       maxContextLength: 8192,
-      maxTokens: 600,
+      maxTokens: 'unlimited',
       minP: 0.02,
       name: 'Мой пресет',
       presencePenalty: 0,

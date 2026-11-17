@@ -3,7 +3,7 @@ import type { SamplerPresetInput } from '@immersion/contracts/settings';
 export const DEFAULT_SAMPLER_VALUES = {
   contextTrimStrategy: 'trim_middle',
   maxContextLength: 8192,
-  maxTokens: 600,
+  maxTokens: 'unlimited',
   minP: 0.02,
   presencePenalty: 0,
   repeatPenalty: 1.05,

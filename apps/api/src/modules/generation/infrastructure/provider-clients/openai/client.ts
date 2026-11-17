@@ -15,7 +15,7 @@ import { buildOpenAiBody, buildOpenAiHeaders } from './request.js';
 export class OpenAiClient implements ChatCompletionClient {
   private readonly httpFetch: HttpFetch;
 
-  constructor(dependencies: ProviderClientDependencies) {
+  constructor(dependencies: Pick<ProviderClientDependencies, 'httpFetch'>) {
     this.httpFetch = dependencies.httpFetch;
   }
 

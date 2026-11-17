@@ -7,7 +7,7 @@ import {
   ChatSessionDtoSchema,
   ChatSummaryDtoSchema,
 } from '../chats/index.js';
-import { ApiProblemSchema } from '../common/index.js';
+import { ApiProblemSchema, ReplyTokenLimitSchema } from '../common/index.js';
 import { ProviderModeSchema, ProviderTypeSchema } from '../providers/settings.js';
 import { RuntimeServerStatusSchema } from '../runtime/overview.js';
 
@@ -121,7 +121,7 @@ export type ChatReplyPromptPreviewMessage = z.infer<typeof ChatReplyPromptPrevie
 export const ChatReplyPromptPreviewSamplingSchema = z.object({
   contextTrimStrategy: z.enum(['trim_middle', 'trim_start']),
   maxContextLength: z.number().int().nonnegative(),
-  maxTokens: z.number().int().positive(),
+  maxTokens: ReplyTokenLimitSchema,
   minP: z.number().nonnegative(),
   presencePenalty: z.number(),
   repeatPenalty: z.number().nonnegative(),
@@ -170,7 +170,13 @@ export type ChatReplyPromptPreviewRendererDiagnostics = z.infer<typeof ChatReply
 export const TokenCountMethodSchema = z.enum(['approximate', 'exact']);
 export type TokenCountMethod = z.infer<typeof TokenCountMethodSchema>;
 
-export const ContextBudgetStatusSchema = z.enum(['fits', 'trimmed', 'reply-exceeds-context']);
+export const ContextBudgetStatusSchema = z.enum([
+  'fits',
+  'trimmed',
+  'unlimited',
+  'reply-exceeds-context',
+  'system-exceeds-budget',
+]);
 export type ContextBudgetStatus = z.infer<typeof ContextBudgetStatusSchema>;
 
 export const PromptContextWindowSchema = z.object({
@@ -220,7 +226,7 @@ export const ChatReplyPromptPreviewResponseSchema = z.object({
     readiness: GenerationReadinessResponseSchema,
   }),
   request: z.object({
-    maxTokens: z.number().int().positive(),
+    maxTokens: z.number().int().positive().nullable(),
     messages: z.array(ChatReplyPromptPreviewMessageSchema),
     sampling: ChatReplyPromptPreviewProviderSamplingSchema,
   }),

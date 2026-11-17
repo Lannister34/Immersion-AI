@@ -28,7 +28,7 @@ export interface ChatReplyProviderSamplingSettings {
 }
 
 export interface ChatReplyProviderRequestPlan {
-  maxTokens: number;
+  maxTokens: number | null;
   messages: ChatReplyPromptMessage[];
   sampling: ChatReplyProviderSamplingSettings;
 }
@@ -59,12 +59,11 @@ export interface ResolveChatReplyGenerationPlanDependencies {
 
 function toPromptSamplerPreset(
   resolvedSettings: ResolvedChatGenerationSettings,
-  contextWindow: PromptContextWindow,
 ): ResolvedChatGenerationSettings['samplerPreset'] {
   return {
     ...resolvedSettings.samplerPreset,
     contextTrimStrategy: resolvedSettings.sampling.contextTrimStrategy,
-    maxContextLength: contextWindow.size,
+    maxContextLength: resolvedSettings.sampling.maxContextLength,
     maxTokens: resolvedSettings.sampling.maxTokens,
   };
 }
@@ -101,7 +100,8 @@ export async function resolveChatReplyGenerationPlan(
       characterScenarioContent: input.characterScenarioContent ?? null,
       lorebookSections: input.lorebookSections ?? [],
       ...(input.messageImages ? { messageImages: input.messageImages } : {}),
-      samplerPreset: toPromptSamplerPreset(effectiveSettings, contextWindow),
+      samplerPreset: toPromptSamplerPreset(effectiveSettings),
+      serverContextSize: input.providerContextSize,
       session: input.session,
       settings,
       trailingUserInstruction: input.trailingUserInstruction ?? null,
@@ -114,7 +114,7 @@ export async function resolveChatReplyGenerationPlan(
     effectiveSettings,
     prompt,
     providerRequest: {
-      maxTokens: effectiveSettings.sampling.maxTokens,
+      maxTokens: effectiveSettings.sampling.maxTokens === 'unlimited' ? null : effectiveSettings.sampling.maxTokens,
       messages: prompt.messages,
       sampling: toProviderSampling(effectiveSettings.sampling),
     },

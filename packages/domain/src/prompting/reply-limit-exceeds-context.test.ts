@@ -26,3 +26,10 @@ describe('replyLimitExceedsContext', () => {
     expect(replyLimitExceedsContext({ maxContextLength: 0, maxTokens: 10_000_000 })).toBe(false);
   });
 });
+
+describe('replyLimitExceedsContext without a reply limit', () => {
+  it('never flags an unlimited reply, whatever the context', () => {
+    expect(replyLimitExceedsContext({ maxContextLength: 1, maxTokens: 'unlimited' })).toBe(false);
+    expect(replyLimitExceedsContext({ maxContextLength: 32_256, maxTokens: 'unlimited' })).toBe(false);
+  });
+});

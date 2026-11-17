@@ -1,3 +1,4 @@
+import type { ReplyTokenLimit } from '@immersion/contracts/common';
 import type { ChatReplyPromptPreviewResponse, TokenCountMethod } from '@immersion/contracts/generation';
 
 export interface ContextStats {
@@ -5,10 +6,12 @@ export interface ContextStats {
   contextWindow: number;
   presetContextWindow: number;
   limitedByRuntime: boolean;
-  replyLimit: number;
+  replyLimit: ReplyTokenLimit;
+  replyReservation: number;
   messageCount: number;
   trimmedMessageCount: number;
   onlyLastMessageFits: boolean;
+  promptExceedsBudget: boolean;
   systemTokens: number;
   transcriptTokens: number;
   tokenCountMethod: TokenCountMethod;
@@ -26,9 +29,11 @@ export function toContextStats(preview: ChatReplyPromptPreviewResponse | undefin
     presetContextWindow: preview.effectiveSettings.sampling.maxContextLength,
     limitedByRuntime: contextWindow.source === 'runtime',
     replyLimit: preview.effectiveSettings.sampling.maxTokens,
+    replyReservation: tokenEstimate.replyReservation,
     messageCount: transcriptMessageCount,
     trimmedMessageCount,
     onlyLastMessageFits: budgetStatus === 'reply-exceeds-context',
+    promptExceedsBudget: budgetStatus === 'system-exceeds-budget',
     systemTokens: tokenEstimate.system,
     transcriptTokens: tokenEstimate.transcriptAfterTrim,
     tokenCountMethod,

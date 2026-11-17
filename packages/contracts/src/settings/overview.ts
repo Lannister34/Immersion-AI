@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { ReplyTokenLimitSchema } from '../common/reply-token-limit.js';
+
 export const ResponseLanguageSchema = z.enum(['ru', 'en', 'none']);
 export const ContextTrimStrategySchema = z.enum(['trim_middle', 'trim_start']);
 
@@ -23,7 +25,7 @@ export const SamplerPresetSummarySchema = z.object({
   contextTrimStrategy: ContextTrimStrategySchema,
   id: z.string(),
   maxContextLength: z.number().int().nonnegative(),
-  maxTokens: z.number().int().positive(),
+  maxTokens: ReplyTokenLimitSchema,
   minP: z.number().nonnegative(),
   name: z.string(),
   presencePenalty: z.number(),
@@ -74,7 +76,7 @@ export type UpdateSettingsProfileResponse = z.infer<typeof UpdateSettingsProfile
 export const SamplerPresetInputSchema = z.object({
   contextTrimStrategy: ContextTrimStrategySchema,
   maxContextLength: z.number().int().nonnegative().max(10_000_000),
-  maxTokens: z.number().int().positive().max(10_000_000),
+  maxTokens: ReplyTokenLimitSchema,
   minP: z.number().nonnegative().max(1),
   name: z.string().trim().min(1).max(120),
   presencePenalty: z.number().min(-5).max(5),

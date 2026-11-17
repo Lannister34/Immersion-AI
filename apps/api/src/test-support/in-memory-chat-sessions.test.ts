@@ -27,6 +27,7 @@ describe('InMemoryChatSessions', () => {
         createdAt: CREATED_AT,
         id: 'chat-1-1',
         reasoning: null,
+        stoppedAtTokenLimit: false,
         role: 'user',
       },
       {
@@ -35,6 +36,7 @@ describe('InMemoryChatSessions', () => {
         createdAt: '2026-04-01T11:00:01.000Z',
         id: 'chat-1-2',
         reasoning: 'мысль',
+        stoppedAtTokenLimit: false,
         role: 'assistant',
       },
     ]);
@@ -67,6 +69,7 @@ describe('InMemoryChatSessions', () => {
       continuation: ' дед и баба.',
       expectedContentPrefix: 'Жили-были',
       expectedMessageIndex: 1,
+      stoppedAtTokenLimit: false,
       updatedAt: '2026-04-01T11:00:05.000Z',
     });
 
@@ -76,6 +79,7 @@ describe('InMemoryChatSessions', () => {
         continuation: ' Конец.',
         expectedContentPrefix: 'Жили-были',
         expectedMessageIndex: 2,
+        stoppedAtTokenLimit: false,
         updatedAt: '2026-04-01T11:00:06.000Z',
       }),
     ).rejects.toThrow('The last message of chat chat-3 changed.');

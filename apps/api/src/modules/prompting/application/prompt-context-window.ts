@@ -1,12 +1,12 @@
 import type { PromptContextWindow } from '@immersion/contracts/generation';
+import { resolveContextWindowSize } from '@immersion/domain/prompting';
 
 export function resolvePromptContextWindow(
   maxContextLength: number,
   providerContextSize: number | null,
 ): PromptContextWindow {
-  if (providerContextSize !== null && (maxContextLength <= 0 || providerContextSize < maxContextLength)) {
-    return { size: providerContextSize, source: 'runtime' };
-  }
+  const size = resolveContextWindowSize(maxContextLength, providerContextSize);
+  const isRuntimeWindow = size === providerContextSize && size !== maxContextLength;
 
-  return { size: maxContextLength, source: 'preset' };
+  return { size, source: isRuntimeWindow ? 'runtime' : 'preset' };
 }

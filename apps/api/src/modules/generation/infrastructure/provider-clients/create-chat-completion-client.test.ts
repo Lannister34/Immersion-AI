@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { createCapturingLogger } from '../../../../test-support/capturing-logger.js';
 import { createHttpStub } from '../../../../test-support/http-stub.js';
 import { anthropicMessage, openAiChatCompletion } from '../../../../test-support/provider-responses.js';
 import type { ChatCompletionRequest } from '../../application/chat-completion-client.js';
@@ -27,7 +28,7 @@ describe('createChatCompletionClient', () => {
     const http = createHttpStub();
     http.on('POST', 'https://api.anthropic.com/v1/messages', () => anthropicMessage('Claude.'));
     http.on('POST', 'http://127.0.0.1:5001/v1/chat/completions', () => openAiChatCompletion('Local.'));
-    const client = createChatCompletionClient({ httpFetch: http.fetch });
+    const client = createChatCompletionClient({ httpFetch: http.fetch, logger: createCapturingLogger().logger });
 
     const anthropicReply = await client.completeChat(
       requestFor({

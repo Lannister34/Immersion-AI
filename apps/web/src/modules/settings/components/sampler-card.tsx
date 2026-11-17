@@ -10,8 +10,10 @@ import {
   useSetActiveSamplerPreset,
   useUpdateSamplerPreset,
 } from '../mutations/use-sampler-preset-mutations';
+import { DEFAULT_REPLY_TOKEN_LIMIT } from '../view-models/default-reply-token-limit';
 import { DEFAULT_SAMPLER_VALUES, resetSamplerToDefaults } from '../view-models/sampler-defaults';
 import { NumberField } from './number-field';
+import { ReplyLimitField } from './reply-limit-field';
 
 export interface SamplerCardProps {
   data: SettingsOverviewResponse;
@@ -174,7 +176,7 @@ export function SamplerCard({ data }: SamplerCardProps) {
           </span>
         ) : null}
       </div>
-      <form className="col gap-12" onSubmit={onSubmit}>
+      <form className="col gap-12" noValidate onSubmit={onSubmit}>
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
           <div className="field">
             <label htmlFor="sampler-name">Название</label>
@@ -271,15 +273,6 @@ export function SamplerCard({ data }: SamplerCardProps) {
             value={form.presencePenalty}
           />
           <NumberField
-            id="sampler-max-length"
-            label="max_length"
-            max={10_000_000}
-            min={1}
-            onChange={(value) => setForm((current) => ({ ...current, maxTokens: Math.max(1, Math.round(value)) }))}
-            step={32}
-            value={form.maxTokens}
-          />
-          <NumberField
             id="sampler-context"
             label="context"
             max={10_000_000}
@@ -289,6 +282,14 @@ export function SamplerCard({ data }: SamplerCardProps) {
             value={form.maxContextLength}
           />
         </div>
+        <ReplyLimitField
+          contextLength={form.maxContextLength}
+          key={isCreating ? 'new-preset' : (selectedPreset?.id ?? 'no-preset')}
+          id="sampler-max-length"
+          onChange={(maxTokens) => setForm((current) => ({ ...current, maxTokens }))}
+          restoredLimit={typeof baseline.maxTokens === 'number' ? baseline.maxTokens : DEFAULT_REPLY_TOKEN_LIMIT}
+          value={form.maxTokens}
+        />
         {mutationErrorMessage ? <ErrorBanner>{mutationErrorMessage}</ErrorBanner> : null}
         <div className="row gap-8" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="row gap-8">

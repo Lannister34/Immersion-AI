@@ -42,6 +42,30 @@ function encode(text: string): Uint8Array {
 }
 
 describe('OpenAiClient request body', () => {
+  it('sends no max_tokens to a local server when the reply has no limit, so llama-server writes until the model stops', async () => {
+    const http = createHttpStub();
+    http.on('POST', COMPLETIONS_URL, () => openAiChatCompletion('раз'));
+
+    await new OpenAiClient({ httpFetch: http.fetch }).completeChat({ ...BASE_REQUEST, maxTokens: null });
+
+    expect(readProviderChatRequest(http)).not.toHaveProperty('max_tokens');
+    expect(readProviderChatRequest(http)).toMatchObject({ min_p: 0, top_k: 0 });
+  });
+
+  it('sends no max_completion_tokens to the OpenAI cloud when the reply has no limit', async () => {
+    const http = createHttpStub();
+    http.on('POST', COMPLETIONS_URL, () => openAiChatCompletion('раз'));
+
+    await new OpenAiClient({ httpFetch: http.fetch }).completeChat({
+      ...BASE_REQUEST,
+      endpoint: { ...BASE_REQUEST.endpoint, apiKind: 'openai-cloud', model: 'gpt-4o' },
+      maxTokens: null,
+    });
+
+    expect(readProviderChatRequest(http)).not.toHaveProperty('max_completion_tokens');
+    expect(readProviderChatRequest(http)).not.toHaveProperty('max_tokens');
+  });
+
   it('sends the extended sampler set to a local server', async () => {
     const http = createHttpStub();
     http.on('POST', COMPLETIONS_URL, () => openAiChatCompletion('раз'));
@@ -131,6 +155,7 @@ describe('OpenAiClient replies', () => {
     await expect(client.completeChat({ ...BASE_REQUEST, allowEmptyContent: true })).resolves.toEqual({
       content: '',
       reasoning: 'Весь лимит ушёл сюда',
+      stoppedAtTokenLimit: false,
     });
   });
 
@@ -157,7 +182,11 @@ describe('OpenAiClient replies', () => {
       ProviderReplyTruncatedError,
     );
 
-    await expect(client.completeChat(BASE_REQUEST)).resolves.toEqual({ content: '{"name": "Ари', reasoning: '' });
+    await expect(client.completeChat(BASE_REQUEST)).resolves.toEqual({
+      content: '{"name": "Ари',
+      reasoning: '',
+      stoppedAtTokenLimit: true,
+    });
   });
 
   it('accepts a complete reply when the caller needs it complete', async () => {
@@ -169,6 +198,7 @@ describe('OpenAiClient replies', () => {
     ).resolves.toEqual({
       content: '{"name": "Ария"}',
       reasoning: '',
+      stoppedAtTokenLimit: false,
     });
   });
 
@@ -350,7 +380,7 @@ describe('OpenAiClient streaming', () => {
       ['reasoning', 'маю'],
       ['reply', 'Ответ.'],
     ]);
-    expect(response).toEqual({ content: 'Ответ.', reasoning: 'Думаю' });
+    expect(response).toEqual({ content: 'Ответ.', reasoning: 'Думаю', stoppedAtTokenLimit: false });
   });
 
   it('hands the caller signal to the HTTP port, so cancelling a generation stops the provider request', async () => {

@@ -9,13 +9,19 @@ import type { ReplyChannel } from '@immersion/domain/generation';
 
 import type { Clock } from '../../../platform/clock/clock.js';
 import { ChatLastMessageChangedError } from '../../chats/index.js';
-import { InvalidChatGenerationSettingsResolutionError, type TokenCounter } from '../../prompting/index.js';
+import {
+  type ChatReplyGenerationPlan,
+  InvalidChatGenerationSettingsResolutionError,
+  type TokenCounter,
+} from '../../prompting/index.js';
 import { GenerationProviderUnavailableError } from '../../providers/index.js';
-import type { ChatCompletionClient, ChatCompletionResponse } from './chat-completion-client.js';
+import { assertPromptFitsContext } from './assert-prompt-fits-context.js';
+import type { ChatCompletionClient, ChatCompletionEndpoint, ChatCompletionResponse } from './chat-completion-client.js';
 import {
   ChatReplyGenerationFailedError,
   NothingToAnswerError,
   NothingToContinueError,
+  PromptExceedsContextError,
   ProviderGenerationError,
 } from './generation-errors.js';
 import type {
@@ -76,11 +82,78 @@ function mapChatReplyGenerationError(error: unknown, session: ChatSessionDto): u
     return new ChatReplyGenerationFailedError(409, 'invalid_chat_generation_settings', error.message, session);
   }
 
+  if (error instanceof PromptExceedsContextError) {
+    return new ChatReplyGenerationFailedError(409, 'prompt_exceeds_context', error.message, session);
+  }
+
   if (error instanceof ProviderGenerationError) {
     return new ChatReplyGenerationFailedError(502, 'provider_generation_failed', error.message, session);
   }
 
   return error;
+}
+
+interface FittingChatReplyPlan {
+  endpoint: ChatCompletionEndpoint;
+  generationPlan: ChatReplyGenerationPlan;
+  settings: SettingsOverviewResponse;
+}
+
+async function planFittingChatReply(
+  session: ChatSessionDto,
+  dependencies: ChatReplyGenerationDependencies,
+  buildTrailingInstruction?: (settings: SettingsOverviewResponse) => string,
+): Promise<FittingChatReplyPlan> {
+  const endpoint = await dependencies.providers.resolveGenerationProviderEndpoint();
+  const settings = dependencies.settings.getSettingsOverview();
+  const characterContext = await dependencies.prompting.loadChatPromptContext(session);
+  const messageImages = await loadMessageImages(session, dependencies.chats);
+  const generationPlan = await dependencies.prompting.resolveChatReplyGenerationPlan({
+    character: characterContext.character,
+    characterScenarioContent: characterContext.characterScenarioContent,
+    lorebookSections: characterContext.lorebookSections,
+    messageImages,
+    providerContextSize: endpoint.contextSize,
+    providerModelName: endpoint.model,
+    session,
+    settings,
+    tokenCounter: dependencies.tokenCounter,
+    trailingUserInstruction: buildTrailingInstruction ? buildTrailingInstruction(settings) : null,
+  });
+  assertPromptFitsContext(generationPlan);
+
+  return { endpoint, generationPlan, settings };
+}
+
+export async function assertChatReplyFitsContext(
+  session: ChatSessionDto,
+  dependencies: ChatReplyGenerationDependencies,
+): Promise<void> {
+  await planFittingChatReply(session, dependencies);
+}
+
+export async function refuseNewChatReplyThatCannotFit(
+  command: StartChatReplyCommand,
+  session: ChatSessionDto,
+  dependencies: ChatReplyGenerationDependencies,
+): Promise<void> {
+  const pendingUserMessage: ChatMessageDto = {
+    attachments: [],
+    content: command.message,
+    createdAt: dependencies.clock.now().toISOString(),
+    id: `pending:${session.chat.id}`,
+    reasoning: null,
+    role: 'user',
+    stoppedAtTokenLimit: false,
+  };
+
+  try {
+    await planFittingChatReply({ ...session, messages: [...session.messages, pendingUserMessage] }, dependencies);
+  } catch (error) {
+    if (error instanceof PromptExceedsContextError) {
+      throw error;
+    }
+  }
 }
 
 async function runChatCompletionForSession(
@@ -92,22 +165,11 @@ async function runChatCompletionForSession(
   try {
     options.signal?.throwIfAborted();
 
-    const endpoint = await dependencies.providers.resolveGenerationProviderEndpoint();
-    const settings = dependencies.settings.getSettingsOverview();
-    const characterContext = await dependencies.prompting.loadChatPromptContext(session);
-    const messageImages = await loadMessageImages(session, dependencies.chats);
-    const generationPlan = await dependencies.prompting.resolveChatReplyGenerationPlan({
-      character: characterContext.character,
-      characterScenarioContent: characterContext.characterScenarioContent,
-      lorebookSections: characterContext.lorebookSections,
-      messageImages,
-      providerContextSize: endpoint.contextSize,
-      providerModelName: endpoint.model,
+    const { endpoint, generationPlan, settings } = await planFittingChatReply(
       session,
-      settings,
-      tokenCounter: dependencies.tokenCounter,
-      trailingUserInstruction: buildTrailingInstruction ? buildTrailingInstruction(settings) : null,
-    });
+      dependencies,
+      buildTrailingInstruction,
+    );
     const streamingDelta = settings.profile.streamingEnabled ? options.onDelta : undefined;
     const completion = await dependencies.chatCompletionClient.completeChat({
       endpoint,
@@ -184,6 +246,7 @@ export async function completeChatReplyForSession(
       content: content.content,
       createdAt: dependencies.clock.now().toISOString(),
       reasoning: content.reasoning,
+      stoppedAtTokenLimit: content.stoppedAtTokenLimit,
     },
   ]);
 
@@ -232,6 +295,7 @@ export async function completeChatReplyContinuationForSession(
       continuation: continuationResponse.content,
       expectedContentPrefix: lastMessage.content,
       expectedMessageIndex: session.messages.length,
+      stoppedAtTokenLimit: continuationResponse.stoppedAtTokenLimit,
       updatedAt: dependencies.clock.now().toISOString(),
     });
 

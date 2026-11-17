@@ -9,6 +9,7 @@ import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
 import type { Clock } from '../../../platform/clock/clock.js';
 import { ChatNotFoundError, ChatTranscriptNotEmptyError } from '../../chats/index.js';
 import type { TokenCounter } from '../../prompting/index.js';
+import { assertPromptFitsContext } from './assert-prompt-fits-context.js';
 import type { ChatCompletionClient } from './chat-completion-client.js';
 import { ChatNotEmptyError } from './generation-errors.js';
 import type {
@@ -105,6 +106,7 @@ export async function generateFirstMessage(
       settings.profile.responseLanguage,
     ),
   });
+  assertPromptFitsContext(generationPlan);
   const completion = await dependencies.chatCompletionClient.completeChat({
     endpoint,
     maxTokens: generationPlan.providerRequest.maxTokens,
@@ -121,6 +123,7 @@ export async function generateFirstMessage(
           role: 'assistant',
           content: completion.content,
           createdAt: dependencies.clock.now().toISOString(),
+          stoppedAtTokenLimit: completion.stoppedAtTokenLimit,
         },
       ],
       { requireEmptyTranscript: true },
