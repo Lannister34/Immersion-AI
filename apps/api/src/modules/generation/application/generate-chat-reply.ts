@@ -11,6 +11,7 @@ import {
   completeChatReplyContinuationForSession,
   completeChatReplyForSession,
   getAnswerableUserMessage,
+  refuseNewChatReplyThatCannotFit,
 } from './chat-reply-generation.js';
 import type { GenerationOptions } from './generation-ports.js';
 
@@ -39,6 +40,7 @@ export async function generateChatReply(
     );
   }
 
+  await refuseNewChatReplyThatCannotFit(command, session, dependencies);
   const sessionAfterUserMessage = await appendUserMessageForChatReply(command, dependencies);
 
   return ChatReplyGenerationResponseSchema.parse(

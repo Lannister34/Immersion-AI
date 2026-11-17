@@ -64,6 +64,30 @@ function command(fields: Record<string, unknown>) {
 }
 
 describe('createOpenAiChatCompletion', () => {
+  it('sends no reply limit when neither the request nor the preset sets one', async () => {
+    const { client, dependencies } = createInMemoryPorts();
+    client.reply({ content: 'ок' });
+
+    await createOpenAiChatCompletion(command({}), {
+      ...dependencies,
+      settings: { resolveSamplerPresetForModel: () => ({ ...PRESET, maxTokens: 'unlimited' }) },
+    });
+
+    expect(client.requests[0]?.maxTokens).toBeNull();
+  });
+
+  it('keeps the request max_tokens when the preset sets no reply limit', async () => {
+    const { client, dependencies } = createInMemoryPorts();
+    client.reply({ content: 'ок' });
+
+    await createOpenAiChatCompletion(command({ max_tokens: 64 }), {
+      ...dependencies,
+      settings: { resolveSamplerPresetForModel: () => ({ ...PRESET, maxTokens: 'unlimited' }) },
+    });
+
+    expect(client.requests[0]?.maxTokens).toBe(64);
+  });
+
   it('request sampling overrides beat the preset', async () => {
     const { client, dependencies } = createInMemoryPorts();
     client.reply({ content: 'ок' });

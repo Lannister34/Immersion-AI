@@ -15,6 +15,29 @@ export class ProviderReplyTruncatedError extends ProviderGenerationError {
   }
 }
 
+export interface PromptExceedsContextDetails {
+  readonly contextWindow: number;
+  readonly fixedPromptTokens: number;
+  readonly maxTokens: number;
+  readonly promptBudget: number;
+  readonly reason: 'reply-exceeds-context' | 'system-exceeds-budget';
+}
+
+function describePromptExceedsContext(details: PromptExceedsContextDetails): string {
+  if (details.reason === 'reply-exceeds-context') {
+    return `Лимит ответа (${details.maxTokens}) не меньше окна контекста (${details.contextWindow}): для истории чата не остаётся места. Уменьшите лимит ответа, выберите «Без лимита» или увеличьте контекст.`;
+  }
+
+  return `Системный промпт и последнее сообщение (${details.fixedPromptTokens} токенов) не помещаются в бюджет промпта: окно контекста ${details.contextWindow} − лимит ответа ${details.maxTokens} = ${details.promptBudget}. Уменьшите лимит ответа или системный промпт, выберите «Без лимита» или увеличьте контекст.`;
+}
+
+export class PromptExceedsContextError extends Error {
+  constructor(readonly details: PromptExceedsContextDetails) {
+    super(describePromptExceedsContext(details));
+    this.name = 'PromptExceedsContextError';
+  }
+}
+
 export class ChatTranscriptEmptyError extends Error {
   constructor(readonly chatId: string) {
     super('Chat has no messages to derive a title from.');

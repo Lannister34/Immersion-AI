@@ -1,10 +1,11 @@
+import type { ReplyTokenLimit } from '@immersion/contracts/common';
 import type { SamplerPresetInput } from '@immersion/contracts/settings';
 
 export interface StoredSamplerPreset {
   context_trim_strategy: 'trim_middle' | 'trim_start';
   id: string;
   max_context_length: number;
-  max_length: number;
+  max_length: ReplyTokenLimit;
   min_p: number;
   name: string;
   presence_penalty: number;

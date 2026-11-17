@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { createCapturingLogger } from '../../../test-support/capturing-logger.js';
 import { createHttpStub, type HttpStub } from '../../../test-support/http-stub.js';
 import { InMemoryChatSessions } from '../../../test-support/in-memory-chat-sessions.js';
 import {
@@ -129,7 +130,7 @@ describe('llama-server counts reasoning tokens against max_tokens, so drafts ask
     useProviderSettings(LOCAL_PROVIDER_SETTINGS);
     const http = stubProviderReply();
 
-    await generate(createChatCompletionClient({ httpFetch: http.fetch }));
+    await generate(createChatCompletionClient({ httpFetch: http.fetch, logger: createCapturingLogger().logger }));
 
     expect(onlyRequestBody(http)).toMatchObject({ chat_template_kwargs: { enable_thinking: false } });
   });
@@ -138,7 +139,7 @@ describe('llama-server counts reasoning tokens against max_tokens, so drafts ask
     useProviderSettings(CLOUD_PROVIDER_SETTINGS);
     const http = stubProviderReply();
 
-    await generate(createChatCompletionClient({ httpFetch: http.fetch }));
+    await generate(createChatCompletionClient({ httpFetch: http.fetch, logger: createCapturingLogger().logger }));
 
     expect(onlyRequestBody(http)).not.toHaveProperty('chat_template_kwargs');
   });

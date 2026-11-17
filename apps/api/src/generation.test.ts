@@ -1192,9 +1192,13 @@ describe('generation routes', () => {
     const lateClient: ChatCompletionClient = {
       completeChat: (request) =>
         new Promise((resolve) => {
-          request.signal?.addEventListener('abort', () => resolve({ content: 'Too late.', reasoning: '' }), {
-            once: true,
-          });
+          request.signal?.addEventListener(
+            'abort',
+            () => resolve({ content: 'Too late.', reasoning: '', stoppedAtTokenLimit: false }),
+            {
+              once: true,
+            },
+          );
           providerCalled.resolve();
         }),
     };
@@ -1527,7 +1531,7 @@ describe('generation routes', () => {
       sampling: {
         ...NO_SAMPLING_OVERRIDES,
         contextTrimStrategy: 'trim_start',
-        maxContextLength: 74,
+        maxContextLength: 92,
         maxTokens: 24,
       },
     });

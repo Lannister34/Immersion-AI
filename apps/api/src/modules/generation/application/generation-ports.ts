@@ -39,12 +39,14 @@ export interface ChatMessageAppend {
   createdAt: string;
   reasoning?: string | null;
   role: 'assistant' | 'user';
+  stoppedAtTokenLimit?: boolean;
 }
 
 export interface AssistantMessageContinuation {
   continuation: string;
   expectedContentPrefix: string;
   expectedMessageIndex: number;
+  stoppedAtTokenLimit: boolean;
   updatedAt: string;
 }
 

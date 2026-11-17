@@ -58,13 +58,13 @@ export function buildAnthropicHeaders(apiKey: string | null) {
   };
 }
 
-export function buildAnthropicBody(request: ChatCompletionRequest) {
+export function buildAnthropicBody(request: ChatCompletionRequest, maxTokens: number) {
   const { conversation, system } = buildAnthropicPayload(request.messages);
 
   return {
     model: request.endpoint.model,
     messages: conversation,
-    max_tokens: request.maxTokens,
+    max_tokens: maxTokens,
     stream: Boolean(request.onDelta),
     ...(system ? { system } : {}),
     ...buildAnthropicSamplingPayload(request.sampling, resolveAnthropicSamplingSupport(request.endpoint.model)),

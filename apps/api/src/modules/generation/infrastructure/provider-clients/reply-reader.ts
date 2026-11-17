@@ -10,14 +10,10 @@ export interface ProviderStreamSink {
   stoppedAtTokenLimit(): void;
 }
 
-export interface ProviderReply extends ChatCompletionResponse {
-  stoppedAtTokenLimit?: boolean | undefined;
-}
-
 export type ProviderStreamDataHandler = (data: string, sink: ProviderStreamSink) => void;
 
 export interface ProviderReplyReaders {
-  readJson(response: Response): Promise<ProviderReply>;
+  readJson(response: Response): Promise<ChatCompletionResponse>;
   readStreamData: ProviderStreamDataHandler;
 }
 
@@ -25,7 +21,7 @@ async function readProviderStream(
   response: Response,
   onDelta: (delta: string, channel: ReplyChannel) => void,
   handleData: ProviderStreamDataHandler,
-): Promise<ProviderReply> {
+): Promise<ChatCompletionResponse> {
   const body = response.body;
 
   if (!body) {
@@ -99,7 +95,7 @@ async function readStreamedReply(
   request: ChatCompletionRequest,
   onDelta: (delta: string, channel: ReplyChannel) => void,
   handleData: ProviderStreamDataHandler,
-): Promise<ProviderReply> {
+): Promise<ChatCompletionResponse> {
   try {
     return await readProviderStream(response, onDelta, handleData);
   } catch (error) {
@@ -119,13 +115,13 @@ export async function readProviderReply(
   readers: ProviderReplyReaders,
 ): Promise<ChatCompletionResponse> {
   const isEventStream = (response.headers.get('content-type') ?? '').includes('text/event-stream');
-  const { stoppedAtTokenLimit, ...completion } =
+  const completion =
     request.onDelta && isEventStream
       ? await readStreamedReply(response, request, request.onDelta, readers.readStreamData)
       : await readers.readJson(response);
   const isDisallowedEmpty = !completion.content && !request.allowEmptyContent;
 
-  if (stoppedAtTokenLimit && (isDisallowedEmpty || request.requireCompleteReply)) {
+  if (completion.stoppedAtTokenLimit && (isDisallowedEmpty || request.requireCompleteReply)) {
     throw new ProviderReplyTruncatedError();
   }
 

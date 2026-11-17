@@ -47,6 +47,7 @@ function buildSession(roles: ChatMessageRole[]): ChatSessionDto {
       createdAt: '2026-01-01T00:00:00.000Z',
       id: `chat:${index + 1}`,
       reasoning: null,
+      stoppedAtTokenLimit: false,
       role,
     })),
     scenarioId: null,

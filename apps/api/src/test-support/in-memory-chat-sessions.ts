@@ -122,6 +122,7 @@ export class InMemoryChatSessions implements InMemoryChatSessionPort {
     }
 
     lastMessage.content += input.continuation;
+    lastMessage.stoppedAtTokenLimit = input.stoppedAtTokenLimit;
     session.chat.updatedAt = input.updatedAt;
 
     return this.#summarize(session);
@@ -168,6 +169,7 @@ export class InMemoryChatSessions implements InMemoryChatSessionPort {
       createdAt: message.createdAt,
       id: `${chatId}-${position}`,
       reasoning: message.reasoning ?? null,
+      stoppedAtTokenLimit: message.stoppedAtTokenLimit ?? false,
       role: message.role,
     };
   }

@@ -10,6 +10,15 @@ import {
   AnthropicStreamEventSchema,
 } from './response-wire.js';
 
+const ANTHROPIC_TOKEN_LIMIT_STOP_REASONS: ReadonlySet<string> = new Set([
+  'max_tokens',
+  'model_context_window_exceeded',
+]);
+
+function isTokenLimitStop(stopReason: string | null | undefined): boolean {
+  return stopReason !== null && stopReason !== undefined && ANTHROPIC_TOKEN_LIMIT_STOP_REASONS.has(stopReason);
+}
+
 function readResponseBlocks(payload: AnthropicMessageResponse): ChatCompletionResponse {
   const parts: Record<ReplyChannel, string[]> = { reasoning: [], reply: [] };
 
@@ -23,7 +32,11 @@ function readResponseBlocks(payload: AnthropicMessageResponse): ChatCompletionRe
     }
   }
 
-  return { content: parts.reply.join('').trim(), reasoning: parts.reasoning.join('').trim() };
+  return {
+    content: parts.reply.join('').trim(),
+    reasoning: parts.reasoning.join('').trim(),
+    stoppedAtTokenLimit: isTokenLimitStop(payload.stop_reason),
+  };
 }
 
 export function readAnthropicStreamData(data: string, sink: ProviderStreamSink) {
@@ -37,6 +50,10 @@ export function readAnthropicStreamData(data: string, sink: ProviderStreamSink) 
 
   if (event.type === 'error') {
     throw new ProviderGenerationError(event.error?.message ?? 'Provider stream reported an error.');
+  }
+
+  if (event.type === 'message_delta' && isTokenLimitStop(event.delta?.stop_reason)) {
+    sink.stoppedAtTokenLimit();
   }
 
   const delta = event.type === 'content_block_delta' ? event.delta : undefined;

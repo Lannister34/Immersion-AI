@@ -1,4 +1,5 @@
 import type { ChatGenerationSettingsDto, ChatSamplingOverridesDto } from '@immersion/contracts/chats';
+import type { ReplyTokenLimit } from '@immersion/contracts/common';
 import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
 
 import {
@@ -24,7 +25,7 @@ export interface AppliedChatSamplingOverrides {
 export interface ResolvedChatGenerationSamplingSettings {
   contextTrimStrategy: ActiveSamplerPreset['contextTrimStrategy'];
   maxContextLength: number;
-  maxTokens: number;
+  maxTokens: ReplyTokenLimit;
   minP: number;
   presencePenalty: number;
   repeatPenalty: number;
