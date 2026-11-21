@@ -113,6 +113,7 @@ export function ModelDirsCard({ dirsStatus, serverConfig }: ModelDirsCardProps) 
         )}
         <form className="row gap-8" onSubmit={handleAdd}>
           <input
+            autoComplete="off"
             aria-label="Новый каталог моделей"
             className="input"
             onChange={(event) => {

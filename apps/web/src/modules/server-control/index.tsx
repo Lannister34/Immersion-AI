@@ -293,6 +293,7 @@ export function ServerControlScreen() {
                     <div className="search" style={{ minWidth: 200 }}>
                       <SearchIcon size={13} />
                       <input
+                        autoComplete="off"
                         onChange={(event) => setSearch(event.currentTarget.value)}
                         placeholder="Имя модели"
                         value={search}

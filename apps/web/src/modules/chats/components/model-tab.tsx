@@ -120,6 +120,7 @@ export function ModelTab({ effectiveSampling, form, modelBindingPresetId, settin
           ) : null}
         </div>
         <select
+          autoComplete="off"
           className="input"
           disabled={presets.length === 0}
           id="chat-sampler-preset"
@@ -168,6 +169,7 @@ export function ModelTab({ effectiveSampling, form, modelBindingPresetId, settin
                     −
                   </button>
                   <input
+                    autoComplete="off"
                     className="rp-param__value"
                     id={`chat-sampling-${field.key}`}
                     inputMode="decimal"
@@ -220,6 +222,7 @@ export function ModelTab({ effectiveSampling, form, modelBindingPresetId, settin
             </span>
           </label>
           <select
+            autoComplete="off"
             className="rp-param__select"
             id="chat-sampling-trim"
             onChange={(event) => {

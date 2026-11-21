@@ -115,6 +115,7 @@ export function Composer({
         </div>
       ) : null}
       <textarea
+        autoComplete="off"
         className="textarea"
         onChange={onChange}
         onKeyDown={onKeyDown}

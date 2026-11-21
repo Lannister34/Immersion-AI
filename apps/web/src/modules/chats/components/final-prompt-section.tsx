@@ -69,6 +69,7 @@ export function FinalPromptSection({ assembledPrompt, form }: FinalPromptSection
             </div>
           ) : null}
           <textarea
+            autoComplete="off"
             aria-label="Итоговый промпт"
             className="textarea mono"
             maxLength={20_000}

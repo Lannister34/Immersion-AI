@@ -83,7 +83,7 @@ export function TemplateTextarea({
           ref={textareaRef}
           rows={rows}
           value={value}
-          {...(maxLength === undefined ? {} : { maxLength })}
+          maxLength={maxLength}
         />
       </div>
       <div className="row gap-6" style={{ alignItems: 'center' }}>

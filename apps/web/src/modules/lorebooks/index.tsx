@@ -268,6 +268,7 @@ export function LorebooksScreen() {
               <div className="search" style={{ minWidth: 280 }}>
                 <SearchIcon size={13} />
                 <input
+                  autoComplete="off"
                   onChange={(event) => setSearch(event.currentTarget.value)}
                   placeholder="Имя или ключ…"
                   value={search}

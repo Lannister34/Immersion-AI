@@ -77,6 +77,7 @@ export function ChatHeader({
         ) : (
           <div className="row gap-8" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
             <input
+              autoComplete="off"
               autoFocus
               className="input"
               disabled={isRenaming}

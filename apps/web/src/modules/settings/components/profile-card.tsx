@@ -120,6 +120,7 @@ export function ProfileCard({ data }: ProfileCardProps) {
             <div className="field">
               <label htmlFor="profile-user-name">Имя</label>
               <input
+                autoComplete="off"
                 className="input"
                 id="profile-user-name"
                 maxLength={120}
@@ -131,6 +132,7 @@ export function ProfileCard({ data }: ProfileCardProps) {
             <div className="field">
               <label htmlFor="profile-user-persona">Описание персоны</label>
               <textarea
+                autoComplete="off"
                 className="textarea"
                 id="profile-user-persona"
                 maxLength={20_000}
@@ -147,6 +149,7 @@ export function ProfileCard({ data }: ProfileCardProps) {
           <div className="field">
             <label htmlFor="profile-response-language">Язык ответа модели</label>
             <select
+              autoComplete="off"
               className="input"
               id="profile-response-language"
               onChange={(event) =>

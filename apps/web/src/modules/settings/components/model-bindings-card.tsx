@@ -77,6 +77,7 @@ export function ModelBindingsCard({ data }: ModelBindingsCardProps) {
                   {binding.modelName}
                 </span>
                 <select
+                  autoComplete="off"
                   className="input"
                   disabled={upsertMutation.isPending}
                   onChange={(event) =>
@@ -129,6 +130,7 @@ export function ModelBindingsCard({ data }: ModelBindingsCardProps) {
         <div className="field" style={{ flex: 1 }}>
           <label htmlFor="binding-model-name">Имя файла модели</label>
           <input
+            autoComplete="off"
             className="input mono"
             id="binding-model-name"
             onChange={(event) => setNewModelName(event.currentTarget.value)}
@@ -139,6 +141,7 @@ export function ModelBindingsCard({ data }: ModelBindingsCardProps) {
         <div className="field" style={{ minWidth: 200 }}>
           <label htmlFor="binding-preset-id">Preset</label>
           <select
+            autoComplete="off"
             className="input"
             id="binding-preset-id"
             onChange={(event) => setNewPresetId(event.currentTarget.value)}

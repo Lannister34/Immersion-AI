@@ -43,6 +43,7 @@ export function ReplyLimitField({ contextLength, id, onChange, restoredLimit, va
         </label>
       </div>
       <input
+        autoComplete="off"
         className="input mono"
         disabled={isUnlimited}
         id={id}

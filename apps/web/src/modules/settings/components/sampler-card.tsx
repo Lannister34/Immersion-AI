@@ -181,6 +181,7 @@ export function SamplerCard({ data }: SamplerCardProps) {
           <div className="field">
             <label htmlFor="sampler-name">Название</label>
             <input
+              autoComplete="off"
               className="input"
               id="sampler-name"
               maxLength={120}
@@ -195,6 +196,7 @@ export function SamplerCard({ data }: SamplerCardProps) {
           <div className="field">
             <label htmlFor="sampler-trim">Стратегия обрезки</label>
             <select
+              autoComplete="off"
               className="input"
               id="sampler-trim"
               onChange={(event) => {

@@ -295,6 +295,7 @@ export function ChatListScreen({ characterFilter }: ChatListScreenProps) {
               <div className="search" style={{ minWidth: 280 }}>
                 <SearchIcon size={13} />
                 <input
+                  autoComplete="off"
                   onChange={(event) => setSearch(event.currentTarget.value)}
                   placeholder="Поиск по названию и тексту…"
                   value={search}

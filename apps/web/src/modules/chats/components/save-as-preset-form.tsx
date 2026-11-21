@@ -96,6 +96,7 @@ export function SaveAsPresetForm({ baselinePresetName, effectiveSampling, form }
       <label className="col gap-4" htmlFor="chat-new-preset-name">
         <span style={{ color: 'var(--muted)', fontSize: 'var(--fz-xs)' }}>Название новой предустановки</span>
         <input
+          autoComplete="off"
           autoFocus
           className="input"
           id="chat-new-preset-name"
