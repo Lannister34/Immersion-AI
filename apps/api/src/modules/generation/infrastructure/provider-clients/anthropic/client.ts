@@ -1,3 +1,4 @@
+import { fetchRefusingRedirects } from '../../../../../platform/outbound-http/fetch-refusing-redirects.js';
 import type { HttpFetch } from '../../../../../platform/outbound-http/http-fetch.js';
 import { resolveAnthropicMessagesUrl } from '../../../../providers/index.js';
 import type {
@@ -23,7 +24,7 @@ export class AnthropicClient implements ChatCompletionClient {
     let response: Response;
 
     try {
-      response = await this.httpFetch(resolveAnthropicMessagesUrl(request.endpoint), {
+      response = await fetchRefusingRedirects(this.httpFetch, resolveAnthropicMessagesUrl(request.endpoint), {
         method: 'POST',
         headers: buildAnthropicHeaders(request.endpoint.apiKey),
         body: JSON.stringify(buildAnthropicBody(request)),

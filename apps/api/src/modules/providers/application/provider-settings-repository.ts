@@ -28,10 +28,6 @@ export class ProviderSettingsRepository {
     return normalizeStoredProviderSettings(this.document.read());
   }
 
-  async write(next: ProviderSettings): Promise<void> {
-    await this.document.update((existing) => toStoredRecord(existing, next));
-  }
-
   async update(change: ProviderSettingsChange): Promise<ProviderSettings> {
     const stored = await this.document.update((existing) =>
       toStoredRecord(existing, change(normalizeStoredProviderSettings(existing))),

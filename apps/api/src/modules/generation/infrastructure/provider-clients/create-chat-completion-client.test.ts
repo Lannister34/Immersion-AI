@@ -1,8 +1,12 @@
+import type { ProviderApiKind } from '@immersion/contracts/providers';
 import { describe, expect, it } from 'vitest';
 
+import { globalHttpFetch } from '../../../../platform/outbound-http/global-http-fetch.js';
 import { createHttpStub } from '../../../../test-support/http-stub.js';
 import { anthropicMessage, openAiChatCompletion } from '../../../../test-support/provider-responses.js';
+import { startRedirectingServers } from '../../../../test-support/redirecting-servers.js';
 import type { ChatCompletionRequest } from '../../application/chat-completion-client.js';
+import { ProviderGenerationError } from '../../application/generation-errors.js';
 import { createChatCompletionClient } from './create-chat-completion-client.js';
 
 function requestFor(endpoint: ChatCompletionRequest['endpoint']): ChatCompletionRequest {
@@ -53,5 +57,36 @@ describe('createChatCompletionClient', () => {
       'POST http://127.0.0.1:5001/v1/chat/completions',
     ]);
     expect([anthropicReply.content, localReply.content]).toEqual(['Claude.', 'Local.']);
+  });
+
+  it.each<[ProviderApiKind, string]>([
+    ['anthropic', '/v1/messages'],
+    ['openai-cloud', '/v1/chat/completions'],
+    ['openai-compatible', '/v1/chat/completions'],
+  ])('refuses a redirect from the %s provider, so its key never reaches the redirect target', async (apiKind, path) => {
+    const servers = await startRedirectingServers();
+    const client = createChatCompletionClient({ httpFetch: globalHttpFetch });
+
+    const failure = await client
+      .completeChat(
+        requestFor({
+          apiKey: 'sk-canary-generation',
+          apiKind,
+          baseUrl: `${servers.redirectingOrigin}/v1`,
+          contextSize: null,
+          model: 'model',
+        }),
+      )
+      .catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ProviderGenerationError);
+    expect(failure).toMatchObject({
+      message: expect.stringContaining(`HTTP 307 на ${servers.collectorOrigin}${path}`),
+    });
+    const keyHeaders = servers.redirected.map(
+      (request) => request.headers['x-api-key'] ?? request.headers.authorization,
+    );
+    expect(keyHeaders).toEqual([apiKind === 'anthropic' ? 'sk-canary-generation' : 'Bearer sk-canary-generation']);
+    expect(servers.collected).toEqual([]);
   });
 });
