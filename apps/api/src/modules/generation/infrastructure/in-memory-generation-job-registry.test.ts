@@ -77,6 +77,33 @@ describe('InMemoryGenerationJobRegistry eviction', () => {
   });
 });
 
+describe('InMemoryGenerationJobRegistry activity', () => {
+  it('reports an active job while one is queued, and none once every job has settled', () => {
+    const registry = new InMemoryGenerationJobRegistry({ clock: createManualClock() });
+
+    expect(registry.hasActiveJob()).toBe(false);
+
+    const first = registry.createChatReplyJob({
+      chatId: 'chat-a',
+      command: { chatId: 'chat-a', message: 'hi', mode: 'reply' },
+    });
+    const second = registry.createChatReplyJob({
+      chatId: 'chat-b',
+      command: { chatId: 'chat-b', message: 'hi', mode: 'reply' },
+    });
+
+    expect(registry.hasActiveJob()).toBe(true);
+
+    registry.fail(first.id, new Error('boom'));
+
+    expect(registry.hasActiveJob()).toBe(true);
+
+    registry.cancel(second.id);
+
+    expect(registry.hasActiveJob()).toBe(false);
+  });
+});
+
 describe('InMemoryGenerationJobRegistry deltas', () => {
   it('stops relaying deltas once the job is canceled, so subscribers end on the canceled status', async () => {
     const registry = new InMemoryGenerationJobRegistry({ clock: createManualClock() });

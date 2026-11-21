@@ -68,35 +68,38 @@ describe('ContextMeter', () => {
     expect(rowText('обрезано сообщений')).toBe('обрезано сообщений7');
   });
 
-  it("measures against the built-in server's context and says so when the preset asks for a larger window", async () => {
+  it('measures against the context the model runs with and says the chat context is not applied yet', async () => {
     await renderMeter({
       budgetStatus: 'trimmed',
-      contextWindow: { size: 8192, source: 'runtime' },
+      contextWindow: { pendingSize: 32_256, size: 8192, source: 'runtime' },
       maxContextLength: 32_256,
       maxTokens: 600,
       transcriptMessageCount: 12,
       trimmedMessageCount: 7,
     });
 
-    const badge = screen.getByText('окно ограничено сервером');
-    expect(badge.getAttribute('title')).toContain(`предустановка просит ${(32_256).toLocaleString('ru-RU')}`);
+    const badge = screen.getByText(/не применён/u);
+    expect(badge.textContent).toBe(`контекст ${(32_256).toLocaleString('ru-RU')} не применён`);
+    expect(badge.getAttribute('title')).toContain('«Применить»');
     expect(screen.getByTitle('Подробности о контексте').textContent).toContain(`/ ${(8192).toLocaleString('ru-RU')} ·`);
 
     fireEvent.click(screen.getByTitle('Подробности о контексте'));
 
-    expect(rowText('окно контекста')).toBe(`окно контекста${(8192).toLocaleString('ru-RU')} (сервер)`);
+    expect(rowText('окно контекста')).toBe(`окно контекста${(8192).toLocaleString('ru-RU')} (работает)`);
+    expect(rowText('ждёт применения')).toBe(`ждёт применения${(32_256).toLocaleString('ru-RU')}`);
   });
 
-  it('shows no server limit while the preset window fits the server', async () => {
+  it('shows nothing pending while the model runs the chat context', async () => {
     await renderMeter({
       budgetStatus: 'fits',
+      contextWindow: { pendingSize: null, size: 8192, source: 'runtime' },
       maxContextLength: 8192,
       maxTokens: 600,
       transcriptMessageCount: 3,
       trimmedMessageCount: 0,
     });
 
-    expect(screen.queryByText('окно ограничено сервером')).toBeNull();
+    expect(screen.queryByText(/не применён/u)).toBeNull();
   });
 
   it('names no limit in place of a number and shows the room left for the reply', async () => {

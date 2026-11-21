@@ -173,7 +173,7 @@ describe('createApiDependencies', () => {
 
     const responses = await Promise.all([
       app.inject({ method: 'PATCH', url: '/api/providers/settings', payload: { mode: 'builtin' } }),
-      app.inject({ method: 'PUT', url: '/api/runtime/config', payload: { contextSize: 4096 } }),
+      app.inject({ method: 'PUT', url: '/api/runtime/config', payload: { gpuLayers: 12 } }),
       app.inject({
         method: 'PUT',
         url: '/api/settings/profile',
@@ -193,7 +193,7 @@ describe('createApiDependencies', () => {
     expect(userSettings.writes).toHaveLength(3);
     expect(userSettings.read()).toMatchObject({
       backendMode: 'builtin',
-      llmServerConfig: { contextSize: 4096 },
+      llmServerConfig: { gpuLayers: 12 },
       userName: 'Переименован',
     });
   });

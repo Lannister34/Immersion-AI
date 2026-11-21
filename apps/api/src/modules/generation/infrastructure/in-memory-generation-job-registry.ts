@@ -124,6 +124,16 @@ export class InMemoryGenerationJobRegistry implements GenerationJobRegistry {
     this.evictionTimers.clear();
   }
 
+  hasActiveJob(): boolean {
+    for (const storedJob of this.jobs.values()) {
+      if (isActiveStatus(storedJob.dto.status)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   createChatReplyJob(input: CreateChatReplyGenerationJobInput): GenerationJobDto {
     const activeJob = this.findActiveChatReplyJob(input.chatId);
 

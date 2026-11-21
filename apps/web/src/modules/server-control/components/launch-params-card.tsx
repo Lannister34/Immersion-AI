@@ -15,8 +15,8 @@ import {
 } from '../forms/launch-params-form-state';
 import { runtimeOverviewQueryKey } from '../queries/runtime-overview-query';
 import { startRuntimeMutationKey } from '../queries/start-runtime-mutation-key';
+import { type LaunchFlags, sameLaunchFlags } from '../view-models/launch-flags';
 import { type LaunchRestartState, toLaunchRestartState } from '../view-models/launch-restart-state';
-import { sameLaunchConfig } from '../view-models/same-launch-config';
 
 interface LaunchParamsCardProps {
   overview: RuntimeOverviewResponse;
@@ -51,15 +51,15 @@ function describeRunningConfig(config: RuntimeLaunchConfig | null): string {
   return `Модель работает с ctx ${config.contextSize.toLocaleString('ru-RU')}, GPU ${config.gpuLayers}`;
 }
 
-function toLaunchConfig(overview: RuntimeOverviewResponse): RuntimeLaunchConfig {
-  const { contextSize, flashAttention, gpuLayers, threads } = overview.serverConfig;
+function toLaunchFlags(overview: RuntimeOverviewResponse): LaunchFlags {
+  const { flashAttention, gpuLayers, threads } = overview.serverConfig;
 
-  return { contextSize, flashAttention, gpuLayers, threads };
+  return { flashAttention, gpuLayers, threads };
 }
 
 export function LaunchParamsCard({ overview }: LaunchParamsCardProps) {
   const queryClient = useQueryClient();
-  const saved = useMemo(() => toLaunchConfig(overview), [overview]);
+  const saved = useMemo(() => toLaunchFlags(overview), [overview]);
   const savedForm = useMemo(() => toLaunchParamsForm(saved), [saved]);
   const [form, setForm] = useServerSeededForm(savedForm, launchParamsFormsEqual);
 
@@ -76,7 +76,7 @@ export function LaunchParamsCard({ overview }: LaunchParamsCardProps) {
 
   const parsed = parseLaunchParamsForm(form);
   const validationError = 'error' in parsed ? parsed.error : null;
-  const isDirty = 'config' in parsed ? !sameLaunchConfig(parsed.config, saved) : true;
+  const isDirty = 'config' in parsed ? !sameLaunchFlags(parsed.config, saved) : true;
   const restartState: LaunchRestartState = toLaunchRestartState(overview);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -99,25 +99,11 @@ export function LaunchParamsCard({ overview }: LaunchParamsCardProps) {
       <div className="between">
         <h2 style={{ margin: 0, fontSize: 'var(--fz-md)', fontWeight: 600 }}>Параметры запуска</h2>
         <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-          Применяются при запуске модели
+          Применяются при запуске модели. Контекст берётся из предустановки модели.
         </span>
       </div>
       <form className="col gap-12" onSubmit={handleSubmit}>
         <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-          <LaunchField
-            hint="Окно llama-server (-c). Промпт чата не превысит его."
-            htmlFor="launch-context-size"
-            label="Контекст, токенов"
-          >
-            <input
-              autoComplete="off"
-              className="input mono"
-              id="launch-context-size"
-              inputMode="numeric"
-              onChange={(event) => updateField({ contextSize: event.currentTarget.value })}
-              value={form.contextSize}
-            />
-          </LaunchField>
           <LaunchField hint="Слоёв модели на видеокарте (-ngl)." htmlFor="launch-gpu-layers" label="GPU-слои">
             <input
               autoComplete="off"

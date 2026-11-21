@@ -4,8 +4,8 @@ import type { ChatReplyPromptPreviewResponse, TokenCountMethod } from '@immersio
 export interface ContextStats {
   totalTokens: number;
   contextWindow: number;
-  presetContextWindow: number;
-  limitedByRuntime: boolean;
+  windowFromRuntime: boolean;
+  pendingContextSize: number | null;
   replyLimit: ReplyTokenLimit;
   replyReservation: number;
   messageCount: number;
@@ -26,8 +26,8 @@ export function toContextStats(preview: ChatReplyPromptPreviewResponse | undefin
   return {
     totalTokens: tokenEstimate.finalTotal,
     contextWindow: contextWindow.size,
-    presetContextWindow: preview.effectiveSettings.sampling.maxContextLength,
-    limitedByRuntime: contextWindow.source === 'runtime',
+    windowFromRuntime: contextWindow.source === 'runtime',
+    pendingContextSize: contextWindow.pendingSize,
     replyLimit: preview.effectiveSettings.sampling.maxTokens,
     replyReservation: tokenEstimate.replyReservation,
     messageCount: transcriptMessageCount,

@@ -1,70 +1,83 @@
 import { describe, expect, it } from 'vitest';
 
-import { computePromptBudget, resolveContextWindowSize, UNLIMITED_REPLY_RESERVATION } from './context-budget.js';
+import {
+  computePromptBudget,
+  resolveContextWindowSize,
+  resolvePendingContextSize,
+  unlimitedReplyRoom,
+} from './context-budget.js';
 
 describe('resolveContextWindowSize', () => {
-  it('takes the smaller of the preset context and a known server window', () => {
-    expect(resolveContextWindowSize(32_256, 48_000)).toBe(32_256);
+  it('is the window the running server has, whatever the preset says, so the meter never claims more', () => {
+    expect(resolveContextWindowSize(32_256, 48_000)).toBe(48_000);
     expect(resolveContextWindowSize(65_536, 48_000)).toBe(48_000);
+    expect(resolveContextWindowSize(0, 8192)).toBe(8192);
   });
 
-  it('falls back to the server window when the preset context is 0, and to 0 when neither is known', () => {
-    expect(resolveContextWindowSize(0, 8192)).toBe(8192);
+  it('is the preset context when no server window is known, as for a cloud provider', () => {
+    expect(resolveContextWindowSize(32_256, null)).toBe(32_256);
+    expect(resolveContextWindowSize(4096, 0)).toBe(4096);
     expect(resolveContextWindowSize(0, null)).toBe(0);
   });
+});
 
-  it('ignores a server window of 0 or less', () => {
-    expect(resolveContextWindowSize(4096, 0)).toBe(4096);
+describe('resolvePendingContextSize', () => {
+  it('reports the preset context as pending while the server runs another one', () => {
+    expect(resolvePendingContextSize(48_000, 32_256)).toBe(48_000);
+    expect(resolvePendingContextSize(16_384, 32_256)).toBe(16_384);
+  });
+
+  it('reports nothing pending when they agree, when no server window is known, or when the preset sets none', () => {
+    expect(resolvePendingContextSize(48_000, 48_000)).toBeNull();
+    expect(resolvePendingContextSize(48_000, null)).toBeNull();
+    expect(resolvePendingContextSize(0, 48_000)).toBeNull();
+  });
+});
+
+describe('unlimitedReplyRoom', () => {
+  it('keeps an eighth of the window for the reply, 6000 of 48000', () => {
+    expect(unlimitedReplyRoom(48_000)).toBe(6000);
+  });
+
+  it('keeps at least 2048 tokens for the reply', () => {
+    expect(unlimitedReplyRoom(8192)).toBe(2048);
+    expect(unlimitedReplyRoom(16_384)).toBe(2048);
+  });
+
+  it('never takes more than half of a tiny window', () => {
+    expect(unlimitedReplyRoom(1000)).toBe(500);
   });
 });
 
 describe('computePromptBudget', () => {
-  it('gives history the whole preset context when an unlimited reply runs on a larger server window', () => {
+  it('leaves an unlimited reply max(2048, window / 8) of the running window', () => {
     expect(
-      computePromptBudget({ maxContextLength: 32_256, maxTokens: 'unlimited', serverContextSize: 48_000 }),
+      computePromptBudget({ maxContextLength: 48_000, maxTokens: 'unlimited', serverContextSize: 48_000 }),
+    ).toEqual({
+      contextWindow: 48_000,
+      kind: 'bounded',
+      promptBudget: 42_000,
+      replyReservation: 6000,
+    });
+  });
+
+  it('budgets against the running window while a different preset context is pending', () => {
+    expect(
+      computePromptBudget({ maxContextLength: 48_000, maxTokens: 'unlimited', serverContextSize: 32_256 }),
     ).toEqual({
       contextWindow: 32_256,
       kind: 'bounded',
-      promptBudget: 32_256,
-      replyReservation: 15_744,
+      promptBudget: 32_256 - 4032,
+      replyReservation: 4032,
     });
   });
 
-  it('keeps about 1024 tokens for an unlimited reply when the preset context is not smaller than the server window', () => {
-    expect(
-      computePromptBudget({ maxContextLength: 32_768, maxTokens: 'unlimited', serverContextSize: 32_768 }),
-    ).toEqual({
-      contextWindow: 32_768,
-      kind: 'bounded',
-      promptBudget: 32_768 - UNLIMITED_REPLY_RESERVATION,
-      replyReservation: UNLIMITED_REPLY_RESERVATION,
-    });
-  });
-
-  it('keeps about 1024 tokens for an unlimited reply when the server window is unknown', () => {
+  it('budgets a cloud provider by the preset context', () => {
     expect(
       computePromptBudget({ maxContextLength: 8192, maxTokens: 'unlimited', serverContextSize: null }),
     ).toMatchObject({
-      promptBudget: 7168,
-      replyReservation: 1024,
-    });
-  });
-
-  it('keeps at least 1024 tokens for an unlimited reply when the preset context is only slightly below the server window', () => {
-    expect(
-      computePromptBudget({ maxContextLength: 47_990, maxTokens: 'unlimited', serverContextSize: 48_000 }),
-    ).toMatchObject({
-      promptBudget: 46_976,
-      replyReservation: 1024,
-    });
-  });
-
-  it('keeps half of a tiny window for an unlimited reply', () => {
-    expect(
-      computePromptBudget({ maxContextLength: 100, maxTokens: 'unlimited', serverContextSize: null }),
-    ).toMatchObject({
-      promptBudget: 50,
-      replyReservation: 50,
+      promptBudget: 6144,
+      replyReservation: 2048,
     });
   });
 
@@ -77,8 +90,8 @@ describe('computePromptBudget', () => {
     });
   });
 
-  it('reserves an explicit reply limit inside the effective window, as before', () => {
-    expect(computePromptBudget({ maxContextLength: 32_256, maxTokens: 32_225, serverContextSize: 48_000 })).toEqual({
+  it('reserves an explicit reply limit inside the window', () => {
+    expect(computePromptBudget({ maxContextLength: 32_256, maxTokens: 32_225, serverContextSize: null })).toEqual({
       contextWindow: 32_256,
       kind: 'bounded',
       promptBudget: 31,
@@ -91,7 +104,7 @@ describe('computePromptBudget', () => {
     );
   });
 
-  it('reports an explicit reply limit equal to or above the effective window as reply-exceeds-context', () => {
+  it('reports an explicit reply limit equal to or above the window as reply-exceeds-context', () => {
     expect(computePromptBudget({ maxContextLength: 32_768, maxTokens: 32_768, serverContextSize: null })).toEqual({
       contextWindow: 32_768,
       kind: 'reply-exceeds-context',

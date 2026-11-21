@@ -19,16 +19,27 @@ export interface PromptExceedsContextDetails {
   readonly contextWindow: number;
   readonly fixedPromptTokens: number;
   readonly maxTokens: number;
+  readonly pendingContextSize: number | null;
   readonly promptBudget: number;
   readonly reason: 'reply-exceeds-context' | 'system-exceeds-budget';
 }
 
-function describePromptExceedsContext(details: PromptExceedsContextDetails): string {
-  if (details.reason === 'reply-exceeds-context') {
-    return `Лимит ответа (${details.maxTokens}) не меньше окна контекста (${details.contextWindow}): для истории чата не остаётся места. Уменьшите лимит ответа, выберите «Без лимита» или увеличьте контекст.`;
+function describePendingContext(pendingContextSize: number | null): string {
+  if (pendingContextSize === null) {
+    return '';
   }
 
-  return `Системный промпт и последнее сообщение (${details.fixedPromptTokens} токенов) не помещаются в бюджет промпта: окно контекста ${details.contextWindow} − лимит ответа ${details.maxTokens} = ${details.promptBudget}. Уменьшите лимит ответа или системный промпт, выберите «Без лимита» или увеличьте контекст.`;
+  return ` Контекст ${pendingContextSize} из настроек чата ещё не применён: нажмите «Применить» во вкладке «Модель».`;
+}
+
+function describePromptExceedsContext(details: PromptExceedsContextDetails): string {
+  const pending = describePendingContext(details.pendingContextSize);
+
+  if (details.reason === 'reply-exceeds-context') {
+    return `Лимит ответа (${details.maxTokens}) не меньше окна контекста (${details.contextWindow}): для истории чата не остаётся места. Уменьшите лимит ответа, выберите «Без лимита» или увеличьте контекст.${pending}`;
+  }
+
+  return `Системный промпт и последнее сообщение (${details.fixedPromptTokens} токенов) не помещаются в бюджет промпта: окно контекста ${details.contextWindow} − лимит ответа ${details.maxTokens} = ${details.promptBudget}. Уменьшите лимит ответа или системный промпт, выберите «Без лимита» или увеличьте контекст.${pending}`;
 }
 
 export class PromptExceedsContextError extends Error {

@@ -314,10 +314,10 @@ describe('context budgeting without a reply limit', () => {
   const tokenCounter = (): RecordingTokenCounter =>
     buildFakeTokenCounter({ LATEST: 10_000, MIDDLE: 10_000, OLDEST: 10_000, SYSCUSTOM: 1_000 });
 
-  it('budgets the whole preset context for history when the server window is larger, the Artemis 32256 on a 48000 server that forgot its chat', async () => {
+  it('leaves the reply max(2048, context / 8), 6000 of a 48000 window, and gives history the rest', async () => {
     const bundle = await buildChatReplyPromptBundleWithTokenCounter(
       {
-        samplerPreset: { ...defaultSamplerPreset, maxContextLength: 32_256, maxTokens: 'unlimited' },
+        samplerPreset: { ...defaultSamplerPreset, maxContextLength: 48_000, maxTokens: 'unlimited' },
         serverContextSize: 48_000,
         session: buildSession(history, 'SYSCUSTOM prompt'),
         settings,
@@ -326,7 +326,7 @@ describe('context budgeting without a reply limit', () => {
     );
 
     expect(bundle.diagnostics.budgetStatus).toBe('fits');
-    expect(bundle.diagnostics.tokenEstimate).toMatchObject({ promptBudget: 32_256, replyReservation: 15_744 });
+    expect(bundle.diagnostics.tokenEstimate).toMatchObject({ promptBudget: 42_000, replyReservation: 6000 });
     expect(bundle.messages.map((message) => message.content)).toEqual([
       'SYSCUSTOM prompt',
       'OLDEST',
@@ -335,22 +335,28 @@ describe('context budgeting without a reply limit', () => {
     ]);
   });
 
-  it('reserves about 1024 tokens for the reply when the preset context equals the server window', async () => {
+  it('budgets against the window the server runs while a larger preset context waits to be applied', async () => {
     const bundle = await buildChatReplyPromptBundleWithTokenCounter(
       {
-        samplerPreset: { ...defaultSamplerPreset, maxContextLength: 32_768, maxTokens: 'unlimited' },
-        serverContextSize: 32_768,
+        samplerPreset: {
+          ...defaultSamplerPreset,
+          contextTrimStrategy: 'trim_start',
+          maxContextLength: 48_000,
+          maxTokens: 'unlimited',
+        },
+        serverContextSize: 32_256,
         session: buildSession(history, 'SYSCUSTOM prompt'),
         settings,
       },
       tokenCounter(),
     );
 
-    expect(bundle.diagnostics.tokenEstimate).toMatchObject({ promptBudget: 31_744, replyReservation: 1024 });
-    expect(bundle.diagnostics.budgetStatus).toBe('fits');
+    expect(bundle.diagnostics.tokenEstimate).toMatchObject({ promptBudget: 28_224, replyReservation: 4032 });
+    expect(bundle.diagnostics.budgetStatus).toBe('trimmed');
+    expect(bundle.messages.map((message) => message.content)).toEqual(['SYSCUSTOM prompt', 'MIDDLE', 'LATEST']);
   });
 
-  it('reserves about 1024 tokens for the reply when the server window is unknown, as with a cloud provider', async () => {
+  it('budgets a cloud provider, whose window is unknown, by the preset context', async () => {
     const bundle = await buildChatReplyPromptBundleWithTokenCounter(
       {
         samplerPreset: {
@@ -366,7 +372,7 @@ describe('context budgeting without a reply limit', () => {
       tokenCounter(),
     );
 
-    expect(bundle.diagnostics.tokenEstimate).toMatchObject({ promptBudget: 28_976, replyReservation: 1024 });
+    expect(bundle.diagnostics.tokenEstimate).toMatchObject({ promptBudget: 26_250, replyReservation: 3750 });
     expect(bundle.diagnostics.budgetStatus).toBe('trimmed');
     expect(bundle.messages.map((message) => message.content)).toEqual(['SYSCUSTOM prompt', 'MIDDLE', 'LATEST']);
   });
@@ -391,7 +397,7 @@ describe('context budgeting without a reply limit', () => {
     const bundle = await buildChatReplyPromptBundleWithTokenCounter(
       {
         samplerPreset: { ...defaultSamplerPreset, maxContextLength: 32_256, maxTokens: 32_225 },
-        serverContextSize: 48_000,
+        serverContextSize: 32_256,
         session: buildSession(history, 'SYSCUSTOM prompt'),
         settings,
       },

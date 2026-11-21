@@ -8,6 +8,7 @@ import {
   type AutoSavedGenerationSettings,
   INHERIT_PRESET_VALUE,
 } from '../mutations/use-auto-saved-generation-settings';
+import type { PendingRuntimeContext } from '../view-models/pending-runtime-context';
 import {
   countSamplingOverrides,
   describeContextTrimStrategy,
@@ -17,6 +18,7 @@ import {
   toSamplingFieldViewModels,
 } from '../view-models/sampling-overrides';
 import { MarkDot } from './mark-dot';
+import { PendingContextNotice } from './pending-context-notice';
 import { SaveAsPresetForm } from './save-as-preset-form';
 import { SaveErrorLine } from './save-error-line';
 
@@ -80,11 +82,20 @@ function ReplyLimitControls({ contextLength, inheritedLimit, onChange, row }: Re
 interface ModelTabProps {
   effectiveSampling: InheritedSampling | undefined;
   form: AutoSavedGenerationSettings;
+  isContextDraftSaved?: boolean;
   modelBindingPresetId: string | null;
+  pendingRuntimeContext?: PendingRuntimeContext | null;
   settings: SettingsOverviewResponse | undefined;
 }
 
-export function ModelTab({ effectiveSampling, form, modelBindingPresetId, settings }: ModelTabProps) {
+export function ModelTab({
+  effectiveSampling,
+  form,
+  isContextDraftSaved = true,
+  modelBindingPresetId,
+  pendingRuntimeContext = null,
+  settings,
+}: ModelTabProps) {
   const presets = settings?.sampler.presets ?? [];
   const inheritedPresetId = modelBindingPresetId ?? settings?.sampler.activePresetId ?? null;
   const inheritedSuffix = modelBindingPresetId ? ' — от модели' : ' — из настроек';
@@ -140,6 +151,10 @@ export function ModelTab({ effectiveSampling, form, modelBindingPresetId, settin
           })}
         </select>
       </div>
+
+      {pendingRuntimeContext ? (
+        <PendingContextNotice isDraftSaved={isContextDraftSaved} {...pendingRuntimeContext} />
+      ) : null}
 
       <div className="col">
         {rows.map((row) => {

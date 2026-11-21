@@ -9,7 +9,7 @@ import {
 } from '../chats/index.js';
 import { ApiProblemSchema, ReplyTokenLimitSchema } from '../common/index.js';
 import { ProviderModeSchema, ProviderTypeSchema } from '../providers/settings.js';
-import { RuntimeServerStatusSchema } from '../runtime/overview.js';
+import { RuntimeContextSizeSchema, RuntimeServerStatusSchema } from '../runtime/overview.js';
 
 export const GenerationReadinessStatusSchema = z.enum(['blocked', 'ready']);
 export type GenerationReadinessStatus = z.infer<typeof GenerationReadinessStatusSchema>;
@@ -180,6 +180,7 @@ export const ContextBudgetStatusSchema = z.enum([
 export type ContextBudgetStatus = z.infer<typeof ContextBudgetStatusSchema>;
 
 export const PromptContextWindowSchema = z.object({
+  pendingSize: RuntimeContextSizeSchema.nullable(),
   size: z.number().int().nonnegative(),
   source: z.enum(['preset', 'runtime']),
 });

@@ -8,11 +8,13 @@ export const RuntimeEngineInfoSchema = z.object({
   defaultModelsDir: z.string(),
 });
 
+export const RuntimeContextSizeSchema = z.number().int().positive();
+
 export const RuntimeConfigSnapshotSchema = z.object({
   modelsDirs: z.array(z.string().trim().min(1)),
   port: z.number().int().nonnegative(),
   gpuLayers: z.number().int(),
-  contextSize: z.number().int().positive(),
+  contextSize: RuntimeContextSizeSchema,
   flashAttention: z.boolean(),
   threads: z.number().int().nonnegative(),
 });

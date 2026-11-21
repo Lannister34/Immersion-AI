@@ -40,17 +40,34 @@ describe('toLaunchRestartState', () => {
     expect(toLaunchRestartState(overview('error', { ...SAVED, contextSize: 8192 }))).toEqual({ kind: 'none' });
   });
 
-  it('restarts the running model with the saved parameters and its own projector when any of them differs', () => {
-    const running = { ...SAVED, contextSize: 8192 };
+  it('asks for nothing when only the context differs, since the context comes from the chat preset, not this form', () => {
+    expect(toLaunchRestartState(overview('running', { ...SAVED, contextSize: 8192 }))).toEqual({ kind: 'none' });
+  });
+
+  it('restarts the running model with the saved flags, its own projector and the context it runs with', () => {
+    const running = { ...SAVED, contextSize: 48_000, gpuLayers: 40 };
 
     expect(toLaunchRestartState(overview('running', running, MODEL_PATH, 'D:/Модели/mmproj-Гемма.gguf'))).toEqual({
       kind: 'restart',
-      command: { ...SAVED, modelPath: MODEL_PATH, mmprojPath: 'D:/Модели/mmproj-Гемма.gguf', port: 5002 },
+      command: {
+        ...SAVED,
+        contextSize: 48_000,
+        modelPath: MODEL_PATH,
+        mmprojPath: 'D:/Модели/mmproj-Гемма.gguf',
+        port: 5002,
+      },
       runningConfig: running,
     });
     expect(toLaunchRestartState(overview('running', { ...SAVED, flashAttention: false }))).toMatchObject({
       kind: 'restart',
     });
+  });
+
+  it('leaves the context to the preset when it restarts a server whose running parameters are unknown', () => {
+    const state = toLaunchRestartState(overview('running', null));
+
+    expect(state).toMatchObject({ kind: 'restart' });
+    expect(state.kind === 'restart' ? state.command : null).not.toHaveProperty('contextSize');
   });
 
   it('offers a restart when the running parameters are unknown, as for a server started before they were recorded', () => {

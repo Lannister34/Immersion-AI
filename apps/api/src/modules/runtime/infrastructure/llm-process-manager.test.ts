@@ -249,6 +249,38 @@ describe('LlmProcessManager', () => {
     await manager.stop();
   });
 
+  it('settles a wait on a starting server with the error state once it exits while loading', async () => {
+    const { config, servers } = await arrangeFakeLlamaServers();
+    const manager = createManager();
+
+    await manager.start(config);
+    const settled = manager.waitUntilSettled();
+    servers[0]?.exit(1);
+
+    await expect(settled).resolves.toMatchObject({ error: 'llama-server завершился с кодом 1', status: 'error' });
+
+    await manager.stop();
+  });
+
+  it('settles a wait at once while nothing starts or stops', async () => {
+    const manager = createManager();
+
+    await expect(manager.waitUntilSettled()).resolves.toMatchObject({ status: 'idle' });
+  });
+
+  it('settles a pending wait when the manager is disposed, so no request hangs on a closing API', async () => {
+    const { config } = await arrangeFakeLlamaServers();
+    const manager = createManager();
+
+    await manager.start(config);
+    const settled = manager.waitUntilSettled();
+    manager.dispose();
+
+    await expect(settled).resolves.toMatchObject({ status: 'starting' });
+
+    await manager.stop();
+  });
+
   it('clears the previous crash when a model is started again', async () => {
     const { config, servers } = await arrangeFakeLlamaServers();
     const manager = createManager();

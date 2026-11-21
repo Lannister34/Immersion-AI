@@ -1,6 +1,7 @@
 import type { RuntimeOverviewResponse } from '@immersion/contracts/runtime';
 import type { FastifyPluginAsync } from 'fastify';
 
+import { createSerialQueue } from '../../platform/concurrency/serial-queue.js';
 import type { LogPort } from '../../platform/logging/log-port.js';
 import type { HttpFetch } from '../../platform/outbound-http/http-fetch.js';
 import type { UserSettingsDocument } from '../settings/index.js';
@@ -9,12 +10,15 @@ import { getRuntimeOverview } from './application/get-runtime-overview.js';
 import type { ModelScanner } from './application/model-scanner.js';
 import { reconnectDetachedRuntime } from './application/reconnect-detached-runtime.js';
 import { RuntimeConfigRepository } from './application/runtime-config-repository.js';
+import type { GenerationActivity, LaunchContextSource } from './application/runtime-ports.js';
 import type { RuntimeProcess } from './application/runtime-process.js';
 import { createRuntimeRoutes, type RuntimeRoutesDependencies } from './interface/http/routes.js';
 
 export interface RuntimeModuleDependencies {
   readonly dataRoot: string;
+  readonly generationActivity: GenerationActivity;
   readonly httpFetch: HttpFetch;
+  readonly launchContext: LaunchContextSource;
   readonly logger: LogPort;
   readonly modelScanner: ModelScanner;
   readonly projectRoot: string;
@@ -33,6 +37,7 @@ export interface RuntimeModule {
 export function createRuntimeModule({ settingsDocument, ...rest }: RuntimeModuleDependencies): RuntimeModule {
   const dependencies: RuntimeRoutesDependencies = {
     ...rest,
+    lifecycle: createSerialQueue(),
     runtimeConfig: new RuntimeConfigRepository({ document: settingsDocument, runtimeProcess: rest.runtimeProcess }),
   };
 

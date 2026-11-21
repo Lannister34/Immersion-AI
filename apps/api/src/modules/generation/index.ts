@@ -21,6 +21,7 @@ export {
   type GenerationModule,
   type GenerationModuleDependencies,
 } from './generation-module.js';
+export { InFlightChatCompletionClient } from './infrastructure/in-flight-chat-completion-client.js';
 export { InMemoryGenerationJobRegistry } from './infrastructure/in-memory-generation-job-registry.js';
 export { createChatCompletionClient } from './infrastructure/provider-clients/create-chat-completion-client.js';
 export { ProviderTokenCounter, type TokenizeTarget } from './infrastructure/provider-clients/token-counter.js';

@@ -22,20 +22,17 @@ function formatReplyLimit(limit: ContextStats['replyLimit']): string {
   return limit === 'unlimited' ? 'без лимита' : formatNumber(limit);
 }
 
-interface RuntimeLimitBadgeProps {
-  stats: ContextStats;
+interface PendingContextBadgeProps {
+  pendingContextSize: number;
+  runningContextSize: number;
 }
 
-function RuntimeLimitBadge({ stats }: RuntimeLimitBadgeProps) {
-  const requested =
-    stats.presetContextWindow > 0
-      ? `предустановка просит ${formatNumber(stats.presetContextWindow)}`
-      : 'окно не ограничено';
-  const hint = `Встроенный сервер запущен с контекстом ${formatNumber(stats.contextWindow)} токенов, а ${requested}. Промпт обрезается по окну сервера. Увеличьте контекст в «API / Сервер → Параметры» и перезапустите модель.`;
+function PendingContextBadge({ pendingContextSize, runningContextSize }: PendingContextBadgeProps) {
+  const hint = `Модель работает с контекстом ${formatNumber(runningContextSize)}, а в настройках чата ${formatNumber(pendingContextSize)}. Пока изменение не применено, промпт считается по окну ${formatNumber(runningContextSize)}. Нажмите «Применить» во вкладке «Модель», чтобы перезапустить модель с новым контекстом.`;
 
   return (
     <span className="pill pill--warn mt-4" title={hint}>
-      окно ограничено сервером
+      контекст {formatNumber(pendingContextSize)} не применён
     </span>
   );
 }
@@ -98,9 +95,12 @@ export function ContextMeter({ stats }: ContextMeterProps) {
     [
       'окно контекста',
       stats.contextWindow > 0
-        ? `${formatNumber(stats.contextWindow)}${stats.limitedByRuntime ? ' (сервер)' : ''}`
+        ? `${formatNumber(stats.contextWindow)}${stats.windowFromRuntime ? ' (работает)' : ''}`
         : 'не ограничено',
     ],
+    ...(stats.pendingContextSize !== null
+      ? [['ждёт применения', formatNumber(stats.pendingContextSize)] satisfies [string, string]]
+      : []),
     ['лимит ответа', formatReplyLimit(stats.replyLimit)],
     ['место под ответ', formatNumber(stats.replyReservation)],
     ['предустановка', stats.presetName ?? '—'],
@@ -135,7 +135,12 @@ export function ContextMeter({ stats }: ContextMeterProps) {
           </span>
           {stats.onlyLastMessageFits ? <OnlyLastMessageBadge /> : null}
           {stats.promptExceedsBudget ? <PromptExceedsBudgetBadge /> : null}
-          {stats.limitedByRuntime ? <RuntimeLimitBadge stats={stats} /> : null}
+          {stats.pendingContextSize !== null ? (
+            <PendingContextBadge
+              pendingContextSize={stats.pendingContextSize}
+              runningContextSize={stats.contextWindow}
+            />
+          ) : null}
         </span>
         <ChevronDownIcon className="chevron" size={12} />
       </button>

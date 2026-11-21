@@ -82,12 +82,12 @@ describe('resolveChatReplyGenerationPlan', () => {
       { settings: { getSettingsOverview: () => settings } },
     );
 
-    expect(clamped.contextWindow).toEqual({ size: 8192, source: 'runtime' });
+    expect(clamped.contextWindow).toEqual({ pendingSize: 32_256, size: 8192, source: 'runtime' });
     expect(clamped.prompt.diagnostics.tokenEstimate.promptBudget).toBe(8192 - 512);
     expect(clamped.prompt.diagnostics.tokenEstimate.finalTotal).toBeLessThanOrEqual(8192 - 512);
     expect(clamped.prompt.diagnostics.trimmedMessageCount).toBeGreaterThan(0);
     expect(clamped.effectiveSettings.sampling.maxContextLength).toBe(32_256);
-    expect(unclamped.contextWindow).toEqual({ size: 32_256, source: 'preset' });
+    expect(unclamped.contextWindow).toEqual({ pendingSize: null, size: 32_256, source: 'preset' });
     expect(unclamped.prompt.diagnostics.trimmedMessageCount).toBe(0);
   });
 });

@@ -1,7 +1,8 @@
 import { replyLimitExceedsContext } from './reply-limit-exceeds-context.js';
 import type { ReplyTokenLimit } from './reply-token-limit.js';
 
-export const UNLIMITED_REPLY_RESERVATION = 1024;
+export const MINIMUM_UNLIMITED_REPLY_ROOM = 2048;
+export const UNLIMITED_REPLY_ROOM_SHARE = 8;
 
 export interface PromptBudgetSettings {
   maxContextLength: number;
@@ -15,15 +16,25 @@ export type PromptBudget =
   | { contextWindow: number; kind: 'bounded'; promptBudget: number; replyReservation: number };
 
 export function resolveContextWindowSize(maxContextLength: number, serverContextSize: number | null): number {
-  if (
-    serverContextSize !== null &&
-    serverContextSize > 0 &&
-    (maxContextLength <= 0 || serverContextSize < maxContextLength)
-  ) {
+  if (serverContextSize !== null && serverContextSize > 0) {
     return serverContextSize;
   }
 
   return Math.max(0, maxContextLength);
+}
+
+export function resolvePendingContextSize(maxContextLength: number, serverContextSize: number | null): number | null {
+  if (serverContextSize === null || serverContextSize <= 0 || maxContextLength <= 0) {
+    return null;
+  }
+
+  return maxContextLength === serverContextSize ? null : maxContextLength;
+}
+
+export function unlimitedReplyRoom(contextWindow: number): number {
+  const room = Math.max(MINIMUM_UNLIMITED_REPLY_ROOM, Math.ceil(contextWindow / UNLIMITED_REPLY_ROOM_SHARE));
+
+  return Math.min(room, Math.floor(contextWindow / 2));
 }
 
 export function computePromptBudget(settings: PromptBudgetSettings): PromptBudget {
@@ -33,23 +44,20 @@ export function computePromptBudget(settings: PromptBudgetSettings): PromptBudge
     return { kind: 'unbounded' };
   }
 
-  if (settings.maxTokens !== 'unlimited') {
-    if (replyLimitExceedsContext({ maxContextLength: contextWindow, maxTokens: settings.maxTokens })) {
-      return { contextWindow, kind: 'reply-exceeds-context', maxTokens: settings.maxTokens };
-    }
+  if (settings.maxTokens === 'unlimited') {
+    const replyReservation = unlimitedReplyRoom(contextWindow);
 
-    return {
-      contextWindow,
-      kind: 'bounded',
-      promptBudget: contextWindow - settings.maxTokens,
-      replyReservation: settings.maxTokens,
-    };
+    return { contextWindow, kind: 'bounded', promptBudget: contextWindow - replyReservation, replyReservation };
   }
 
-  const realWindow =
-    settings.serverContextSize !== null && settings.serverContextSize > 0 ? settings.serverContextSize : contextWindow;
-  const minimumReplyRoom = Math.min(UNLIMITED_REPLY_RESERVATION, Math.floor(realWindow / 2));
-  const promptBudget = Math.min(contextWindow, realWindow - minimumReplyRoom);
+  if (replyLimitExceedsContext({ maxContextLength: contextWindow, maxTokens: settings.maxTokens })) {
+    return { contextWindow, kind: 'reply-exceeds-context', maxTokens: settings.maxTokens };
+  }
 
-  return { contextWindow, kind: 'bounded', promptBudget, replyReservation: realWindow - promptBudget };
+  return {
+    contextWindow,
+    kind: 'bounded',
+    promptBudget: contextWindow - settings.maxTokens,
+    replyReservation: settings.maxTokens,
+  };
 }

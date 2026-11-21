@@ -13,7 +13,10 @@ export async function updateRuntimeConfig(
   command: RuntimeConfigCommand,
   dependencies: UpdateRuntimeConfigDependencies,
 ): Promise<RuntimeOverviewResponse> {
-  const patch = command.modelsDirs ? { ...command, modelsDirs: [...new Set(command.modelsDirs)] } : command;
+  const { contextSize: _contextSizeComesFromThePreset, ...launchSettings } = command;
+  const patch = launchSettings.modelsDirs
+    ? { ...launchSettings, modelsDirs: [...new Set(launchSettings.modelsDirs)] }
+    : launchSettings;
 
   await dependencies.runtimeConfig.merge(patch);
   dependencies.modelScanner.invalidate();

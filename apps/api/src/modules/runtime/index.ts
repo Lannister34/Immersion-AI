@@ -7,6 +7,7 @@ export {
 export type { ModelScanner } from './application/model-scanner.js';
 export { RuntimeConfigRepository } from './application/runtime-config-repository.js';
 export { RuntimeBinaryMissingError } from './application/runtime-errors.js';
+export type { GenerationActivity, LaunchContextSource } from './application/runtime-ports.js';
 export type { RuntimeProcess, RuntimeStartConfig } from './application/runtime-process.js';
 export { LlmProcessManager } from './infrastructure/llm-process-manager.js';
 export { ModelDirectoryScanner } from './infrastructure/model-directory-scanner.js';
