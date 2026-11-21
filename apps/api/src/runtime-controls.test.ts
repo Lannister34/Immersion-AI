@@ -71,7 +71,7 @@ describe('runtime control routes', () => {
     expect(logs.status).toBe('idle');
   });
 
-  it('updates runtime config without overwriting unrelated user settings', async () => {
+  it('updates runtime config without overwriting unrelated user settings, and accepts but never stores a contextSize, which now comes from the preset', async () => {
     const { app, settings } = api();
     await settings.write({
       userName: 'Misha',
@@ -105,12 +105,12 @@ describe('runtime control routes', () => {
     expect(overview.serverConfig).toMatchObject({
       port: 5010,
       gpuLayers: 42,
-      contextSize: 16384,
+      contextSize: 8192,
       flashAttention: true,
       threads: 8,
     });
     expect(stored.userName).toBe('Misha');
-    expect(stored.llmServerConfig).toMatchObject(command);
+    expect(stored.llmServerConfig).toMatchObject({ ...command, contextSize: 8192 });
   });
 
   it('merges a partial runtime config into the stored one, so the launch and directory forms never undo each other', async () => {
@@ -142,7 +142,7 @@ describe('runtime control routes', () => {
       modelsDirs: ['Модели'],
       port: 5001,
       gpuLayers: 40,
-      contextSize: 32_256,
+      contextSize: 8192,
       flashAttention: false,
       threads: 0,
     });

@@ -44,7 +44,7 @@ export function buildChatReplyPromptPreview(fixture: ChatReplyPromptPreviewFixtu
     chatId: 'nochnaya-gavan',
     diagnostics: {
       budgetStatus: fixture.budgetStatus,
-      contextWindow: fixture.contextWindow ?? { size: fixture.maxContextLength, source: 'preset' },
+      contextWindow: fixture.contextWindow ?? { pendingSize: null, size: fixture.maxContextLength, source: 'preset' },
       messageCount: fixture.transcriptMessageCount + 1,
       promptSource: { kind: 'default-template' },
       renderer: {

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { RuntimeConfigSnapshotSchema } from './overview.js';
+import { RuntimeConfigSnapshotSchema, RuntimeContextSizeSchema } from './overview.js';
 
 export const RuntimeConfigCommandSchema = RuntimeConfigSnapshotSchema.partial();
 export type RuntimeConfigCommand = z.infer<typeof RuntimeConfigCommandSchema>;
@@ -8,10 +8,16 @@ export type RuntimeConfigCommand = z.infer<typeof RuntimeConfigCommandSchema>;
 export const RuntimeStartCommandSchema = RuntimeConfigSnapshotSchema.omit({
   modelsDirs: true,
 }).extend({
+  contextSize: RuntimeConfigSnapshotSchema.shape.contextSize.optional(),
   mmprojPath: z.string().min(1).optional(),
   modelPath: z.string().min(1),
 });
 export type RuntimeStartCommand = z.infer<typeof RuntimeStartCommandSchema>;
+
+export const ApplyRuntimeContextCommandSchema = z.object({
+  contextSize: RuntimeContextSizeSchema,
+});
+export type ApplyRuntimeContextCommand = z.infer<typeof ApplyRuntimeContextCommandSchema>;
 
 export const PickRuntimeDirectoryCommandSchema = z.object({
   initialPath: z.string().max(4096).optional(),

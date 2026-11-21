@@ -146,12 +146,15 @@ PATCH /api/providers/settings   # change only the fields you send
 POST  /api/providers/models     # list a provider's models without saving anything
 GET   /api/runtime/overview     # built-in llama-server: status, models, directories
 POST  /api/runtime/start        # start the built-in server with a model
+POST  /api/runtime/apply-context # restart the running model with another context size
 POST  /api/runtime/stop
 ```
 
-`start` takes `modelPath`, `port`, `gpuLayers`, `contextSize`, `flashAttention`, `threads`
-and an optional `mmprojPath` — the multimodal projector passed to llama-server as
-`--mmproj`, which is what turns a VL model into a model that actually sees images.
+`start` takes `modelPath`, `port`, `gpuLayers`, `flashAttention`, `threads`, an optional
+`contextSize` and an optional `mmprojPath` — the multimodal projector passed to llama-server as
+`--mmproj`, which is what turns a VL model into a model that actually sees images. Without
+`contextSize` the model runs with the context of the sampler preset bound to it, or of the active
+preset.
 
 ```
 curl -X PATCH http://127.0.0.1:4787/api/providers/settings   -H 'Content-Type: application/json'   -d '{"mode":"external","activeProvider":"anthropic","config":{"apiKey":"sk-ant-…","model":"claude-sonnet-4-5"}}'
@@ -332,12 +335,15 @@ PATCH /api/providers/settings   # меняет только присланные
 POST  /api/providers/models     # список моделей провайдера, ничего не сохраняя
 GET   /api/runtime/overview     # встроенный llama-server: статус, модели, каталоги
 POST  /api/runtime/start        # запустить встроенный сервер с моделью
+POST  /api/runtime/apply-context # перезапустить работающую модель с другим контекстом
 POST  /api/runtime/stop
 ```
 
-`start` принимает `modelPath`, `port`, `gpuLayers`, `contextSize`, `flashAttention`,
-`threads` и необязательный `mmprojPath` — мультимодальный проектор, который уходит
-llama-server как `--mmproj`; без него VL-модель запускается текстовой и картинок не видит.
+`start` принимает `modelPath`, `port`, `gpuLayers`, `flashAttention`, `threads`,
+необязательный `contextSize` и необязательный `mmprojPath` — мультимодальный проектор, который
+уходит llama-server как `--mmproj`; без него VL-модель запускается текстовой и картинок не видит.
+Без `contextSize` модель запускается с контекстом предустановки, привязанной к ней, или активной
+предустановки.
 
 ```
 curl -X PATCH http://127.0.0.1:4787/api/providers/settings   -H 'Content-Type: application/json'   -d '{"mode":"external","activeProvider":"anthropic","config":{"apiKey":"sk-ant-…","model":"claude-sonnet-4-5"}}'

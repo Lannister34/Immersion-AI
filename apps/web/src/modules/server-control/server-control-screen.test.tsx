@@ -113,13 +113,13 @@ describe('ServerControlScreen', () => {
   it('saves only the launch parameters, leaving the directories to their own form, and offers to restart the running model', async () => {
     const requests = await openLaunchParams(createOverview('running'));
 
-    fireEvent.change(screen.getByLabelText('Контекст, токенов'), { target: { value: '32256' } });
+    fireEvent.change(screen.getByLabelText('GPU-слои'), { target: { value: '40' } });
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
 
     const restart = await screen.findByRole('button', { name: /Перезапустить/ });
     expect(requests).toEqual([
       {
-        body: { ...SAVED_LAUNCH, contextSize: 32_256 },
+        body: { flashAttention: true, gpuLayers: 40, threads: 0 },
         method: 'PUT',
         url: expect.stringMatching(/\/api\/runtime\/config$/u),
       },
@@ -130,9 +130,9 @@ describe('ServerControlScreen', () => {
     await waitFor(() => expect(requests).toHaveLength(2));
     expect(requests[1]).toEqual({
       body: {
-        contextSize: 32_256,
+        contextSize: 8192,
         flashAttention: true,
-        gpuLayers: 999,
+        gpuLayers: 40,
         modelPath: `models/${ACTIVE_MODEL}`,
         port: 5001,
         threads: 0,
@@ -142,19 +142,26 @@ describe('ServerControlScreen', () => {
     });
   });
 
-  it('shows the context the running model was started with, not the saved one', async () => {
+  it('shows the context the running model was started with and offers no context field, since the preset sets it', async () => {
     await openLaunchParams(createOverview('running', { ...SAVED_LAUNCH, contextSize: 4096 }));
 
     expect(screen.getByText('ctx 4 096')).toBeDefined();
-    expect(screen.getByText(/Модель работает с ctx/)).toBeDefined();
+    expect(screen.queryByLabelText('Контекст, токенов')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Перезапустить/ })).toBeNull();
   });
 
-  it('refuses to save a context size that is not a positive whole number', async () => {
+  it('shows no context while no model runs, instead of a stored server value', async () => {
+    await openLaunchParams(createOverview('idle'));
+
+    expect(screen.getByText('ctx —')).toBeDefined();
+  });
+
+  it('refuses to save GPU layers that are not a whole number', async () => {
     const requests = await openLaunchParams(createOverview('idle'));
 
-    fireEvent.change(screen.getByLabelText('Контекст, токенов'), { target: { value: '0' } });
+    fireEvent.change(screen.getByLabelText('GPU-слои'), { target: { value: 'восемь' } });
 
-    expect(screen.getByText(/Размер контекста/)).toBeDefined();
+    expect(screen.getByText(/GPU-слоёв/)).toBeDefined();
     expect((screen.getByRole('button', { name: 'Сохранить' }) as HTMLButtonElement).disabled).toBe(true);
     expect(requests).toEqual([]);
   });

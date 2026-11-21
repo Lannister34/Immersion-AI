@@ -1,6 +1,10 @@
 import { type CharactersModule, createCharactersModule } from '../modules/characters/index.js';
 import { type ChatsModule, createChatsModule } from '../modules/chats/index.js';
-import { createGenerationModule, type GenerationModule } from '../modules/generation/index.js';
+import {
+  createGenerationModule,
+  type GenerationModule,
+  InFlightChatCompletionClient,
+} from '../modules/generation/index.js';
 import { createLorebooksModule, type LorebooksModule } from '../modules/lorebooks/index.js';
 import { createOpenAiCompatModule, type OpenAiCompatModule } from '../modules/openai-compat/index.js';
 import { createPromptingModule, type PromptingModule } from '../modules/prompting/index.js';
@@ -28,7 +32,6 @@ export interface ApiModules {
 export function createApiModules(dependencies: ApiDependencies): ApiModules {
   const {
     characterStore,
-    chatCompletionClient,
     chatIndex,
     chatRepository,
     clock,
@@ -44,10 +47,17 @@ export function createApiModules(dependencies: ApiDependencies): ApiModules {
     userSettings,
     visionProbe,
   } = dependencies;
+  const trackedCompletions = new InFlightChatCompletionClient(dependencies.chatCompletionClient);
   const settings = createSettingsModule({ userSettings });
   const runtime = createRuntimeModule({
     dataRoot: config.dataRoot,
+    generationActivity: {
+      hasActiveGeneration: () => trackedCompletions.hasInFlightCompletion() || generationJobs.hasActiveJob(),
+    },
     httpFetch,
+    launchContext: {
+      contextSizeForModel: (modelName) => settings.resolveSamplerPresetForModel(modelName).maxContextLength,
+    },
     logger,
     modelScanner,
     projectRoot: config.projectRoot,
@@ -89,7 +99,7 @@ export function createApiModules(dependencies: ApiDependencies): ApiModules {
     prompting,
     chats,
     generation: createGenerationModule({
-      chatCompletionClient,
+      chatCompletionClient: trackedCompletions,
       chats,
       clock,
       generationJobs,
@@ -101,7 +111,7 @@ export function createApiModules(dependencies: ApiDependencies): ApiModules {
       settings,
     }),
     openAiCompat: createOpenAiCompatModule({
-      chatCompletionClient,
+      chatCompletionClient: trackedCompletions,
       clock,
       providers,
       settings,

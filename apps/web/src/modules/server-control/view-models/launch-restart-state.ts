@@ -1,6 +1,6 @@
 import type { RuntimeLaunchConfig, RuntimeOverviewResponse, RuntimeStartCommand } from '@immersion/contracts/runtime';
 
-import { sameLaunchConfig } from './same-launch-config';
+import { sameLaunchFlags } from './launch-flags';
 
 export type LaunchRestartState =
   | { kind: 'none' }
@@ -16,7 +16,7 @@ export function toLaunchRestartState(overview: RuntimeOverviewResponse): LaunchR
 
   const runningConfig = serverStatus.launchConfig;
 
-  if (runningConfig && sameLaunchConfig(runningConfig, serverConfig)) {
+  if (runningConfig && sameLaunchFlags(runningConfig, serverConfig)) {
     return { kind: 'none' };
   }
 
@@ -29,7 +29,7 @@ export function toLaunchRestartState(overview: RuntimeOverviewResponse): LaunchR
   return {
     kind: 'restart',
     command: {
-      contextSize: serverConfig.contextSize,
+      ...(runningConfig ? { contextSize: runningConfig.contextSize } : {}),
       flashAttention: serverConfig.flashAttention,
       gpuLayers: serverConfig.gpuLayers,
       modelPath: runningModel.path,

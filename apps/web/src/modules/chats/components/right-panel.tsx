@@ -5,6 +5,8 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { ChatRightPanelTab } from '../../../app/store/ui-shell';
 import { XIcon } from '../../../shared/ui/icons';
 import { useAutoSavedGenerationSettings } from '../mutations/use-auto-saved-generation-settings';
+import { isContextDraftSaved } from '../view-models/context-draft-saved';
+import type { PendingRuntimeContext } from '../view-models/pending-runtime-context';
 import type { InheritedSampling } from '../view-models/sampling-overrides';
 import { ContextTab } from './context-tab';
 import { MarkDot } from './mark-dot';
@@ -23,6 +25,7 @@ export interface RightPanelProps {
   onClose: () => void;
   onResizeStart: (event: ReactPointerEvent<HTMLElement>) => void;
   onTabChange: (tab: ChatRightPanelTab) => void;
+  pendingRuntimeContext?: PendingRuntimeContext | null;
   scenarioName: string | null;
   settingsOverview?: SettingsOverviewResponse | undefined;
   tab: ChatRightPanelTab;
@@ -46,6 +49,7 @@ export function RightPanel({
   onClose,
   onResizeStart,
   onTabChange,
+  pendingRuntimeContext = null,
   scenarioName,
   settingsOverview,
   tab,
@@ -92,7 +96,9 @@ export function RightPanel({
           <ModelTab
             effectiveSampling={effectiveSampling}
             form={form}
+            isContextDraftSaved={isContextDraftSaved(form.draft, generationSettings)}
             modelBindingPresetId={modelBindingPresetId}
+            pendingRuntimeContext={pendingRuntimeContext}
             settings={settingsOverview}
           />
         ) : (

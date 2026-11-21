@@ -1,5 +1,7 @@
 import { type RuntimeConfigSnapshot, RuntimeConfigSnapshotSchema } from '@immersion/contracts/runtime';
 
+export const DEFAULT_RUNTIME_CONTEXT_SIZE = 8192;
+
 export interface RuntimeConfigDefaults {
   readonly modelsDir: string;
   readonly port: number;
@@ -18,7 +20,7 @@ export function normalizeRuntimeConfig(raw: unknown, defaults: RuntimeConfigDefa
     modelsDirs,
     port: typeof configSource.port === 'number' ? configSource.port : defaults.port,
     gpuLayers: typeof configSource.gpuLayers === 'number' ? configSource.gpuLayers : 0,
-    contextSize: typeof configSource.contextSize === 'number' ? configSource.contextSize : 8192,
+    contextSize: typeof configSource.contextSize === 'number' ? configSource.contextSize : DEFAULT_RUNTIME_CONTEXT_SIZE,
     flashAttention: typeof configSource.flashAttention === 'boolean' ? configSource.flashAttention : false,
     threads: typeof configSource.threads === 'number' ? configSource.threads : 0,
   });

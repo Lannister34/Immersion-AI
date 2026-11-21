@@ -45,6 +45,7 @@ export class FakeRuntimeProcess implements RuntimeProcess {
   private readonly logs: string[] = [];
   private nextPid = FIRST_SYNTHETIC_PID;
   private nextOutcome: FakeStartOutcome = 'running';
+  private readonly settleWaiters: Array<(state: RuntimeStatusSnapshot) => void> = [];
   private state: RuntimeStatusSnapshot;
   private visionProjectorPath: string | null = null;
 
@@ -69,6 +70,16 @@ export class FakeRuntimeProcess implements RuntimeProcess {
       pid: this.claimPid(),
       launchConfig,
     };
+    this.releaseSettleWaiters();
+  }
+
+  finishStarting(): void {
+    if (this.state.status !== 'starting') {
+      throw new Error(`A fake llama-server can finish starting only while it starts, not while ${this.state.status}.`);
+    }
+
+    this.state = { ...this.state, status: 'running' };
+    this.releaseSettleWaiters();
   }
 
   crash(exitCode: number): void {
@@ -77,6 +88,7 @@ export class FakeRuntimeProcess implements RuntimeProcess {
     }
 
     this.state = { ...this.state, status: 'error', error: `llama-server завершился с кодом ${exitCode}`, pid: null };
+    this.releaseSettleWaiters();
   }
 
   appendLog(line: string): void {
@@ -135,6 +147,23 @@ export class FakeRuntimeProcess implements RuntimeProcess {
     this.stops += 1;
     this.visionProjectorPath = null;
     this.state = idleState(this.state.port);
+    this.releaseSettleWaiters();
+  }
+
+  waitUntilSettled(): Promise<RuntimeStatusSnapshot> {
+    if (this.disposed || (this.state.status !== 'starting' && this.state.status !== 'stopping')) {
+      return Promise.resolve(this.getState());
+    }
+
+    return new Promise((resolve) => {
+      this.settleWaiters.push(resolve);
+    });
+  }
+
+  private releaseSettleWaiters(): void {
+    for (const resolve of this.settleWaiters.splice(0)) {
+      resolve(this.getState());
+    }
   }
 
   async reconnect(): Promise<void> {
@@ -143,6 +172,7 @@ export class FakeRuntimeProcess implements RuntimeProcess {
 
   dispose(): void {
     this.disposed = true;
+    this.releaseSettleWaiters();
   }
 
   private claimPid(): number {

@@ -50,6 +50,10 @@ function readLogFileTail(logFilePath: string): string[] {
 
 type RuntimeLifecycleStatus = RuntimeStatusSnapshot['status'];
 
+function isSettledStatus(status: RuntimeLifecycleStatus): boolean {
+  return status !== 'starting' && status !== 'stopping';
+}
+
 interface PidFileData {
   pid: number;
   port: number;
@@ -197,6 +201,7 @@ export class LlmProcessManager implements RuntimeProcess {
   private startTimeout: ReturnType<typeof setTimeout> | null = null;
   private logStream: fs.WriteStream | null = null;
   private readonly logBuffer: string[] = [];
+  private readonly settleWaiters: Array<(state: RuntimeStatusSnapshot) => void> = [];
   private readonly state: RuntimeStatusSnapshot = {
     status: 'idle',
     model: null,
@@ -434,10 +439,23 @@ export class LlmProcessManager implements RuntimeProcess {
     this.startHealthPoll(pidFile.port);
   }
 
+  waitUntilSettled(): Promise<RuntimeStatusSnapshot> {
+    const state = this.getState();
+
+    if (isSettledStatus(state.status) || this.disposed) {
+      return Promise.resolve(state);
+    }
+
+    return new Promise((resolve) => {
+      this.settleWaiters.push(resolve);
+    });
+  }
+
   dispose(): void {
     this.disposed = true;
     this.cleanupTimers();
     this.closeLogFile();
+    this.releaseSettleWaiters();
   }
 
   private savePidFile(data: PidFileData) {
@@ -472,6 +490,23 @@ export class LlmProcessManager implements RuntimeProcess {
 
   private setStateStatus(status: RuntimeLifecycleStatus, overrides: Partial<RuntimeStatusSnapshot> = {}) {
     Object.assign(this.state, overrides, { status });
+
+    if (isSettledStatus(status)) {
+      this.releaseSettleWaiters();
+    }
+  }
+
+  private releaseSettleWaiters() {
+    if (this.settleWaiters.length === 0) {
+      return;
+    }
+
+    const waiters = this.settleWaiters.splice(0);
+    const state = this.getState();
+
+    for (const resolve of waiters) {
+      resolve(state);
+    }
   }
 
   private pushLog(line: string) {

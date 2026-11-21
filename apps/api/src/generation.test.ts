@@ -1600,7 +1600,7 @@ describe('generation routes', () => {
       .join('\n');
 
     expect(preview.provider.contextSize).toBe(74);
-    expect(preview.diagnostics.contextWindow).toEqual({ size: 74, source: 'runtime' });
+    expect(preview.diagnostics.contextWindow).toEqual({ pendingSize: 32_256, size: 74, source: 'runtime' });
     expect(preview.effectiveSettings.sampling.maxContextLength).toBe(32_256);
     expect(preview.diagnostics.trimmedMessageCount).toBeGreaterThan(0);
     expect(promptText).not.toContain('OLD_CONTEXT');

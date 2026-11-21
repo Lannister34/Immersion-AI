@@ -25,6 +25,7 @@ export interface GenerationJobRegistry {
   createChatReplyJob(input: CreateChatReplyGenerationJobInput): GenerationJobDto;
   fail(jobId: GenerationJobId, error: unknown): GenerationJobDto | null;
   get(jobId: GenerationJobId): GenerationJobDto | null;
+  hasActiveJob(): boolean;
   list(input?: { chatId?: string }): GenerationJobDto[];
   runChatReplyJob(
     jobId: GenerationJobId,

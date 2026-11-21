@@ -38,6 +38,7 @@ import { toContextStats } from '../view-models/context-stats';
 import { deriveMessageActions } from '../view-models/message-actions';
 import { DEFAULT_MESSAGE_FORMATTING } from '../view-models/message-content';
 import type { MessageEditTarget } from '../view-models/message-edit-target';
+import { toPendingRuntimeContext } from '../view-models/pending-runtime-context';
 import { BubbleMessage } from './bubble-message';
 import { ChatHeader } from './chat-header';
 import { Composer } from './composer';
@@ -555,6 +556,11 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
           onClose={closePanel}
           onResizeStart={startPanelResize}
           onTabChange={setPanelTab}
+          pendingRuntimeContext={toPendingRuntimeContext(
+            promptPreviewQuery.data?.diagnostics.contextWindow,
+            isStreaming,
+            promptPreviewQuery.isFetching,
+          )}
           scenarioName={session.scenarioName}
           settingsOverview={settingsOverviewQuery.data}
           tab={panelTab}

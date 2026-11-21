@@ -12,6 +12,7 @@ export interface RuntimeProcess {
   getLogs(): string[];
   start(config: RuntimeStartConfig): Promise<void>;
   stop(): Promise<void>;
+  waitUntilSettled(): Promise<RuntimeStatusSnapshot>;
   reconnect(): Promise<void>;
   dispose(): void;
 }
