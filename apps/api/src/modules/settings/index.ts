@@ -1,6 +1,7 @@
 export const settingsModuleId = 'settings' as const;
 
 export { ReplyLimitExceedsContextError } from './application/reply-limit-exceeds-context-error.js';
+export { readStoredReplyTokenLimit } from './application/stored-reply-token-limit.js';
 export type {
   UserSettingsDocument,
   UserSettingsMutator,

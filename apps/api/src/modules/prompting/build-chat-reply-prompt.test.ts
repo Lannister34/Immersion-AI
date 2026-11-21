@@ -103,6 +103,7 @@ describe('buildChatReplyPrompt', () => {
           {
             attachments: [],
             reasoning: null,
+            stoppedAtTokenLimit: false,
             content: 'Hello.',
             createdAt: '2026-01-01T00:00:00.000Z',
             id: 'm1',
@@ -135,6 +136,7 @@ describe('buildChatReplyPrompt', () => {
             createdAt: '2026-01-01T00:00:00.000Z',
             id: 'm1',
             reasoning: null,
+            stoppedAtTokenLimit: false,
             role: 'user',
           },
         ],
@@ -164,6 +166,7 @@ describe('buildChatReplyPrompt', () => {
             createdAt: '2026-01-01T00:00:00.000Z',
             id: 'm1',
             reasoning: null,
+            stoppedAtTokenLimit: false,
             role: 'user',
           },
         ],
@@ -189,6 +192,7 @@ describe('buildChatReplyPrompt', () => {
         {
           attachments: [],
           reasoning: null,
+          stoppedAtTokenLimit: false,
           content: 'Привет.',
           createdAt: '2026-01-01T00:00:00.000Z',
           id: 'm1',
@@ -224,6 +228,7 @@ describe('buildChatReplyPrompt', () => {
           createdAt: '2026-01-01T00:00:00.000Z',
           id: 'm1',
           reasoning: null,
+          stoppedAtTokenLimit: false,
           role: 'user',
         },
         {
@@ -232,6 +237,7 @@ describe('buildChatReplyPrompt', () => {
           createdAt: '2026-01-01T00:00:01.000Z',
           id: 'm2',
           reasoning: 'Прикину тон ответа.',
+          stoppedAtTokenLimit: false,
           role: 'assistant',
         },
         {
@@ -240,6 +246,7 @@ describe('buildChatReplyPrompt', () => {
           createdAt: '2026-01-01T00:00:02.000Z',
           id: 'm3',
           reasoning: null,
+          stoppedAtTokenLimit: false,
           role: 'user',
         },
       ]),
@@ -261,6 +268,7 @@ describe('buildChatReplyPrompt', () => {
           createdAt: '2026-01-01T00:00:00.000Z',
           id: 'm1',
           reasoning: null,
+          stoppedAtTokenLimit: false,
           role: 'user',
         },
         {
@@ -269,6 +277,7 @@ describe('buildChatReplyPrompt', () => {
           createdAt: '2026-01-01T00:00:01.000Z',
           id: 'm2',
           reasoning: null,
+          stoppedAtTokenLimit: false,
           role: 'user',
         },
         {
@@ -277,6 +286,7 @@ describe('buildChatReplyPrompt', () => {
           createdAt: '2026-01-01T00:00:02.000Z',
           id: 'm3',
           reasoning: null,
+          stoppedAtTokenLimit: false,
           role: 'assistant',
         },
       ]),
@@ -301,6 +311,7 @@ describe('buildChatReplyPrompt', () => {
         {
           attachments: [],
           reasoning: null,
+          stoppedAtTokenLimit: false,
           content: 'old message that should be trimmed',
           createdAt: '2026-01-01T00:00:00.000Z',
           id: 'm1',
@@ -309,6 +320,7 @@ describe('buildChatReplyPrompt', () => {
         {
           attachments: [],
           reasoning: null,
+          stoppedAtTokenLimit: false,
           content: 'latest message stays even if it is large',
           createdAt: '2026-01-01T00:00:01.000Z',
           id: 'm2',
@@ -334,6 +346,7 @@ describe('buildChatReplyPrompt', () => {
         {
           attachments: [],
           reasoning: null,
+          stoppedAtTokenLimit: false,
           content: 'FIRST edge',
           createdAt: '2026-01-01T00:00:00.000Z',
           id: 'm1',
@@ -342,6 +355,7 @@ describe('buildChatReplyPrompt', () => {
         {
           attachments: [],
           reasoning: null,
+          stoppedAtTokenLimit: false,
           content: 'MIDDLE '.repeat(20),
           createdAt: '2026-01-01T00:00:01.000Z',
           id: 'm2',
@@ -350,6 +364,7 @@ describe('buildChatReplyPrompt', () => {
         {
           attachments: [],
           reasoning: null,
+          stoppedAtTokenLimit: false,
           content: 'LATEST edge',
           createdAt: '2026-01-01T00:00:02.000Z',
           id: 'm3',
@@ -377,6 +392,7 @@ describe('buildChatReplyPrompt', () => {
         {
           attachments: [],
           reasoning: null,
+          stoppedAtTokenLimit: false,
           content: 'old '.repeat(80),
           createdAt: '2026-01-01T00:00:00.000Z',
           id: 'm1',
@@ -385,6 +401,7 @@ describe('buildChatReplyPrompt', () => {
         {
           attachments: [],
           reasoning: null,
+          stoppedAtTokenLimit: false,
           content: 'latest message stays',
           createdAt: '2026-01-01T00:00:01.000Z',
           id: 'm2',
@@ -426,6 +443,7 @@ describe('buildChatReplyPromptBundle character data', () => {
     createdAt: '2026-01-01T00:00:00.000Z',
     id: 'm1',
     reasoning: null,
+    stoppedAtTokenLimit: false,
     role: 'user',
   };
 

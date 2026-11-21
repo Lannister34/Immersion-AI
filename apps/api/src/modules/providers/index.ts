@@ -4,6 +4,7 @@ export {
   GenerationProviderUnavailableError,
   normalizeGenerationProviderBaseUrl,
   resolveAnthropicMessagesUrl,
+  resolveAnthropicModelUrl,
 } from './application/generation-provider.js';
 export { getProviderSettings } from './application/get-provider-settings.js';
 export { ProviderSettingsRepository } from './application/provider-settings-repository.js';

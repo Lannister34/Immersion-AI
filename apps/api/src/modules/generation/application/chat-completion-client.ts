@@ -24,7 +24,7 @@ export interface ChatCompletionSamplingOptions {
 export interface ChatCompletionRequest {
   allowEmptyContent?: boolean | undefined;
   endpoint: ChatCompletionEndpoint;
-  maxTokens: number;
+  maxTokens: number | null;
   messages: ChatReplyPromptMessage[];
   onDelta?: ((delta: string, channel: ReplyChannel) => void) | undefined;
   requireCompleteReply?: boolean | undefined;
@@ -36,6 +36,7 @@ export interface ChatCompletionRequest {
 export interface ChatCompletionResponse {
   content: string;
   reasoning: string;
+  stoppedAtTokenLimit: boolean;
 }
 
 export interface ChatCompletionClient {

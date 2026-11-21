@@ -13,6 +13,7 @@ import {
   NoAssistantMessageToRegenerateError,
   NothingToAnswerError,
   NothingToContinueError,
+  PromptExceedsContextError,
   ProviderGenerationError,
 } from '../../application/generation-errors.js';
 import { ActiveGenerationJobExistsError } from '../../application/generation-job-registry.js';
@@ -55,6 +56,7 @@ export const generationProblems: ProblemTable = createProblemTable(
       session: error.session,
     }),
   ),
+  problemFor(PromptExceedsContextError, (error) => problem(409, 'prompt_exceeds_context', error.message)),
   problemFor(ProviderGenerationError, (error) => problem(502, 'provider_generation_failed', error.message)),
   problemFor(GenerationJobNotFoundError, () => problem(404, 'generation_job_not_found', 'Generation job not found.')),
 );

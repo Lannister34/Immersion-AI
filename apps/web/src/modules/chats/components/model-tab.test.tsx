@@ -89,4 +89,31 @@ describe('ModelTab', () => {
 
     expect(form.setSampling).toHaveBeenCalledWith('maxTokens', '496');
   });
+
+  it('overrides the reply limit with no limit and shows what stays for the history', async () => {
+    const form = createForm();
+    await renderModelTab(form);
+
+    expect((document.body.textContent ?? '').replace(/\u00a0/gu, ' ')).toContain(
+      'На историю остаётся 7 680 из 8 192 токенов',
+    );
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Без лимита' }));
+
+    expect(form.setSampling).toHaveBeenCalledWith('maxTokens', 'unlimited', { immediate: true });
+  });
+
+  it('shows an overridden no limit as checked with an empty field, and unchecking returns to the preset', async () => {
+    const form = createForm();
+    form.draft.sampling.maxTokens = 'unlimited';
+    await renderModelTab(form);
+    const checkbox = screen.getByRole('checkbox', { name: 'Без лимита' }) as HTMLInputElement;
+
+    expect(checkbox.checked).toBe(true);
+    expect((document.getElementById('chat-sampling-maxTokens') as HTMLInputElement).value).toBe('');
+
+    fireEvent.click(checkbox);
+
+    expect(form.setSampling).toHaveBeenCalledWith('maxTokens', '', { immediate: true });
+  });
 });

@@ -57,6 +57,10 @@ export function resolveAnthropicMessagesUrl(endpoint: GenerationProviderEndpoint
   return resolveVersionedUrl(endpoint.baseUrl, 'messages');
 }
 
+export function resolveAnthropicModelUrl(endpoint: GenerationProviderEndpoint): string {
+  return resolveVersionedUrl(endpoint.baseUrl, `models/${encodeURIComponent(endpoint.model)}`);
+}
+
 export interface ResolveGenerationProviderEndpointDependencies extends GetProviderSettingsDependencies {
   readonly runtimeEndpoint: RuntimeEndpointPort;
 }

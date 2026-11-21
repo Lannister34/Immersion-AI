@@ -1,3 +1,5 @@
+import type { ReplyTokenLimit } from '@immersion/contracts/common';
+
 export type ChatMessageRoleRecord = 'assistant' | 'system' | 'user';
 
 export type ChatAttachmentMimeTypeRecord = 'image/jpeg' | 'image/png' | 'image/webp';
@@ -14,6 +16,7 @@ export interface ChatMessageRecord {
   id: string;
   reasoning: string | null;
   role: ChatMessageRoleRecord;
+  stoppedAtTokenLimit: boolean;
 }
 
 export interface ChatSummaryRecord {
@@ -62,6 +65,7 @@ export interface AppendChatMessageInput {
   createdAt: string;
   reasoning?: string | null;
   role: ChatMessageRoleRecord;
+  stoppedAtTokenLimit?: boolean;
 }
 
 export type ChatContextTrimStrategyRecord = 'trim_middle' | 'trim_start';
@@ -69,7 +73,7 @@ export type ChatContextTrimStrategyRecord = 'trim_middle' | 'trim_start';
 export interface ChatSamplingOverridesRecord {
   contextTrimStrategy: ChatContextTrimStrategyRecord | null;
   maxContextLength: number | null;
-  maxTokens: number | null;
+  maxTokens: ReplyTokenLimit | null;
   minP: number | null;
   presencePenalty: number | null;
   repeatPenalty: number | null;

@@ -11,8 +11,15 @@ export interface ContextMeterProps {
 const ONLY_LAST_MESSAGE_HINT =
   'Лимит ответа не меньше окна контекста: история переписки не помещается в промпт. Уменьшите лимит ответа или увеличьте окно контекста.';
 
+const PROMPT_EXCEEDS_BUDGET_HINT =
+  'Системный промпт и последнее сообщение не помещаются в бюджет промпта. С заданным лимитом ответа генерация будет отклонена: уменьшите лимит ответа или системный промпт, выберите «Без лимита» или увеличьте окно контекста.';
+
 function formatNumber(value: number): string {
   return value.toLocaleString('ru-RU');
+}
+
+function formatReplyLimit(limit: ContextStats['replyLimit']): string {
+  return limit === 'unlimited' ? 'без лимита' : formatNumber(limit);
 }
 
 interface RuntimeLimitBadgeProps {
@@ -29,6 +36,14 @@ function RuntimeLimitBadge({ stats }: RuntimeLimitBadgeProps) {
   return (
     <span className="pill pill--warn mt-4" title={hint}>
       окно ограничено сервером
+    </span>
+  );
+}
+
+function PromptExceedsBudgetBadge() {
+  return (
+    <span className="pill pill--warn mt-4" title={PROMPT_EXCEEDS_BUDGET_HINT}>
+      промпт не помещается
     </span>
   );
 }
@@ -80,8 +95,14 @@ export function ContextMeter({ stats }: ContextMeterProps) {
     ['обрезано сообщений', formatNumber(stats.trimmedMessageCount)],
   ];
   const tailRows: [string, string][] = [
-    ['окно контекста', `${formatNumber(stats.contextWindow)}${stats.limitedByRuntime ? ' (сервер)' : ''}`],
-    ['лимит ответа', formatNumber(stats.replyLimit)],
+    [
+      'окно контекста',
+      stats.contextWindow > 0
+        ? `${formatNumber(stats.contextWindow)}${stats.limitedByRuntime ? ' (сервер)' : ''}`
+        : 'не ограничено',
+    ],
+    ['лимит ответа', formatReplyLimit(stats.replyLimit)],
+    ['место под ответ', formatNumber(stats.replyReservation)],
     ['предустановка', stats.presetName ?? '—'],
     ['подсчёт', isApproximate ? 'приблизительный' : 'точный'],
   ];
@@ -105,12 +126,15 @@ export function ContextMeter({ stats }: ContextMeterProps) {
           <span className="tokenbar__track" style={{ display: 'block', marginTop: 4 }}>
             <span
               className={
-                ratio >= 0.8 || stats.onlyLastMessageFits ? 'tokenbar__fill tokenbar__fill--warn' : 'tokenbar__fill'
+                ratio >= 0.8 || stats.onlyLastMessageFits || stats.promptExceedsBudget
+                  ? 'tokenbar__fill tokenbar__fill--warn'
+                  : 'tokenbar__fill'
               }
               style={{ display: 'block', width: `${percent}%` }}
             />
           </span>
           {stats.onlyLastMessageFits ? <OnlyLastMessageBadge /> : null}
+          {stats.promptExceedsBudget ? <PromptExceedsBudgetBadge /> : null}
           {stats.limitedByRuntime ? <RuntimeLimitBadge stats={stats} /> : null}
         </span>
         <ChevronDownIcon className="chevron" size={12} />

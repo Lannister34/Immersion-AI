@@ -18,6 +18,7 @@ export function appendOptimisticUserMessage(
     role: 'user',
     content: input.content,
     createdAt: input.createdAt,
+    stoppedAtTokenLimit: false,
   };
 
   return {

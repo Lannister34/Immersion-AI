@@ -61,7 +61,7 @@ export const SAMPLER_PARAMETER_FIELDS: readonly SamplerParameterField[] = [
     stepCeiling: 2,
   },
   {
-    hint: 'Предел длины одного ответа, в токенах',
+    hint: 'Предел длины одного ответа, в токенах; без лимита модель пишет, пока не остановится',
     key: 'maxTokens',
     label: 'Max Length',
     step: 16,

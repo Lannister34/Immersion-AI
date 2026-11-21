@@ -1,7 +1,7 @@
 import { splitReply } from '@immersion/domain/generation';
-
+import type { ChatCompletionResponse } from '../../../application/chat-completion-client.js';
 import { ProviderGenerationError } from '../../../application/generation-errors.js';
-import type { ProviderReply, ProviderStreamSink } from '../reply-reader.js';
+import type { ProviderStreamSink } from '../reply-reader.js';
 import {
   type OpenAiChatCompletionReply,
   OpenAiChatCompletionReplySchema,
@@ -52,7 +52,7 @@ export function readOpenAiStreamData(data: string, sink: ProviderStreamSink) {
   }
 }
 
-export async function readOpenAiJsonReply(response: Response): Promise<ProviderReply> {
+export async function readOpenAiJsonReply(response: Response): Promise<ChatCompletionResponse> {
   const responseText = await response.text();
   let payload: OpenAiChatCompletionReply;
 

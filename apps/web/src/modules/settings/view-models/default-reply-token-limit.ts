@@ -1,0 +1,1 @@
+export const DEFAULT_REPLY_TOKEN_LIMIT = 1024;

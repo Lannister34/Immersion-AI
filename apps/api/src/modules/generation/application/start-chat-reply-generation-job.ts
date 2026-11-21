@@ -14,6 +14,7 @@ import {
   completeChatReplyForSession,
   getAnswerableUserMessage,
   getContinuableAssistantMessage,
+  refuseNewChatReplyThatCannotFit,
 } from './chat-reply-generation.js';
 import type { GenerationJobRegistry } from './generation-job-registry.js';
 
@@ -84,6 +85,8 @@ export async function startChatReplyGenerationJob(
       session,
     });
   }
+
+  await refuseNewChatReplyThatCannotFit(command, session, dependencies);
 
   const job = dependencies.generationJobs.createChatReplyJob({
     chatId: command.chatId,

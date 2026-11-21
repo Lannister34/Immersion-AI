@@ -95,7 +95,10 @@ export async function createOpenAiChatCompletion(
   const completion = await dependencies.chatCompletionClient.completeChat({
     allowEmptyContent: true,
     endpoint: { ...providerEndpoint, model },
-    maxTokens: request.max_completion_tokens ?? request.max_tokens ?? preset.maxTokens,
+    maxTokens:
+      request.max_completion_tokens ??
+      request.max_tokens ??
+      (preset.maxTokens === 'unlimited' ? null : preset.maxTokens),
     messages,
     ...(onDelta ? { onDelta: (delta: string, channel: ReplyChannel) => onDelta(delta, channel, model) } : {}),
     sampling: {

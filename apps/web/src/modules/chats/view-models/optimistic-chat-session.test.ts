@@ -51,6 +51,7 @@ const SESSION: ChatSessionDto = {
       createdAt: '2026-10-01T10:01:00.000Z',
       id: 'message-1',
       reasoning: null,
+      stoppedAtTokenLimit: false,
       role: 'user',
     },
     {
@@ -59,6 +60,7 @@ const SESSION: ChatSessionDto = {
       createdAt: '2026-10-01T10:05:00.000Z',
       id: 'message-2',
       reasoning: null,
+      stoppedAtTokenLimit: false,
       role: 'assistant',
     },
   ],
