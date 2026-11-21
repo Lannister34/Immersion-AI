@@ -48,6 +48,7 @@ vi.mock('../../modules/chats', async () => {
       <>
         <p>{`chat session:${chatId}`}</p>
         <input
+          autoComplete="off"
           aria-label={`draft of ${chatId}`}
           onChange={(event) => setDraft(event.currentTarget.value)}
           value={draft}
@@ -72,6 +73,7 @@ const { EditorProbe } = await vi.hoisted(async () => {
       <>
         <p>{label}</p>
         <input
+          autoComplete="off"
           aria-label={`input of ${label}`}
           onChange={(event) => setValue(event.currentTarget.value)}
           value={value}

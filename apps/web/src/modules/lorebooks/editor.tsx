@@ -352,6 +352,7 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
                 <div style={{ flex: 1 }}>
                   <Field id="lorebook-name" label="Название" required>
                     <input
+                      autoComplete="off"
                       className="input"
                       disabled={saveMutation.isPending}
                       id="lorebook-name"
@@ -365,6 +366,7 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
                 <div style={{ flex: 1 }}>
                   <Field id="lorebook-tags" label="Теги" hint="Через запятую.">
                     <input
+                      autoComplete="off"
                       className="input"
                       disabled={saveMutation.isPending}
                       id="lorebook-tags"
@@ -386,6 +388,7 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
               >
                 <div className="row gap-8">
                   <input
+                    autoComplete="off"
                     className="input"
                     disabled={saveMutation.isPending || generateEntriesMutation.isPending}
                     id="lorebook-draft-concept"

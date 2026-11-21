@@ -214,6 +214,7 @@ export function BubbleMessage({
         {isEditing ? (
           <div className={isUser ? 'bubble bubble--user' : 'bubble'} style={{ display: 'grid', gap: 8, padding: 10 }}>
             <textarea
+              autoComplete="off"
               autoFocus
               className="textarea"
               onChange={(event) => setDraft(event.currentTarget.value)}
@@ -333,6 +334,7 @@ export function BubbleMessage({
             {branchDraft !== null ? (
               <>
                 <input
+                  autoComplete="off"
                   autoFocus
                   className="input"
                   onChange={(event) => setBranchDraft(event.currentTarget.value)}

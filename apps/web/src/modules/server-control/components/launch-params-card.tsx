@@ -110,6 +110,7 @@ export function LaunchParamsCard({ overview }: LaunchParamsCardProps) {
             label="Контекст, токенов"
           >
             <input
+              autoComplete="off"
               className="input mono"
               id="launch-context-size"
               inputMode="numeric"
@@ -119,6 +120,7 @@ export function LaunchParamsCard({ overview }: LaunchParamsCardProps) {
           </LaunchField>
           <LaunchField hint="Слоёв модели на видеокарте (-ngl)." htmlFor="launch-gpu-layers" label="GPU-слои">
             <input
+              autoComplete="off"
               className="input mono"
               id="launch-gpu-layers"
               inputMode="numeric"
@@ -128,6 +130,7 @@ export function LaunchParamsCard({ overview }: LaunchParamsCardProps) {
           </LaunchField>
           <LaunchField hint="0 — выбрать автоматически." htmlFor="launch-threads" label="Потоки CPU">
             <input
+              autoComplete="off"
               className="input mono"
               id="launch-threads"
               inputMode="numeric"

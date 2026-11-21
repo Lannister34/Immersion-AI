@@ -124,6 +124,7 @@ export function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalPro
         <div className="field">
           <label htmlFor="provider-type">Провайдер</label>
           <select
+            autoComplete="off"
             className="input"
             id="provider-type"
             onChange={(event) => selectProvider(ProviderTypeSchema.parse(event.currentTarget.value))}
@@ -139,6 +140,7 @@ export function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalPro
         <div className="field">
           <label htmlFor="provider-url">Base URL</label>
           <input
+            autoComplete="off"
             className="input"
             id="provider-url"
             onChange={(event) => {
@@ -161,7 +163,7 @@ export function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalPro
             <label htmlFor="provider-api-key">API-ключ</label>
             <div className="row gap-8">
               <input
-                autoComplete="off"
+                autoComplete="new-password"
                 className="input"
                 disabled={form.clearApiKey}
                 id="provider-api-key"
@@ -193,6 +195,7 @@ export function ExternalProviderForm({ isSaving, onSave, snapshot }: ExternalPro
             <label htmlFor="provider-model">Модель</label>
             <div className="row gap-8">
               <input
+                autoComplete="off"
                 className="input"
                 id="provider-model"
                 list="provider-models"

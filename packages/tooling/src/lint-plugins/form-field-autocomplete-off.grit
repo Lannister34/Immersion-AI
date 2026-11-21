@@ -1,0 +1,25 @@
+language js
+
+or {
+  `<$tag $attrs />`,
+  `<$tag $attrs>$children</$tag>`
+} as $field where {
+  $tag <: or {
+    `input`,
+    `textarea`,
+    `select`
+  },
+  not $attrs <: some or {
+    `type="checkbox"`,
+    `type="radio"`,
+    `type="range"`,
+    `type="file"`,
+    `type="hidden"`
+  },
+  or {
+    $attrs <: some `{...$spread}`,
+    and { $attrs <: some `type="password"`, not $attrs <: some `autoComplete="new-password"` },
+    and { not $attrs <: some `type="password"`, not $attrs <: some `autoComplete="off"` }
+  },
+  register_diagnostic(span=$field, message="Form fields take autoComplete off, and password fields new-password, with no spread props: the browser must not suggest typed values or fill saved passwords.", severity="error")
+}

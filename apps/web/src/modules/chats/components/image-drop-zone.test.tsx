@@ -34,7 +34,7 @@ async function renderZone(props: Partial<ImageDropZoneProps> = {}) {
       {...props}
     >
       <p>Держим курс на маяк.</p>
-      <textarea aria-label="Сообщение" />
+      <textarea autoComplete="off" aria-label="Сообщение" />
     </ImageDropZone>,
   );
   return { onAttachFiles, onNotice, transcript: screen.getByText('Держим курс на маяк.') };

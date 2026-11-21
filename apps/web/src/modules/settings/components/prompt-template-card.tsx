@@ -15,6 +15,7 @@ export function PromptTemplateCard({ disabled, onChange, value }: PromptTemplate
         </span>
       </div>
       <textarea
+        autoComplete="off"
         className="textarea mono"
         disabled={disabled}
         maxLength={20_000}

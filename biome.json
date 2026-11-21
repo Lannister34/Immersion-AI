@@ -18,6 +18,7 @@
       "*.cjs"
     ]
   },
+  "plugins": ["./packages/tooling/src/lint-plugins/form-field-autocomplete-off.grit"],
   "formatter": {
     "enabled": true,
     "indentStyle": "space",

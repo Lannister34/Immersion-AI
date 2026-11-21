@@ -200,6 +200,7 @@ export function ScenariosScreen() {
               <div className="search" style={{ minWidth: 280 }}>
                 <SearchIcon size={13} />
                 <input
+                  autoComplete="off"
                   onChange={(event) => setSearch(event.currentTarget.value)}
                   placeholder="Имя, концепт, тег…"
                   value={search}

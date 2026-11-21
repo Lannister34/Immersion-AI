@@ -40,6 +40,7 @@ export function ContextTab({
           Добавляются к промпту в конце — не заменяют ни персонажа, ни сценарий.
         </span>
         <textarea
+          autoComplete="off"
           className="textarea"
           id="chat-additional-instructions"
           maxLength={20_000}

@@ -470,6 +470,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                   >
                     <div className="row gap-8">
                       <input
+                        autoComplete="off"
                         className="input"
                         disabled={draftMutation.isPending}
                         id="character-draft-concept"
@@ -502,6 +503,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                 </div>
                 <Field id="character-name" label="Имя" required>
                   <input
+                    autoComplete="off"
                     className="input"
                     disabled={saveMutation.isPending}
                     id="character-name"
@@ -518,6 +520,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                   label="Описание"
                 >
                   <textarea
+                    autoComplete="off"
                     className="textarea"
                     disabled={saveMutation.isPending}
                     id="character-description"
@@ -535,6 +538,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                   label="Личность"
                 >
                   <textarea
+                    autoComplete="off"
                     className="textarea"
                     disabled={saveMutation.isPending}
                     id="character-personality"
@@ -563,6 +567,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                 {fieldErrorFor('exampleDialogue')}
                 <Field hint="Через запятую." id="character-tags" label="Теги">
                   <input
+                    autoComplete="off"
                     className="input"
                     disabled={saveMutation.isPending}
                     id="character-tags"
@@ -667,6 +672,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
                     {avatarPromptMutation.data ? (
                       <>
                         <textarea
+                          autoComplete="off"
                           aria-label="Промпт для аватара"
                           className="textarea"
                           readOnly

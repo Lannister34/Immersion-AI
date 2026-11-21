@@ -19,6 +19,7 @@ export function NumberField({ id, label, max, min, onChange, step, value }: Numb
         {label}
       </label>
       <input
+        autoComplete="off"
         className="input mono"
         id={id}
         max={max}

@@ -30,6 +30,7 @@ export function LorebookEntryCard({ busy, entry, index, onChange, onRemove }: Lo
         <label className="row gap-4" style={{ alignItems: 'center', fontSize: 'var(--fz-xs)' }}>
           приоритет
           <input
+            autoComplete="off"
             className="input"
             disabled={busy}
             onChange={(event) => {
@@ -54,6 +55,7 @@ export function LorebookEntryCard({ busy, entry, index, onChange, onRemove }: Lo
       </div>
       <Field id={`lorebook-entry-keys-${index}`} label="Ключи" hint="Через запятую. Регистр не важен.">
         <input
+          autoComplete="off"
           className="input"
           disabled={busy}
           id={`lorebook-entry-keys-${index}`}
