@@ -57,12 +57,17 @@ export type GenerationReadinessResponse = z.infer<typeof GenerationReadinessResp
 export const ChatReplyGenerationModeSchema = z.enum(['reply', 'continue']);
 export type ChatReplyGenerationMode = z.infer<typeof ChatReplyGenerationModeSchema>;
 
-export const StartChatReplyCommandSchema = z.object({
-  attachmentIds: z.array(ChatAttachmentIdSchema).max(CHAT_MESSAGE_MAX_ATTACHMENTS).optional(),
-  chatId: ChatIdSchema,
-  message: z.string().trim().min(1).max(20_000),
-  mode: z.literal('reply').default('reply'),
-});
+export const StartChatReplyCommandSchema = z
+  .object({
+    attachmentIds: z.array(ChatAttachmentIdSchema).max(CHAT_MESSAGE_MAX_ATTACHMENTS).optional(),
+    chatId: ChatIdSchema,
+    message: z.string().trim().max(20_000),
+    mode: z.literal('reply').default('reply'),
+  })
+  .refine((command) => command.message.length > 0 || (command.attachmentIds?.length ?? 0) > 0, {
+    message: 'Сообщение должно содержать текст или изображение.',
+    path: ['message'],
+  });
 export type StartChatReplyCommand = z.infer<typeof StartChatReplyCommandSchema>;
 
 export const ContinueChatReplyCommandSchema = z.object({

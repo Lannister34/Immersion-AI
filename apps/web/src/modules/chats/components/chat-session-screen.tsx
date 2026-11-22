@@ -208,7 +208,6 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const blockReason = generationAvailability.blockReason;
   const isStreaming = Boolean(chatReplyGeneration.activeJob);
   const vision = describeVisionSupport(generationReadinessQuery.data?.visionSupport);
-  const canAttachImages = vision.allowsImages && !blockReason;
   const showReasoning = settingsOverviewQuery.data?.profile.thinkingEnabled ?? true;
   const messageActions = deriveMessageActions({
     blockReason,
@@ -227,24 +226,27 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
     isEditingMessage: editing !== null,
     isGeneratingFirstMessage: generateFirstMessageMutation.isPending,
     isReplyStarting: chatReplyGeneration.isPending,
+    isSendingMessage: chatReplyGeneration.isSendingMessage,
     isUploadingAttachment: attachmentsDraft.isUploading,
+    modelAcceptsImages: vision.allowsImages,
     text: draftMessage,
   });
   const { canAnswer, canContinue } = messageActions;
-  const { canSend } = composerActions;
+  const { canAttachImages, canSend } = composerActions;
 
   const onSubmit = async (event?: FormEvent) => {
     event?.preventDefault();
     if (!canSend) return;
     const message = draftMessage;
-    const attachmentIds = attachmentsDraft.attachments.map((attachment) => attachment.id);
+    const attachments = attachmentsDraft.attachments;
     setDraftMessage('');
     attachmentsDraft.clear();
     setDropNotice(null);
     try {
-      await chatReplyGeneration.start(message, attachmentIds);
+      await chatReplyGeneration.start(message, attachments);
     } catch {
       setDraftMessage(message);
+      attachmentsDraft.restore(attachments);
     }
   };
 
@@ -398,7 +400,9 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
             minHeight: 0,
             overflow: 'hidden',
           }}
-          unavailableReason={blockReason ?? vision.hint}
+          unavailableReason={
+            blockReason ?? (chatReplyGeneration.isSendingMessage ? 'Дождитесь отправки сообщения.' : vision.hint)
+          }
         >
           <ChatHeader
             avatarUrl={session.characterAvatarUrl}
@@ -535,7 +539,6 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                 onOpenContext={() => openPanelTab('context')}
                 onOpenSettings={() => openPanelTab('model')}
                 onSubmit={onSubmit}
-                sendHint={composerActions.hint}
                 value={draftMessage}
               />
             </div>

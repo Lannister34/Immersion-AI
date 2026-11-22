@@ -258,7 +258,9 @@ export async function completeChatReplyForSession(
 export function getAnswerableUserMessage(chatId: string, session: ChatSessionDto): ChatMessageDto {
   const lastMessage = session.messages.at(-1);
 
-  if (!lastMessage || lastMessage.role !== 'user' || lastMessage.content.trim().length === 0) {
+  const hasContent = (lastMessage?.content.trim().length ?? 0) > 0 || (lastMessage?.attachments.length ?? 0) > 0;
+
+  if (!lastMessage || lastMessage.role !== 'user' || !hasContent) {
     throw new NothingToAnswerError(chatId);
   }
 

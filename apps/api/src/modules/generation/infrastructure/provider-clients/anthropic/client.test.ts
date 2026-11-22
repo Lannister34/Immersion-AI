@@ -87,6 +87,18 @@ describe('buildAnthropicPayload', () => {
       { text: 'Что тут?', type: 'text' },
     ]);
   });
+
+  it('sends a user turn that has only images without a text block, since Anthropic refuses an empty text block', () => {
+    const { conversation } = buildAnthropicPayload([
+      { content: 'Привет.', role: 'assistant' },
+      { content: ' \n ', images: ['data:image/png;base64,AAAB'], role: 'user' },
+    ]);
+
+    expect(conversation.at(-1)).toEqual({
+      content: [{ source: { data: 'AAAB', media_type: 'image/png', type: 'base64' }, type: 'image' }],
+      role: 'user',
+    });
+  });
 });
 
 describe('AnthropicClient', () => {

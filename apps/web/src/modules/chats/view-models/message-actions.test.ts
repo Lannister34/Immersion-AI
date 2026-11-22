@@ -1,11 +1,17 @@
-import type { ChatMessageRole } from '@immersion/contracts/chats';
+import type { ChatMessageAttachmentDto, ChatMessageRole } from '@immersion/contracts/chats';
 import { describe, expect, it } from 'vitest';
 
 import { deriveMessageActions } from './message-actions';
 
-function message(role: ChatMessageRole, content: string) {
-  return { content, role };
+function message(role: ChatMessageRole, content: string, attachments: ChatMessageAttachmentDto[] = []) {
+  return { attachments, content, role };
 }
+
+const PICTURE: ChatMessageAttachmentDto = {
+  id: 'picture.png',
+  mimeType: 'image/png',
+  url: '/api/chats/chat-1/attachments/picture.png',
+};
 
 const GREETING = message('assistant', 'Добро пожаловать.');
 const ENDS_WITH_REPLY = [message('user', 'Привет!'), message('assistant', '*улыбается* Здравствуй.')];
@@ -54,6 +60,12 @@ describe('deriveMessageActions', () => {
 
     expect(deriveMessageActions({ ...IDLE, messages: blankReply }).canContinue).toBe(false);
     expect(deriveMessageActions({ ...IDLE, messages: blankUser }).canAnswer).toBe(false);
+  });
+
+  it('offers an answer to a user turn that has only images', () => {
+    const imageOnlyUser = [GREETING, message('user', '', [PICTURE])];
+
+    expect(deriveMessageActions({ ...IDLE, messages: imageOnlyUser }).canAnswer).toBe(true);
   });
 
   it('offers no regenerate for a chat that holds only its greeting', () => {

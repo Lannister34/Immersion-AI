@@ -10,7 +10,7 @@ interface MessageActionsInput {
   isGeneratingFirstMessage: boolean;
   isMutatingMessages: boolean;
   isReplyStarting: boolean;
-  messages: readonly Pick<ChatMessageDto, 'content' | 'role'>[];
+  messages: readonly Pick<ChatMessageDto, 'attachments' | 'content' | 'role'>[];
 }
 
 export interface MessageActions {
@@ -37,12 +37,13 @@ export function deriveMessageActions({
   const canChangeMessages = !isGenerating && !isMutatingMessages && !isEditing;
   const canGenerate = !isGenerating && !isMutatingMessages && !isEditing && !blockReason;
   const lastMessage = messages.at(-1);
-  const lastMessageHasContent = (lastMessage?.content.trim().length ?? 0) > 0;
+  const lastMessageHasText = (lastMessage?.content.trim().length ?? 0) > 0;
+  const lastMessageHasImages = (lastMessage?.attachments.length ?? 0) > 0;
 
   return {
-    canAnswer: canGenerate && lastMessage?.role === 'user' && lastMessageHasContent,
+    canAnswer: canGenerate && lastMessage?.role === 'user' && (lastMessageHasText || lastMessageHasImages),
     canChangeMessages,
-    canContinue: canGenerate && lastMessage?.role === 'assistant' && lastMessageHasContent,
+    canContinue: canGenerate && lastMessage?.role === 'assistant' && lastMessageHasText,
     editingMessageIndex: isEditShown ? editing.messageIndex : null,
     isEditStale: isEditing && !isEditShown,
     regenerableMessageIndex: canChangeMessages && !blockReason ? findRegenerableMessageIndex(messages) : null,

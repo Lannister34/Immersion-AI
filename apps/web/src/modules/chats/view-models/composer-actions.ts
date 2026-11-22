@@ -5,13 +5,15 @@ interface ComposerActionsInput {
   isEditingMessage: boolean;
   isGeneratingFirstMessage: boolean;
   isReplyStarting: boolean;
+  isSendingMessage: boolean;
   isUploadingAttachment: boolean;
+  modelAcceptsImages: boolean;
   text: string;
 }
 
 export interface ComposerActions {
+  canAttachImages: boolean;
   canSend: boolean;
-  hint: string | null;
 }
 
 export function deriveComposerActions({
@@ -21,20 +23,22 @@ export function deriveComposerActions({
   isEditingMessage,
   isGeneratingFirstMessage,
   isReplyStarting,
+  isSendingMessage,
   isUploadingAttachment,
+  modelAcceptsImages,
   text,
 }: ComposerActionsInput): ComposerActions {
-  const hasText = text.trim().length > 0;
+  const hasContent = text.trim().length > 0 || attachmentCount > 0;
 
   return {
+    canAttachImages: modelAcceptsImages && !blockReason && !isSendingMessage,
     canSend:
-      hasText &&
+      hasContent &&
       !isUploadingAttachment &&
       !isReplyStarting &&
       !hasActiveJob &&
       !isGeneratingFirstMessage &&
       !isEditingMessage &&
       !blockReason,
-    hint: !hasText && attachmentCount > 0 ? 'Добавьте текст к изображению' : null,
   };
 }

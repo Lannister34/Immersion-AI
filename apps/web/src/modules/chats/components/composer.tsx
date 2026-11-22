@@ -39,7 +39,6 @@ export interface ComposerProps {
   onOpenContext: () => void;
   onOpenSettings: () => void;
   onSubmit: (event?: FormEvent) => void;
-  sendHint: string | null;
   value: string;
 }
 
@@ -66,7 +65,6 @@ export function Composer({
   onOpenContext,
   onOpenSettings,
   onSubmit,
-  sendHint,
   value,
 }: ComposerProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -205,11 +203,6 @@ export function Composer({
           )}
         </div>
       </div>
-      {sendHint ? (
-        <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
-          {sendHint}
-        </div>
-      ) : null}
       {attachmentsNotice ? (
         <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
           {attachmentsNotice}
