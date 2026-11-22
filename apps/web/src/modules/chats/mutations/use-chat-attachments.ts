@@ -1,13 +1,15 @@
 import { ChatAttachmentMimeTypeSchema, type ChatMessageAttachmentDto } from '@immersion/contracts/chats';
-import { IMAGE_UPLOAD_MAX_BYTES, IMAGE_UPLOAD_MAX_MEGABYTES } from '@immersion/contracts/common';
+import {
+  CHAT_MESSAGE_MAX_ATTACHMENTS,
+  IMAGE_UPLOAD_MAX_BYTES,
+  IMAGE_UPLOAD_MAX_MEGABYTES,
+} from '@immersion/contracts/common';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { getApiErrorMessage } from '../../../shared/api/get-api-error-message';
 import { readFileAsBase64 } from '../../../shared/lib/read-file-as-base64';
 import { uploadChatAttachment } from '../api/upload-chat-attachment';
-
-export const MAX_ATTACHMENTS_PER_MESSAGE = 4;
 
 export interface ChatAttachmentsDraft {
   attach: (files: readonly File[]) => void;
@@ -49,10 +51,10 @@ export function useChatAttachments(chatId: string): ChatAttachmentsDraft {
       }
     }
 
-    const room = MAX_ATTACHMENTS_PER_MESSAGE - attachments.length;
+    const room = CHAT_MESSAGE_MAX_ATTACHMENTS - attachments.length;
 
     if (files.length > room) {
-      setPickError(`К одному сообщению можно приложить не больше ${MAX_ATTACHMENTS_PER_MESSAGE} изображений.`);
+      setPickError(`К одному сообщению можно приложить не больше ${CHAT_MESSAGE_MAX_ATTACHMENTS} изображений.`);
       return;
     }
 

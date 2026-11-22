@@ -7,7 +7,7 @@ import {
   ChatSessionDtoSchema,
   ChatSummaryDtoSchema,
 } from '../chats/index.js';
-import { ApiProblemSchema, ReplyTokenLimitSchema } from '../common/index.js';
+import { ApiProblemSchema, CHAT_MESSAGE_MAX_ATTACHMENTS, ReplyTokenLimitSchema } from '../common/index.js';
 import { ProviderModeSchema, ProviderTypeSchema } from '../providers/settings.js';
 import { RuntimeContextSizeSchema, RuntimeServerStatusSchema } from '../runtime/overview.js';
 
@@ -58,7 +58,7 @@ export const ChatReplyGenerationModeSchema = z.enum(['reply', 'continue']);
 export type ChatReplyGenerationMode = z.infer<typeof ChatReplyGenerationModeSchema>;
 
 export const StartChatReplyCommandSchema = z.object({
-  attachmentIds: z.array(ChatAttachmentIdSchema).max(4).optional(),
+  attachmentIds: z.array(ChatAttachmentIdSchema).max(CHAT_MESSAGE_MAX_ATTACHMENTS).optional(),
   chatId: ChatIdSchema,
   message: z.string().trim().min(1).max(20_000),
   mode: z.literal('reply').default('reply'),

@@ -5,6 +5,7 @@ export * from './reply-token-limit.js';
 export {
   CHAT_IMPORT_MAX_BYTES,
   CHAT_IMPORT_MAX_MEGABYTES,
+  CHAT_MESSAGE_MAX_ATTACHMENTS,
   IMAGE_UPLOAD_MAX_BYTES,
   IMAGE_UPLOAD_MAX_MEGABYTES,
 } from './upload-limits.js';
