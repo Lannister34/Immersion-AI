@@ -1,4 +1,4 @@
-import { createServer, type IncomingHttpHeaders, request, type Server } from 'node:http';
+import { type ClientRequest, createServer, type IncomingHttpHeaders, request, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -29,17 +29,53 @@ interface Call {
   readonly body?: string;
 }
 
+interface OpenRequest {
+  readonly outgoing: ClientRequest;
+  readonly reply: Promise<Reply>;
+}
+
+interface HeldLogin {
+  readonly release: () => void;
+  readonly reply: Promise<Reply>;
+}
+
+interface CountWaiter {
+  readonly count: number;
+  readonly resolve: () => void;
+}
+
+class EventCount {
+  private value = 0;
+  private readonly waiters: CountWaiter[] = [];
+
+  add(): void {
+    this.value += 1;
+    for (const waiter of this.waiters) if (waiter.count <= this.value) waiter.resolve();
+  }
+
+  reached(count: number): Promise<void> {
+    return new Promise((resolve) => {
+      if (this.value >= count) resolve();
+      else this.waiters.push({ count, resolve });
+    });
+  }
+}
+
 describe('WebLoginGate', () => {
   let clock: number;
   let server: Server;
   let port: number;
   let forwardedCookies: (string | undefined)[];
   let upgradedCookies: (string | undefined)[];
+  let arrivedRequests: EventCount;
+  let readBodies: EventCount;
 
   beforeEach(async () => {
     clock = 1_000_000;
     forwardedCookies = [];
     upgradedCookies = [];
+    arrivedRequests = new EventCount();
+    readBodies = new EventCount();
     const now = () => clock;
     const gate = new WebLoginGate({
       password: PASSWORD,
@@ -63,6 +99,8 @@ describe('WebLoginGate', () => {
           outgoing.end(APP_BODY);
         })
         .catch(() => outgoing.destroy());
+      arrivedRequests.add();
+      incoming.on('end', () => readBodies.add());
     });
     server.on('upgrade', (incoming, socket) => {
       gate.refuseUpgrade(incoming, socket);
@@ -77,35 +115,51 @@ describe('WebLoginGate', () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
-  function send({ body, from = HOST, headers = {}, method = 'GET', path }: Call): Promise<Reply> {
-    return new Promise((resolve, reject) => {
-      const outgoing = request(
-        { agent: false, headers, host: HOST, localAddress: from, method, path, port },
-        (incoming) => {
-          const chunks: Buffer[] = [];
-          incoming.on('data', (chunk: Buffer) => chunks.push(chunk));
-          incoming.on('end', () =>
-            resolve({
-              body: Buffer.concat(chunks).toString(),
-              headers: incoming.headers,
-              status: incoming.statusCode ?? 0,
-            }),
-          );
-        },
-      );
+  function open({ from = HOST, headers = {}, method = 'GET', path }: Call): OpenRequest {
+    let outgoing: ClientRequest | undefined;
+    const reply = new Promise<Reply>((resolve, reject) => {
+      outgoing = request({ agent: false, headers, host: HOST, localAddress: from, method, path, port }, (incoming) => {
+        const chunks: Buffer[] = [];
+        incoming.on('data', (chunk: Buffer) => chunks.push(chunk));
+        incoming.on('end', () =>
+          resolve({
+            body: Buffer.concat(chunks).toString(),
+            headers: incoming.headers,
+            status: incoming.statusCode ?? 0,
+          }),
+        );
+      });
       outgoing.on('error', reject);
-      outgoing.end(body);
     });
+    if (!outgoing) throw new Error('The request was not created');
+    return { outgoing, reply };
   }
 
-  function logIn(password: string, from = HOST, next = '/chat'): Promise<Reply> {
-    return send({
+  function send(call: Call): Promise<Reply> {
+    const { outgoing, reply } = open(call);
+    outgoing.end(call.body);
+    return reply;
+  }
+
+  function loginCall(password: string, from = HOST, next = '/chat'): Call {
+    return {
       body: new URLSearchParams({ next, password }).toString(),
       from,
       headers: { ...PAGE_LOAD, 'Content-Type': 'application/x-www-form-urlencoded' },
       method: 'POST',
       path: '/__web/login',
-    });
+    };
+  }
+
+  function logIn(password: string, from = HOST, next = '/chat'): Promise<Reply> {
+    return send(loginCall(password, from, next));
+  }
+
+  function holdLogIn(password: string): HeldLogin {
+    const call = loginCall(password);
+    const { outgoing, reply } = open(call);
+    outgoing.flushHeaders();
+    return { release: () => outgoing.end(call.body), reply };
   }
 
   function sessionCookieOf(reply: Reply): string {
@@ -237,9 +291,16 @@ describe('WebLoginGate', () => {
   });
 
   it('checks parallel guesses one at a time, so only the first is compared and the rest wait', async () => {
-    const replies = await Promise.all(['0001', '0002', '0003', '0004', PASSWORD].map((guess) => logIn(guess)));
+    const [first, ...rest] = ['0001', '0002', '0003', '0004', PASSWORD].map((guess) => holdLogIn(guess));
+    if (!first) throw new Error('No guesses were sent');
+    await arrivedRequests.reached(5);
 
-    expect(replies.map((reply) => reply.status).sort()).toEqual([401, 429, 429, 429, 429]);
+    first.release();
+    await readBodies.reached(1);
+    for (const guess of rest) guess.release();
+    const replies = await Promise.all([first, ...rest].map((guess) => guess.reply));
+
+    expect(replies.map((reply) => reply.status)).toEqual([401, 429, 429, 429, 429]);
     expect(replies.some((reply) => reply.headers['set-cookie'] !== undefined)).toBe(false);
   });
 
