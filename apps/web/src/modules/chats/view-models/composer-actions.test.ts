@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { deriveComposerActions } from './composer-actions';
+import { deriveComposerActions, IMAGES_NEED_VISION_MODEL } from './composer-actions';
 
 const IDLE = {
   attachmentCount: 0,
@@ -52,10 +52,29 @@ describe('deriveComposerActions', () => {
     expect(deriveComposerActions({ ...IDLE, ...state, attachmentCount: 1, text: '' }).canSend).toBe(false);
   });
 
-  it('opens attaching only for a model that takes images and is ready', () => {
+  it('opens attaching unless the loaded model is known to take only text', () => {
     expect(deriveComposerActions(IDLE).canAttachImages).toBe(true);
     expect(deriveComposerActions({ ...IDLE, modelAcceptsImages: false }).canAttachImages).toBe(false);
-    expect(deriveComposerActions({ ...IDLE, blockReason: 'Модель не готова.' }).canAttachImages).toBe(false);
+  });
+
+  it('opens attaching while no model is ready, though sending waits for one', () => {
+    expect(deriveComposerActions({ ...IDLE, attachmentCount: 1, blockReason: 'Модель не готова.' })).toEqual({
+      canAttachImages: true,
+      canSend: false,
+      sendRefusal: null,
+    });
+  });
+
+  it('refuses to send images to a text-only model and says how to go on', () => {
+    expect(deriveComposerActions({ ...IDLE, attachmentCount: 2, modelAcceptsImages: false })).toEqual({
+      canAttachImages: false,
+      canSend: false,
+      sendRefusal: IMAGES_NEED_VISION_MODEL,
+    });
+    expect(deriveComposerActions({ ...IDLE, modelAcceptsImages: false })).toMatchObject({
+      canSend: true,
+      sendRefusal: null,
+    });
   });
 
   it('closes attaching while a message is being sent, so a failed send can put its own images back', () => {

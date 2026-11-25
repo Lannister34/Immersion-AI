@@ -14,7 +14,11 @@ interface ComposerActionsInput {
 export interface ComposerActions {
   canAttachImages: boolean;
   canSend: boolean;
+  sendRefusal: string | null;
 }
+
+export const IMAGES_NEED_VISION_MODEL =
+  'Загруженная модель работает только с текстом. Уберите изображения, чтобы отправить сообщение, или запустите модель, которая их принимает.';
 
 export function deriveComposerActions({
   attachmentCount,
@@ -29,16 +33,19 @@ export function deriveComposerActions({
   text,
 }: ComposerActionsInput): ComposerActions {
   const hasContent = text.trim().length > 0 || attachmentCount > 0;
+  const imagesRefused = attachmentCount > 0 && !modelAcceptsImages;
 
   return {
-    canAttachImages: modelAcceptsImages && !blockReason && !isSendingMessage,
+    canAttachImages: modelAcceptsImages && !isSendingMessage,
     canSend:
       hasContent &&
+      !imagesRefused &&
       !isUploadingAttachment &&
       !isReplyStarting &&
       !hasActiveJob &&
       !isGeneratingFirstMessage &&
       !isEditingMessage &&
       !blockReason,
+    sendRefusal: imagesRefused ? IMAGES_NEED_VISION_MODEL : null,
   };
 }

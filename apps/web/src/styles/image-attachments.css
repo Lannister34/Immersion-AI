@@ -14,6 +14,19 @@
   object-fit: cover;
 }
 
+.composer-thumb__missing {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 4px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--fz-2xs);
+  line-height: 1.1;
+  text-align: center;
+}
+
 .composer-thumb__remove {
   position: absolute;
   top: 2px;

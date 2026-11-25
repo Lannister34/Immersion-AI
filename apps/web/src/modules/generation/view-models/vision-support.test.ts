@@ -8,6 +8,15 @@ describe('describeVisionSupport', () => {
     expect(describeVisionSupport(undefined).allowsImages).toBe(true);
   });
 
+  it('allows attaching images while no model is ready, and says they are sent once one runs', () => {
+    const view = describeVisionSupport('model-not-ready');
+
+    expect(view.allowsImages).toBe(true);
+    expect(view.hint).toBe(
+      'Модель ещё не готова. Изображения можно прикрепить сейчас, а отправить — когда модель запустится.',
+    );
+  });
+
   it('forbids attaching images only for a model known to be text-only', () => {
     expect(describeVisionSupport('supported').allowsImages).toBe(true);
     expect(describeVisionSupport('unsupported').allowsImages).toBe(false);
