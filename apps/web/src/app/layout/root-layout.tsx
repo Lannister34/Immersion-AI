@@ -9,6 +9,7 @@ import { scenarioListQueryOptions } from '../../modules/scenarios/queries/scenar
 import { runtimeOverviewQueryOptions } from '../../modules/server-control/queries/runtime-overview-query';
 import { settingsOverviewQueryOptions } from '../../modules/settings';
 import { type RuntimeBadgeStatus, Sidebar } from './sidebar';
+import { useMobileNavigationOverlays } from './use-mobile-navigation-overlays';
 
 interface RuntimeBadge {
   status: RuntimeBadgeStatus;
@@ -46,6 +47,7 @@ function describeRuntime(query: UseQueryResult<RuntimeOverviewResponse>): Runtim
 }
 
 export function RootLayout() {
+  const { closeMobileNav, isMobileNavOpen } = useMobileNavigationOverlays();
   const runtimeOverviewQuery = useQuery({
     ...runtimeOverviewQueryOptions(),
     refetchInterval: 5000,
@@ -74,7 +76,13 @@ export function RootLayout() {
 
   return (
     <div className="frame">
-      <Sidebar persona={persona} runtime={runtime} workspaceCounts={workspaceCounts} />
+      <Sidebar
+        isMobileOpen={isMobileNavOpen}
+        onMobileClose={closeMobileNav}
+        persona={persona}
+        runtime={runtime}
+        workspaceCounts={workspaceCounts}
+      />
       <Outlet />
     </div>
   );

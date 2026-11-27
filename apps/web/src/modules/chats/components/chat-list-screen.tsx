@@ -184,7 +184,7 @@ export function ChatListScreen({ characterFilter }: ChatListScreenProps) {
             : 'Попробуйте изменить запрос или сбросить фильтры.'}
         </p>
         {allItems.length === 0 ? (
-          <div className="row gap-8" style={{ marginTop: 12, justifyContent: 'center' }}>
+          <div className="row gap-8 empty__actions">
             <button
               className="btn btn--primary"
               disabled={createMutation.isPending}
@@ -242,7 +242,8 @@ export function ChatListScreen({ characterFilter }: ChatListScreenProps) {
               title="Импорт чата из файла .jsonl"
               type="button"
             >
-              <UploadIcon size={13} /> {importMutation.isPending ? 'Импорт…' : 'Импорт'}
+              <UploadIcon size={13} />{' '}
+              <span className="btn__label">{importMutation.isPending ? 'Импорт…' : 'Импорт'}</span>
             </button>
             <button
               className="btn btn--primary"
@@ -274,7 +275,10 @@ export function ChatListScreen({ characterFilter }: ChatListScreenProps) {
                 </div>
               ) : null}
               {importNotice ? (
-                <div className="row gap-8" style={{ alignItems: 'center', fontSize: 'var(--fz-xs)', marginTop: 4 }}>
+                <div
+                  className="row gap-8"
+                  style={{ alignItems: 'center', flexWrap: 'wrap', fontSize: 'var(--fz-xs)', marginTop: 4 }}
+                >
                   <span>
                     Импортировано {importNotice.importedMessages} сообщений, {importNotice.skippedLines} строк пропущено
                     (не распознаны).
@@ -291,8 +295,8 @@ export function ChatListScreen({ characterFilter }: ChatListScreenProps) {
                 </div>
               ) : null}
             </div>
-            <div className="row gap-8">
-              <div className="search" style={{ minWidth: 280 }}>
+            <div className="row gap-8 page__actions">
+              <div className="search search--wide">
                 <SearchIcon size={13} />
                 <input
                   autoComplete="off"

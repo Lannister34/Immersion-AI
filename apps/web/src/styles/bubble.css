@@ -7,6 +7,7 @@
   font-size: var(--fz-md);
   line-height: 1.55;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .bubble--user {
@@ -62,4 +63,81 @@
   margin-left: 2px;
   vertical-align: -2px;
   animation: caret 1s infinite;
+}
+
+.bubble-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.bubble-row--user {
+  flex-direction: row-reverse;
+}
+
+.bubble-row__body {
+  min-width: 0;
+  max-width: min(620px, 80%);
+  display: grid;
+  gap: 4px;
+}
+
+.bubble-row__body--editing {
+  width: min(620px, 80%);
+}
+
+.bubble-row--user .bubble-row__actions {
+  justify-content: flex-end;
+}
+
+.bubble-row__edit-hint {
+  font-size: var(--fz-2xs);
+  margin-right: auto;
+}
+
+.bubble-row__branch-input,
+.bubble-row__branch-input:focus {
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  font-size: var(--fz-2xs);
+  min-width: 180px;
+  padding: 2px 6px;
+}
+
+@media (max-width: 767px) {
+  .bubble-row {
+    gap: 8px;
+  }
+
+  .bubble-row__body,
+  .bubble-row__body--editing {
+    max-width: calc(100% - 44px);
+  }
+
+  .bubble-row__body--editing {
+    width: calc(100% - 44px);
+  }
+
+  .bubble-row__actions {
+    flex-wrap: wrap;
+  }
+
+  .bubble-row__edit-hint {
+    display: none;
+  }
+
+  .bubble-row__branch-input,
+  .bubble-row__branch-input:focus {
+    flex: 1 1 100%;
+    min-width: 0;
+    font-size: 16px;
+    padding: 6px 8px;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .bubble-row__actions {
+    opacity: 1;
+  }
 }

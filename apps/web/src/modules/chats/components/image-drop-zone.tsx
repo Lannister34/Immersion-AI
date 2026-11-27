@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import { useFileDropZone } from '../../../shared/lib/use-file-drop-zone';
 import { planImageDrop } from '../view-models/image-drop';
@@ -6,18 +6,18 @@ import { planImageDrop } from '../view-models/image-drop';
 export interface ImageDropZoneProps {
   canAttachImages: boolean;
   children: ReactNode;
+  className?: string;
   onAttachFiles: (files: readonly File[]) => void;
   onNotice: (notice: string | null) => void;
-  style?: CSSProperties;
   unavailableReason: string;
 }
 
 export function ImageDropZone({
   canAttachImages,
   children,
+  className,
   onAttachFiles,
   onNotice,
-  style,
   unavailableReason,
 }: ImageDropZoneProps) {
   const dropZone = useFileDropZone((files) => {
@@ -31,9 +31,8 @@ export function ImageDropZone({
   return (
     <div
       {...dropZone.handlers}
-      className="image-drop-zone"
+      className={className ? `image-drop-zone ${className}` : 'image-drop-zone'}
       data-dragging={dropZone.isDraggingFiles ? 'true' : 'false'}
-      style={style}
     >
       {children}
       {dropZone.isDraggingFiles ? (

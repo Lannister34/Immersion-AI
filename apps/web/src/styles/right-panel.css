@@ -78,3 +78,25 @@
 .rp__resize:hover {
   color: var(--text-1);
 }
+
+@media (max-width: 767px) {
+  .rp {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    border-left: 0;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  .rp__head {
+    padding: 0 8px 0 14px;
+  }
+
+  .rp__resize {
+    display: none;
+  }
+
+  .rp__tab {
+    min-height: 40px;
+  }
+}

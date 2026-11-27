@@ -31,17 +31,7 @@ export function ChatListRow({ chat }: ChatListRowProps) {
   };
 
   return (
-    <div
-      style={{
-        position: 'relative',
-        display: 'grid',
-        gridTemplateColumns: '40px minmax(0, 1.2fr) minmax(0, 2fr) 100px minmax(80px, max-content)',
-        gap: 14,
-        alignItems: 'center',
-        padding: '12px 14px',
-        background: 'var(--bg)',
-      }}
-    >
+    <div className="chat-row">
       <Link
         aria-label={`Открыть чат: ${displayName}`}
         params={{ chatId: chat.id }}
@@ -49,7 +39,7 @@ export function ChatListRow({ chat }: ChatListRowProps) {
         to="/chat/$chatId"
       />
       <Avatar name={displayName} size={36} url={chat.characterAvatarUrl} />
-      <div style={{ minWidth: 0 }}>
+      <div className="chat-row__title">
         <strong className="truncate" style={{ display: 'block', fontSize: 'var(--fz-md)' }}>
           {displayName}
         </strong>
@@ -57,22 +47,9 @@ export function ChatListRow({ chat }: ChatListRowProps) {
           {subline}
         </div>
       </div>
-      <div className="muted truncate" style={{ fontSize: 'var(--fz-sm)' }}>
-        {preview}
-      </div>
-      <div className="muted mono tnum" style={{ fontSize: 'var(--fz-xs)' }}>
-        {formatRelative(chat.updatedAt)}
-      </div>
-      <div
-        className="row gap-4"
-        style={{
-          flexWrap: 'nowrap',
-          justifyContent: 'flex-end',
-          whiteSpace: 'nowrap',
-          position: 'relative',
-          zIndex: 2,
-        }}
-      >
+      <div className="muted truncate chat-row__preview">{preview}</div>
+      <div className="muted mono tnum chat-row__time">{formatRelative(chat.updatedAt)}</div>
+      <div className="row gap-4 chat-row__actions">
         {confirmDelete ? (
           <>
             <button

@@ -23,3 +23,10 @@
   color: var(--accent);
   background: var(--accent-soft);
 }
+
+@media (max-width: 767px) {
+  .filter-chip {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+}

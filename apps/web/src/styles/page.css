@@ -3,12 +3,14 @@
   min-height: 0;
   min-width: 0;
   overflow: hidden;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
 }
 
 .page__head {
   padding: 16px 22px 12px;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   border-bottom: 1px solid var(--hairline);
 }
@@ -27,11 +29,13 @@
   letter-spacing: -0.025em;
   margin: 0;
   line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .page__sub {
   color: var(--muted);
   font-size: var(--fz-sm);
+  overflow-wrap: anywhere;
 }
 
 .page__toolbar {
@@ -44,4 +48,23 @@
 .page__body {
   overflow: auto;
   padding: 14px 22px 22px;
+}
+
+@media (max-width: 767px) {
+  .page__head {
+    padding: 12px 12px 10px;
+  }
+
+  .page__title-row {
+    gap: 10px;
+  }
+
+  .page__actions {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .page__body {
+    padding: 12px 12px 18px;
+  }
 }

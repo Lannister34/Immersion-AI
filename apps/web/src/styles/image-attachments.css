@@ -78,6 +78,7 @@
   position: relative;
   max-width: 95vw;
   max-height: 95vh;
+  max-height: 95dvh;
   border-radius: var(--r-sm);
   pointer-events: none;
 }
@@ -109,4 +110,13 @@
   font-size: var(--fz-md);
   text-align: center;
   pointer-events: none;
+}
+
+@media (max-width: 767px) {
+  .composer-thumb__remove {
+    top: 0;
+    right: 0;
+    width: 24px;
+    height: 24px;
+  }
 }

@@ -34,3 +34,23 @@
   background: var(--surface);
   box-shadow: var(--shadow-2);
 }
+
+@media (max-width: 767px) {
+  .chat-header .context-meter {
+    flex: 1 1 100%;
+    position: relative;
+  }
+
+  .tokenbtn {
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: 100%;
+    min-height: 40px;
+  }
+
+  .chat-stats {
+    top: calc(100% + 6px);
+    right: 0;
+    left: 0;
+    width: auto;
+  }
+}

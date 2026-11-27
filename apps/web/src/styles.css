@@ -32,3 +32,7 @@
 @import "./styles/empty-state.css";
 @import "./styles/image-attachments.css";
 @import "./styles/reasoning.css";
+@import "./styles/chat-screen.css";
+@import "./styles/chat-header.css";
+@import "./styles/composer.css";
+@import "./styles/chat-row.css";
