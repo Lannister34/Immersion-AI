@@ -200,6 +200,65 @@ test('imports a chat from a JSONL export file and opens the new session', async 
   await expect(page.getByText('Ответ из файла')).toBeVisible();
 });
 
+interface LoadedFontFace {
+  family: string;
+  status: string;
+  unicodeRange: string;
+}
+
+const LOAD_CYRILLIC_INTERFACE_FACES = `(async () => {
+  const faces = [
+    ...(await document.fonts.load('600 16px Inter', 'Привет, ёж')),
+    ...(await document.fonts.load('500 16px "JetBrains Mono"', 'Привет, ёж')),
+  ];
+  return faces.map((face) => ({ family: face.family, status: face.status, unicodeRange: face.unicodeRange }));
+})()`;
+
+test('loads every page and resource from its own host and renders the interface fonts in Cyrillic', async ({
+  baseURL,
+  page,
+}) => {
+  const appHost = new URL(baseURL ?? '').host;
+  const foreignRequests: string[] = [];
+  const recordIfForeign = (address: string) => {
+    const url = new URL(address);
+    if (['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol) && url.host !== appHost) {
+      foreignRequests.push(address);
+    }
+  };
+  page.on('request', (request) => recordIfForeign(request.url()));
+  page.on('websocket', (socket) => recordIfForeign(socket.url()));
+
+  await importChatFromList(page);
+  await expect(page.getByText('Привет из файла')).toBeVisible();
+  const loadedFaces = await page.evaluate<LoadedFontFace[]>(LOAD_CYRILLIC_INTERFACE_FACES);
+  expect(loadedFaces).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        family: 'Inter',
+        status: 'loaded',
+        unicodeRange: expect.stringContaining('U+400-45F'),
+      }),
+      expect.objectContaining({
+        family: 'JetBrains Mono',
+        status: 'loaded',
+        unicodeRange: expect.stringContaining('U+400-45F'),
+      }),
+    ]),
+  );
+
+  for (const [path, heading] of [
+    ['/characters', 'Персонажи'],
+    ['/settings', 'Настройки'],
+    ['/server', 'LLM-runtime'],
+  ] as const) {
+    await page.goto(path);
+    await expect(page.getByRole('heading', { exact: true, level: 1, name: heading })).toBeVisible();
+  }
+
+  expect(foreignRequests).toEqual([]);
+});
+
 test('starts a branch with an empty composer and no pending delete', async ({ page }) => {
   await importChatFromList(page);
   const sourceChatUrl = page.url();
