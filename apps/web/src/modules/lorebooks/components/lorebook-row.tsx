@@ -31,44 +31,29 @@ export function LorebookRow({ lorebook }: LorebookRowProps) {
   };
 
   return (
-    <div
-      style={{
-        position: 'relative',
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) 80px minmax(0, 1fr) 120px 100px',
-        gap: 14,
-        alignItems: 'center',
-        padding: '10px 14px',
-        borderBottom: '1px solid var(--hairline)',
-        background: 'var(--bg)',
-      }}
-    >
+    <div className="lorebook-row">
       <Link
         aria-label={`Открыть лорбук: ${lorebook.name}`}
         params={{ lorebookId: lorebook.id }}
         style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'pointer' }}
         to="/lorebooks/$lorebookId"
       />
-      <div className="row gap-8" style={{ minWidth: 0 }}>
+      <div className="row gap-8 lorebook-row__name">
         <BookIcon size={13} stroke="var(--muted)" />
         <strong className="truncate" style={{ fontSize: 'var(--fz-md)' }}>
           {lorebook.name}
         </strong>
       </div>
-      <span className="mono tnum" style={{ fontSize: 'var(--fz-sm)', color: 'var(--text-1)' }}>
-        {lorebook.entryCount}
-      </span>
-      <div className="row gap-4" style={{ flexWrap: 'wrap', minWidth: 0 }}>
+      <span className="mono tnum lorebook-row__count">{lorebook.entryCount}</span>
+      <div className="row gap-4 lorebook-row__tags">
         {lorebook.tags.slice(0, 4).map((tag) => (
           <span className="tag" key={tag}>
             {tag}
           </span>
         ))}
       </div>
-      <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
-        {formatRelative(lorebook.updatedAt)}
-      </span>
-      <div className="row gap-4" style={{ justifyContent: 'flex-end', position: 'relative', zIndex: 2 }}>
+      <span className="muted mono lorebook-row__time">{formatRelative(lorebook.updatedAt)}</span>
+      <div className="row gap-4 lorebook-row__actions">
         {confirmDelete ? (
           <>
             <button

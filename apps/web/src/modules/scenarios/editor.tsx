@@ -240,7 +240,7 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
           title={isDirty ? 'Сначала сохрани изменения' : 'Создать новый чат с этим сценарием'}
           type="button"
         >
-          <ChatIcon size={14} /> {startChatMutation.isPending ? '…' : 'Начать чат'}
+          <ChatIcon size={14} /> <span className="btn__label">{startChatMutation.isPending ? '…' : 'Начать чат'}</span>
         </button>
         <button
           className="btn"
@@ -249,7 +249,7 @@ export function ScenarioEditorScreen({ scenarioId }: ScenarioEditorScreenProps) 
           title="Удалить сценарий"
           type="button"
         >
-          <TrashIcon size={14} /> Удалить
+          <TrashIcon size={14} /> <span className="btn__label">Удалить</span>
         </button>
       </>
     );

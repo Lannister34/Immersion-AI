@@ -1,0 +1,30 @@
+.sampler-card__naming {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+}
+
+.sampler-card__numbers {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 767px) {
+  .sampler-card__naming {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sampler-card__numbers {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sampler-card__footer,
+  .sampler-card__footer > .row {
+    flex-wrap: wrap;
+  }
+
+  .sampler-card__footer > .row:last-child {
+    margin-left: auto;
+  }
+}

@@ -177,7 +177,8 @@ export function ScenariosScreen() {
               title="Импорт .json-сценария"
               type="button"
             >
-              <UploadIcon size={13} /> {importMutation.isPending ? 'Импорт…' : 'Импорт'}
+              <UploadIcon size={13} />{' '}
+              <span className="btn__label">{importMutation.isPending ? 'Импорт…' : 'Импорт'}</span>
             </button>
             <Link className="btn btn--primary" to="/scenarios/new">
               <PlusIcon size={13} /> Новый сценарий
@@ -196,8 +197,8 @@ export function ScenariosScreen() {
                 <div style={{ color: 'var(--danger)', fontSize: 'var(--fz-xs)', marginTop: 4 }}>{importError}</div>
               ) : null}
             </div>
-            <div className="row gap-8">
-              <div className="search" style={{ minWidth: 280 }}>
+            <div className="row gap-8 page__actions">
+              <div className="search search--wide">
                 <SearchIcon size={13} />
                 <input
                   autoComplete="off"

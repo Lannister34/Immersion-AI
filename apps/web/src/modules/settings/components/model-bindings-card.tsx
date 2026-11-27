@@ -47,7 +47,7 @@ export function ModelBindingsCard({ data }: ModelBindingsCardProps) {
 
   return (
     <section className="card" id="models" style={{ padding: 18, display: 'grid', gap: 14 }}>
-      <div className="between">
+      <div className="between settings-card__head">
         <h2 style={{ margin: 0, fontSize: 'var(--fz-xl)', fontWeight: 600 }}>Model Bindings</h2>
         <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
           по умолчанию выбирается активный preset; здесь можно привязать конкретные модели
@@ -63,7 +63,7 @@ export function ModelBindingsCard({ data }: ModelBindingsCardProps) {
             const isConfirming = confirmDelete === binding.modelName;
             return (
               <div
-                className="row gap-8"
+                className="row gap-8 binding-row"
                 key={binding.modelName}
                 style={{
                   alignItems: 'center',
@@ -73,17 +73,16 @@ export function ModelBindingsCard({ data }: ModelBindingsCardProps) {
                   borderRadius: 'var(--r-sm)',
                 }}
               >
-                <span className="mono truncate" style={{ flex: 1, fontSize: 'var(--fz-sm)' }} title={binding.modelName}>
+                <span className="mono truncate binding-row__model" title={binding.modelName}>
                   {binding.modelName}
                 </span>
                 <select
                   autoComplete="off"
-                  className="input"
+                  className="input binding-row__preset"
                   disabled={upsertMutation.isPending}
                   onChange={(event) =>
                     upsertMutation.mutate({ modelName: binding.modelName, presetId: event.currentTarget.value })
                   }
-                  style={{ flex: '0 0 220px', width: 220 }}
                   value={binding.presetId}
                 >
                   {sampler.presets.map((preset) => (
@@ -126,8 +125,8 @@ export function ModelBindingsCard({ data }: ModelBindingsCardProps) {
           })}
         </div>
       )}
-      <form className="row gap-8" onSubmit={onSubmit} style={{ alignItems: 'flex-end' }}>
-        <div className="field" style={{ flex: 1 }}>
+      <form className="row gap-8 binding-form" onSubmit={onSubmit}>
+        <div className="field binding-form__model">
           <label htmlFor="binding-model-name">Имя файла модели</label>
           <input
             autoComplete="off"
@@ -138,7 +137,7 @@ export function ModelBindingsCard({ data }: ModelBindingsCardProps) {
             value={newModelName}
           />
         </div>
-        <div className="field" style={{ minWidth: 200 }}>
+        <div className="field binding-form__preset">
           <label htmlFor="binding-preset-id">Preset</label>
           <select
             autoComplete="off"

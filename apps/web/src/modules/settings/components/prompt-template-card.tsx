@@ -8,7 +8,7 @@ export function PromptTemplateCard({ disabled, onChange, value }: PromptTemplate
   const trimmedLength = value.trim().length;
   return (
     <section className="card" id="prompts" style={{ padding: 18, display: 'grid', gap: 14 }}>
-      <div className="between">
+      <div className="between settings-card__head">
         <h2 style={{ margin: 0, fontSize: 'var(--fz-xl)', fontWeight: 600 }}>System Prompt</h2>
         <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
           {trimmedLength > 0 ? `${trimmedLength} символов` : 'шаблон не задан'}

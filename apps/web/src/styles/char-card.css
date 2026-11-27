@@ -7,3 +7,9 @@
 .char-card__actions:focus-within {
   opacity: 1;
 }
+
+@media (hover: none) and (pointer: coarse) {
+  .char-card__actions {
+    opacity: 1;
+  }
+}

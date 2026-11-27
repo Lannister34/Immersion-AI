@@ -1,0 +1,25 @@
+.settings-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 24px;
+}
+
+.settings-layout__nav {
+  align-self: start;
+  position: sticky;
+  top: 0;
+}
+
+@media (max-width: 767px) {
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .settings-layout__nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    position: static;
+  }
+}

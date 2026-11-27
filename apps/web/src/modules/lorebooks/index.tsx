@@ -199,18 +199,7 @@ export function LorebooksScreen() {
   } else {
     body = (
       <div className="card" style={{ padding: 0, overflow: 'hidden', display: 'grid', gridTemplateRows: 'auto 1fr' }}>
-        <div
-          className="row gap-12"
-          style={{
-            padding: '10px 14px',
-            borderBottom: '1px solid var(--hairline)',
-            fontSize: 'var(--fz-xs)',
-            color: 'var(--muted)',
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) 80px minmax(0, 1fr) 120px 100px',
-            gap: 14,
-          }}
-        >
+        <div className="lorebook-row lorebook-row--head">
           <span>Название</span>
           <span>Записей</span>
           <span>Теги</span>
@@ -245,7 +234,8 @@ export function LorebooksScreen() {
               title="Импорт .json-лорбука"
               type="button"
             >
-              <UploadIcon size={13} /> {importMutation.isPending ? 'Импорт…' : 'Импорт'}
+              <UploadIcon size={13} />{' '}
+              <span className="btn__label">{importMutation.isPending ? 'Импорт…' : 'Импорт'}</span>
             </button>
             <Link className="btn btn--primary" to="/lorebooks/new">
               <PlusIcon size={13} /> Новый лорбук
@@ -264,8 +254,8 @@ export function LorebooksScreen() {
                 <div style={{ color: 'var(--danger)', fontSize: 'var(--fz-xs)', marginTop: 4 }}>{importError}</div>
               ) : null}
             </div>
-            <div className="row gap-8">
-              <div className="search" style={{ minWidth: 280 }}>
+            <div className="row gap-8 page__actions">
+              <div className="search search--wide">
                 <SearchIcon size={13} />
                 <input
                   autoComplete="off"

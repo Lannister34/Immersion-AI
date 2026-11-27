@@ -210,19 +210,10 @@ export function ServerControlScreen() {
           {runtimeActionErrorMessage ? <ErrorBanner>{runtimeActionErrorMessage}</ErrorBanner> : null}
           {activeMode === 'builtin' && overview ? (
             <>
-              <section
-                className="card"
-                style={{
-                  padding: 18,
-                  display: 'grid',
-                  gridTemplateColumns: 'auto 1fr auto',
-                  gap: 18,
-                  alignItems: 'center',
-                }}
-              >
+              <section className="card runtime-status">
                 <span className={RUNTIME_STATUS_DOT[status]} style={{ width: 14, height: 14 }} />
                 <div className="col gap-4">
-                  <div className="row gap-12">
+                  <div className="row gap-12 runtime-status__title">
                     <strong style={{ fontSize: 'var(--fz-xl)' }}>{activeModelName ?? 'Модель не выбрана'}</strong>
                     <span className={RUNTIME_STATUS_PILL[status]}>{RUNTIME_STATUS_LABELS[status]}</span>
                     {status === 'running' ? (
@@ -236,14 +227,14 @@ export function ServerControlScreen() {
                       <span className="pill pill--danger">{overview.serverStatus.error}</span>
                     </div>
                   ) : null}
-                  <div className="row gap-16 muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
+                  <div className="row gap-16 muted mono runtime-status__facts">
                     <span>port {overview.serverConfig.port}</span>
                     {overview.serverStatus.pid ? <span>pid {overview.serverStatus.pid}</span> : null}
                     <span>ctx {runningLaunch ? runningLaunch.contextSize.toLocaleString('ru-RU') : '—'}</span>
                     <span>GPU {displayedGpuLayers ?? '—'}</span>
                   </div>
                 </div>
-                <div className="row gap-8">
+                <div className="row gap-8 runtime-status__actions">
                   <button
                     className="btn btn--ghost-bordered"
                     onClick={() => setParamsOpen((current) => !current)}
@@ -273,7 +264,7 @@ export function ServerControlScreen() {
               ) : null}
 
               <section className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div className="between" style={{ padding: '12px 14px', borderBottom: '1px solid var(--hairline)' }}>
+                <div className="between runtime-models__head">
                   <div className="row gap-8">
                     <h2 style={{ margin: 0, fontSize: 'var(--fz-md)', fontWeight: 600 }}>Модели</h2>
                     <span
@@ -289,7 +280,7 @@ export function ServerControlScreen() {
                     </span>
                   </div>
                   <div className="row gap-8">
-                    <div className="search" style={{ minWidth: 200 }}>
+                    <div className="search search--narrow">
                       <SearchIcon size={13} />
                       <input
                         autoComplete="off"
@@ -304,8 +295,8 @@ export function ServerControlScreen() {
                   <thead>
                     <tr>
                       <th>Модель</th>
-                      <th>Размер</th>
-                      <th>Источник</th>
+                      <th className="tbl__secondary">Размер</th>
+                      <th className="tbl__secondary">Источник</th>
                       <th>Статус</th>
                       <th />
                     </tr>
@@ -325,7 +316,7 @@ export function ServerControlScreen() {
                         return (
                           <tr key={model.path} style={isActive ? { background: 'var(--accent-soft)' } : undefined}>
                             <td>
-                              <div className="row gap-8">
+                              <div className="row gap-8 runtime-model">
                                 <CpuIcon size={14} stroke={isActive ? 'var(--accent)' : 'var(--muted)'} />
                                 <div>
                                   <div className="row gap-6">
@@ -340,14 +331,12 @@ export function ServerControlScreen() {
                                       </span>
                                     ) : null}
                                   </div>
-                                  <div className="muted mono" style={{ fontSize: 'var(--fz-2xs)' }}>
-                                    {model.path}
-                                  </div>
+                                  <div className="muted mono runtime-model__path">{model.path}</div>
                                 </div>
                               </div>
                             </td>
-                            <td className="mono tnum">{formatBytes(model.size)}</td>
-                            <td className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+                            <td className="mono tnum tbl__secondary">{formatBytes(model.size)}</td>
+                            <td className="muted tbl__secondary" style={{ fontSize: 'var(--fz-xs)' }}>
                               {model.sourceDirectory}
                             </td>
                             <td>

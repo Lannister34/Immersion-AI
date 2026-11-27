@@ -1,0 +1,12 @@
+.profile-card__identity {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 767px) {
+  .profile-card__identity {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

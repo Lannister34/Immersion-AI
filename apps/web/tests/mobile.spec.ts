@@ -137,16 +137,71 @@ test('opens the character editor from the drawer and the list', async ({ page })
   expect(await elementsPastTheViewport(page)).toEqual([]);
 });
 
-test('keeps every chat screen within the phone width', async ({ page }) => {
+type LibraryCollection = 'characters' | 'lorebooks' | 'scenarios';
+
+const CREATED_ENTITY_KEY: Record<LibraryCollection, string> = {
+  characters: 'character',
+  lorebooks: 'lorebook',
+  scenarios: 'scenario',
+};
+
+async function createEntity(page: Page, collection: LibraryCollection, data: object): Promise<string> {
+  const response = await page.request.post(`/api/${collection}`, { data });
+  expect(response.status()).toBe(201);
+  const body = (await response.json()) as Record<string, { id: string } | undefined>;
+  const created = body[CREATED_ENTITY_KEY[collection]];
+  if (!created) throw new Error(`POST /api/${collection} returned no ${CREATED_ENTITY_KEY[collection]}.`);
+  return encodeURIComponent(created.id);
+}
+
+test('keeps every screen within the phone width', async ({ page }) => {
+  const longWord = 'ОченьДлинноеСловоБезПробеловКотороеНеПомещаетсяВШиринуТелефона';
   const chatId = await createChat(page);
-  for (const path of ['/chat', `/chat/${chatId}`]) {
+  const characterId = await createEntity(page, 'characters', { description: longWord, name: `Персонаж ${longWord}` });
+  const scenarioId = await createEntity(page, 'scenarios', { content: longWord, name: `Сценарий ${longWord}` });
+  const lorebookId = await createEntity(page, 'lorebooks', {
+    entries: [{ content: longWord, keys: [longWord] }],
+    name: `Лорбук ${longWord}`,
+    tags: [longWord.slice(0, 60)],
+  });
+  const paths = [
+    '/chat',
+    `/chat/${chatId}`,
+    '/characters',
+    '/characters/new',
+    `/characters/${characterId}`,
+    '/scenarios',
+    '/scenarios/new',
+    `/scenarios/${scenarioId}`,
+    '/lorebooks',
+    '/lorebooks/new',
+    `/lorebooks/${lorebookId}`,
+    '/settings',
+    '/server',
+    '/missing-route',
+  ];
+
+  for (const path of paths) {
     await page.goto(path);
     await expect(menuButton(page)).toBeVisible();
     await page.waitForLoadState('networkidle');
     expect(await elementsPastTheViewport(page), path).toEqual([]);
   }
 
+  await page.goto(`/chat/${chatId}`);
   await page.getByTitle('Удалить чат').click();
   await expect(page.getByText('удалить весь чат?')).toBeVisible();
   expect(await elementsPastTheViewport(page), 'chat delete confirmation').toEqual([]);
+
+  await page.goto('/server');
+  await page.getByRole('button', { name: 'Встроенный' }).click();
+  await expect(page.getByRole('heading', { name: 'Модели' })).toBeVisible();
+  await page.getByRole('button', { name: 'Параметры' }).click();
+  await expect(page.getByRole('heading', { name: 'Каталоги моделей' })).toBeVisible();
+  expect(await elementsPastTheViewport(page), '/server, built-in').toEqual([]);
+
+  await page.goto('/characters');
+  await page.getByRole('button', { name: 'Вид: список' }).click();
+  await expect(page.getByRole('columnheader', { name: 'Персонаж' })).toBeVisible();
+  expect(await elementsPastTheViewport(page), '/characters, list view').toEqual([]);
 });

@@ -31,7 +31,7 @@ const CHARACTER_SKELETON_CARD_COUNT = 5;
 
 function CharactersGridSkeleton() {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
+    <div className="char-grid">
       {Array.from({ length: CHARACTER_SKELETON_CARD_COUNT }, (_, index) => (
         <div className="card" key={index} style={{ aspectRatio: '3 / 4', padding: 0, background: 'var(--surface)' }} />
       ))}
@@ -51,8 +51,8 @@ function CharactersListTable({ characters }: CharactersListTableProps) {
           <tr>
             <th>Персонаж</th>
             <th>Чаты</th>
-            <th>Изменён</th>
-            <th style={{ width: 200 }} />
+            <th className="tbl__secondary">Изменён</th>
+            <th className="tbl__actions" />
           </tr>
         </thead>
         <tbody>
@@ -185,7 +185,7 @@ export function CharactersScreen() {
     );
   } else if (viewMode === 'grid') {
     body = (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
+      <div className="char-grid">
         {filtered.map((character) => (
           <CharacterCard character={character} key={character.id} />
         ))}
@@ -214,7 +214,8 @@ export function CharactersScreen() {
               title="Импорт карточки PNG SillyTavern"
               type="button"
             >
-              <UploadIcon size={13} /> {importMutation.isPending ? 'Импорт…' : 'Импорт'}
+              <UploadIcon size={13} />{' '}
+              <span className="btn__label">{importMutation.isPending ? 'Импорт…' : 'Импорт'}</span>
             </button>
             <Link className="btn btn--primary" to="/characters/new">
               <PlusIcon size={13} /> Новый персонаж
@@ -235,8 +236,8 @@ export function CharactersScreen() {
                 </div>
               ) : null}
             </div>
-            <div className="row gap-8">
-              <div className="search" style={{ minWidth: 240 }}>
+            <div className="row gap-8 page__actions">
+              <div className="search">
                 <SearchIcon size={13} />
                 <input
                   autoComplete="off"

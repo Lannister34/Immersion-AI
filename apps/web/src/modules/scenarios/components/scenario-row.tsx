@@ -105,16 +105,7 @@ export function ScenarioRow({ scenario }: ScenarioRowProps) {
   };
 
   return (
-    <div
-      className="card card-hover"
-      style={{
-        padding: 14,
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) 140px',
-        gap: 18,
-        position: 'relative',
-      }}
-    >
+    <div className="card card-hover scenario-row">
       <Link
         aria-label={`Открыть сценарий: ${scenario.name}`}
         params={{ scenarioId: scenario.id }}
@@ -152,7 +143,7 @@ export function ScenarioRow({ scenario }: ScenarioRowProps) {
           </div>
         ) : null}
       </div>
-      <div className="col" style={{ alignItems: 'flex-end', gap: 6, justifyContent: 'space-between' }}>
+      <div className="col scenario-row__side">
         <span className="muted mono" style={{ fontSize: 'var(--fz-xs)' }}>
           {formatRelative(scenario.updatedAt)}
         </span>
