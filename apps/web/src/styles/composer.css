@@ -1,0 +1,55 @@
+.composer {
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+  background: var(--surface);
+}
+
+.composer__input {
+  min-height: 48px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  resize: none;
+}
+
+.composer__counter {
+  font-size: var(--fz-xs);
+  white-space: nowrap;
+}
+
+.composer__hint {
+  font-size: var(--fz-xs);
+}
+
+@media (max-width: 767px) {
+  .composer {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .composer__footer {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .composer__tools,
+  .composer__actions {
+    gap: 4px;
+  }
+
+  .composer__actions {
+    margin-left: auto;
+  }
+
+  .composer__counter--chars,
+  .composer__hint {
+    display: none;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .composer__hint {
+    display: none;
+  }
+}

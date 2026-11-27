@@ -128,11 +128,7 @@ export function Composer({
   };
 
   return (
-    <form
-      className="card"
-      onSubmit={onSubmit}
-      style={{ padding: '10px 12px', display: 'grid', gap: 8, background: 'var(--surface)' }}
-    >
+    <form className="card composer" onSubmit={onSubmit}>
       {attachments.length > 0 ? (
         <div className="row gap-6" style={{ flexWrap: 'wrap' }}>
           {attachments.map((attachment) => (
@@ -146,16 +142,15 @@ export function Composer({
       ) : null}
       <textarea
         autoComplete="off"
-        className="textarea"
+        className="textarea composer__input"
         onChange={onChange}
         onKeyDown={onKeyDown}
         onPaste={attachPastedImages}
         placeholder={blockReason ?? 'Напишите сообщение…'}
-        style={{ minHeight: 48, border: 0, background: 'transparent', padding: 0, resize: 'none' }}
         value={value}
       />
-      <div className="between">
-        <div className="row gap-4">
+      <div className="between composer__footer">
+        <div className="row gap-4 composer__tools">
           <button className="btn btn--icon" onClick={onOpenContext} title="Контекст чата" type="button">
             <BookIcon size={14} />
           </button>
@@ -182,17 +177,12 @@ export function Composer({
             ref={fileInputRef}
             type="file"
           />
-          <span
-            className="muted mono"
-            style={{ fontSize: 'var(--fz-xs)', whiteSpace: 'nowrap' }}
-            title="Длина сообщения в символах"
-          >
+          <span className="muted mono composer__counter composer__counter--chars" title="Длина сообщения в символах">
             {value.length.toLocaleString('ru-RU')} симв.
           </span>
           {draftStats ? (
             <span
-              className="muted mono"
-              style={{ fontSize: 'var(--fz-xs)', whiteSpace: 'nowrap' }}
+              className="muted mono composer__counter"
               title={
                 draftStats.tokenCountMethod === 'approximate'
                   ? 'Приблизительная оценка контекста, если отправить черновик'
@@ -203,8 +193,8 @@ export function Composer({
             </span>
           ) : null}
         </div>
-        <div className="row gap-8">
-          <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
+        <div className="row gap-8 composer__actions">
+          <span className="muted composer__hint">
             <span className="kbd">Enter</span> отправить · <span className="kbd">Shift+Enter</span> — перенос строки
           </span>
           {isStreaming ? (
@@ -215,7 +205,7 @@ export function Composer({
             <>
               {canContinue ? (
                 <button className="btn" onClick={onContinue} title="Продолжить последний ответ персонажа" type="button">
-                  <PlayIcon size={14} /> Продолжить
+                  <PlayIcon size={14} /> <span className="btn__label">Продолжить</span>
                 </button>
               ) : null}
               {canAnswer ? (
@@ -225,11 +215,11 @@ export function Composer({
                   title="Сгенерировать ответ на последнее сообщение"
                   type="button"
                 >
-                  <SparkleIcon size={14} /> Сгенерировать ответ
+                  <SparkleIcon size={14} /> <span className="btn__label">Сгенерировать ответ</span>
                 </button>
               ) : null}
               <button className="btn btn--primary" disabled={!canSend} type="submit">
-                <SendIcon size={14} /> Отправить
+                <SendIcon size={14} /> <span className="btn__label">Отправить</span>
               </button>
             </>
           )}

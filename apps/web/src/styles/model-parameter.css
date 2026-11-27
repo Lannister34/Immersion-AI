@@ -110,3 +110,19 @@
   background: var(--surface);
   color: var(--text-1);
 }
+
+@media (max-width: 767px) {
+  .rp-param {
+    grid-template-columns: minmax(0, 1fr) auto 32px;
+  }
+
+  .rp-param__stepper {
+    gap: 2px;
+  }
+
+  .rp-param__step {
+    width: 32px;
+    height: 36px;
+    font-size: var(--fz-lg);
+  }
+}

@@ -176,14 +176,8 @@ export function BubbleMessage({
 
   return (
     <div
-      className="bubble-row"
+      className={isUser ? 'bubble-row bubble-row--user' : 'bubble-row'}
       data-actions={isActionsPinned ? 'pinned' : 'auto'}
-      style={{
-        display: 'flex',
-        gap: 10,
-        alignItems: 'flex-start',
-        flexDirection: isUser ? 'row-reverse' : 'row',
-      }}
     >
       {isUser ? (
         <div className="avatar avatar--36" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
@@ -192,14 +186,7 @@ export function BubbleMessage({
       ) : (
         <Avatar name={who} size={36} url={characterAvatarUrl} />
       )}
-      <div
-        style={{
-          maxWidth: 'min(620px, 80%)',
-          width: isEditing ? 'min(620px, 80%)' : undefined,
-          display: 'grid',
-          gap: 4,
-        }}
-      >
+      <div className={isEditing ? 'bubble-row__body bubble-row__body--editing' : 'bubble-row__body'}>
         <div
           className="row gap-8"
           style={{
@@ -232,7 +219,7 @@ export function BubbleMessage({
               value={draft}
             />
             <div className="row gap-6" style={{ alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <span className="muted" style={{ fontSize: 'var(--fz-2xs)', marginRight: 'auto' }}>
+              <span className="muted bubble-row__edit-hint">
                 <span className="kbd">Ctrl</span>+<span className="kbd">Enter</span> сохранить ·{' '}
                 <span className="kbd">Esc</span> отменить
               </span>
@@ -298,7 +285,7 @@ export function BubbleMessage({
           </>
         )}
         {isEditing ? null : (
-          <div className="row gap-4 bubble-row__actions" style={{ justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
+          <div className="row gap-4 bubble-row__actions">
             {canRegenerate ? (
               <button
                 className="btn btn--xs"
@@ -336,7 +323,7 @@ export function BubbleMessage({
                 <input
                   autoComplete="off"
                   autoFocus
-                  className="input"
+                  className="input bubble-row__branch-input"
                   onChange={(event) => setBranchDraft(event.currentTarget.value)}
                   onFocus={(event) => event.currentTarget.select()}
                   onKeyDown={(event) => {
@@ -349,14 +336,6 @@ export function BubbleMessage({
                     }
                   }}
                   placeholder="Название ветки"
-                  style={{
-                    background: 'transparent',
-                    border: '1px solid var(--hairline)',
-                    borderRadius: 4,
-                    fontSize: 'var(--fz-2xs)',
-                    minWidth: 180,
-                    padding: '2px 6px',
-                  }}
                   value={branchDraft}
                 />
                 <button

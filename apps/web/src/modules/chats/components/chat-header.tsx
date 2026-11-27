@@ -49,15 +49,7 @@ export function ChatHeader({
   };
 
   return (
-    <div
-      className="row gap-12"
-      style={{
-        alignItems: 'center',
-        borderBottom: '1px solid var(--hairline)',
-        padding: '12px 22px',
-        position: 'relative',
-      }}
-    >
+    <div className="row gap-12 chat-header">
       <Avatar name={characterName} size={36} url={avatarUrl} />
       <div style={{ flex: 1, minWidth: 0 }}>
         {draftTitle === null ? (
@@ -66,8 +58,8 @@ export function ChatHeader({
               {title}
             </h1>
             <button
+              className="chat-header__rename"
               onClick={() => setDraftTitle(title)}
-              style={{ color: 'var(--muted-dim)', display: 'flex' }}
               title="Переименовать чат"
               type="button"
             >
@@ -79,7 +71,7 @@ export function ChatHeader({
             <input
               autoComplete="off"
               autoFocus
-              className="input"
+              className="input chat-header__title-input"
               disabled={isRenaming}
               onBlur={commit}
               onChange={(event) => {
@@ -95,7 +87,6 @@ export function ChatHeader({
                   setDraftTitle(null);
                 }
               }}
-              style={{ borderColor: 'var(--accent)', fontSize: 'var(--fz-md)', fontWeight: 600, width: 340 }}
               value={draftTitle}
             />
             <button

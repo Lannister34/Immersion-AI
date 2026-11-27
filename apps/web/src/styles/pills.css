@@ -54,3 +54,10 @@
   background: var(--surface);
   border: 1px solid var(--hairline);
 }
+
+@media (max-width: 767px) {
+  .tag {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+}

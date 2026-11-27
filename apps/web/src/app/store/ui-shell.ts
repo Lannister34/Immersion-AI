@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import { NARROW_VIEWPORT_QUERY } from '../../shared/lib/media-queries';
 import { CHAT_PANEL_DEFAULT_WIDTH, clampChatPanelWidth } from './chat-panel-width';
 
 export type ChatRightPanelTab = 'model' | 'context';
@@ -9,6 +10,10 @@ const CHAT_PANEL_WIDTH_STORAGE_KEY = 'immersion.chat-panel-width';
 function readStoredPanelWidth(): number {
   const stored = window.localStorage.getItem(CHAT_PANEL_WIDTH_STORAGE_KEY);
   return stored === null ? CHAT_PANEL_DEFAULT_WIDTH : clampChatPanelWidth(Number(stored));
+}
+
+function isNarrowViewport(): boolean {
+  return window.matchMedia(NARROW_VIEWPORT_QUERY).matches;
 }
 
 interface UiShellState {
@@ -25,7 +30,7 @@ interface UiShellState {
 
 export const useUiShellStore = create<UiShellState>((set) => ({
   chatPanelWidth: readStoredPanelWidth(),
-  chatRightPanelOpen: true,
+  chatRightPanelOpen: !isNarrowViewport(),
   chatRightPanelTab: 'model',
   closeChatRightPanel: () => {
     set({ chatRightPanelOpen: false });

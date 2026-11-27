@@ -9,6 +9,10 @@ body,
   min-height: 100%;
 }
 
+#root {
+  height: 100dvh;
+}
+
 body {
   margin: 0;
   font-family: var(--font-ui);

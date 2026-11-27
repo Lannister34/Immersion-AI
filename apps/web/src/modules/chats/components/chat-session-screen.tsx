@@ -13,7 +13,9 @@ import { Topbar } from '../../../app/layout/topbar';
 import { useUiShellStore } from '../../../app/store/ui-shell';
 import { ApiError, createApiUrl } from '../../../shared/api/client';
 import { getApiErrorMessage } from '../../../shared/api/get-api-error-message';
+import { NARROW_VIEWPORT_QUERY, TOUCH_ONLY_QUERY } from '../../../shared/lib/media-queries';
 import { useDebouncedValue } from '../../../shared/lib/use-debounced-value';
+import { useMediaQuery } from '../../../shared/lib/use-media-query';
 import { ErrorBanner } from '../../../shared/ui/error-banner';
 import { DownloadIcon, SparkleIcon, TrashIcon } from '../../../shared/ui/icons';
 import {
@@ -34,6 +36,7 @@ import { useUpdateChatMessage } from '../mutations/use-update-chat-message';
 import { useUpdateChatTitle } from '../mutations/use-update-chat-title';
 import { chatSessionQueryOptions } from '../queries/chat-session-query';
 import { deriveComposerActions } from '../view-models/composer-actions';
+import { isSendKeystroke } from '../view-models/composer-keystroke';
 import { toContextStats } from '../view-models/context-stats';
 import { deriveMessageActions } from '../view-models/message-actions';
 import { DEFAULT_MESSAGE_FORMATTING } from '../view-models/message-content';
@@ -45,6 +48,7 @@ import { Composer } from './composer';
 import { ImageDropZone } from './image-drop-zone';
 import { RightPanel } from './right-panel';
 import { StreamingReply } from './streaming-reply';
+import { useNarrowChatSheet } from './use-narrow-chat-sheet';
 
 export interface ChatSessionScreenProps {
   chatId: string;
@@ -83,6 +87,9 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const openPanelTab = useUiShellStore((state) => state.openChatRightPanelTab);
   const panelWidth = useUiShellStore((state) => state.chatPanelWidth);
   const setPanelWidth = useUiShellStore((state) => state.setChatPanelWidth);
+  const isNarrowViewport = useMediaQuery(NARROW_VIEWPORT_QUERY);
+  const isTouchOnly = useMediaQuery(TOUCH_ONLY_QUERY);
+  useNarrowChatSheet({ close: closePanel, isNarrowViewport, isOpen: isPanelOpen });
   const navigate = useNavigate();
 
   const startPanelResize = (event: ReactPointerEvent<HTMLElement>) => {
@@ -155,7 +162,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
             { label: 'Загрузка…', strong: true },
           ]}
         />
-        <div className="empty" style={{ padding: 80 }}>
+        <div className="empty empty--screen">
           <h2>Загрузка чата</h2>
           <p>Получаем сохранённую сессию из backend.</p>
         </div>
@@ -172,7 +179,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
             { label: 'Чат не найден', strong: true },
           ]}
         />
-        <div className="empty" style={{ padding: 80 }}>
+        <div className="empty empty--screen">
           <h2>Не удалось открыть чат</h2>
           <p>Чат не найден или backend не смог прочитать его файл.</p>
         </div>
@@ -259,7 +266,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   };
 
   const onComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (isSendKeystroke(event, isTouchOnly)) {
       event.preventDefault();
       void onSubmit();
     }
@@ -327,12 +334,8 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
 
   return (
     <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: isPanelOpen ? `minmax(0, 1fr) ${panelWidth}px` : 'minmax(0, 1fr)',
-        minHeight: 0,
-        overflow: 'hidden',
-      }}
+      className="chat-screen"
+      style={isPanelOpen && !isNarrowViewport ? { gridTemplateColumns: `minmax(0, 1fr) ${panelWidth}px` } : undefined}
     >
       <main className="main">
         <Topbar
@@ -351,13 +354,11 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                 href={createApiUrl(`/api/chats/${encodeURIComponent(chatId)}/export`)}
                 title="Скачать JSONL-снимок чата"
               >
-                <DownloadIcon size={14} /> Экспорт
+                <DownloadIcon size={14} /> <span className="btn__label">Экспорт</span>
               </a>
               {confirmDeleteChat ? (
                 <>
-                  <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
-                    удалить весь чат?
-                  </span>
+                  <span className="muted topbar__note">удалить весь чат?</span>
                   <button
                     className="btn btn--danger"
                     disabled={deleteChatMutation.isPending}
@@ -377,7 +378,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                 </>
               ) : (
                 <button className="btn" onClick={() => setConfirmDeleteChat(true)} title="Удалить чат" type="button">
-                  <TrashIcon size={14} /> Удалить
+                  <TrashIcon size={14} /> <span className="btn__label">Удалить</span>
                 </button>
               )}
             </>
@@ -385,14 +386,9 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
         />
         <ImageDropZone
           canAttachImages={canAttachImages}
+          className="chat-screen__session"
           onAttachFiles={attachFiles}
           onNotice={setDropNotice}
-          style={{
-            display: 'grid',
-            gridTemplateRows: 'auto minmax(0, 1fr) auto',
-            minHeight: 0,
-            overflow: 'hidden',
-          }}
           unavailableReason={attachmentsUnavailableReason}
         >
           <ChatHeader
@@ -413,20 +409,8 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
             title={session.chat.title}
             updatedAt={lastUpdated}
           />
-          <div
-            onScroll={handleTranscriptScroll}
-            ref={transcriptRef}
-            style={{ overflow: 'auto', padding: '18px 22px', background: 'var(--bg)' }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 14,
-                maxWidth: 780,
-                margin: '0 auto',
-              }}
-            >
+          <div className="chat-screen__transcript" onScroll={handleTranscriptScroll} ref={transcriptRef}>
+            <div className="chat-screen__transcript-column">
               {session.messages.length === 0 ? (
                 <div className="empty">
                   <h2>В этом чате пока нет сообщений</h2>
@@ -477,14 +461,8 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
               ) : null}
             </div>
           </div>
-          <div
-            style={{
-              padding: '12px 22px 16px',
-              borderTop: '1px solid var(--hairline)',
-              background: 'var(--bg)',
-            }}
-          >
-            <div style={{ maxWidth: 780, margin: '0 auto' }}>
+          <div className="chat-screen__dock">
+            <div className="chat-screen__dock-column">
               {generationErrorMessage ? <ErrorBanner tone="soft">{generationErrorMessage}</ErrorBanner> : null}
               {messageActions.isEditStale ? (
                 <div

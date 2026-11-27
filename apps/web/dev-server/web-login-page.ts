@@ -6,7 +6,7 @@ export interface WebLoginPageOptions {
 }
 
 const STYLE = `
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #15151a; color: #e8e8ee;
+  body { margin: 0; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; background: #15151a; color: #e8e8ee;
     font: 16px/1.5 system-ui, sans-serif; }
   main { width: min(360px, calc(100vw - 32px)); display: grid; gap: 14px; }
   h1 { margin: 0; font-size: 22px; font-weight: 600; }

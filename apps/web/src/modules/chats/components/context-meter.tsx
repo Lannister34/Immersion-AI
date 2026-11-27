@@ -108,7 +108,7 @@ export function ContextMeter({ stats }: ContextMeterProps) {
   ];
 
   return (
-    <div ref={rootRef}>
+    <div className="context-meter" ref={rootRef}>
       <button
         className="tokenbtn"
         data-open={isOpen ? 'true' : 'false'}

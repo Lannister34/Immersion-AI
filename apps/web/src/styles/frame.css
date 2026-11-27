@@ -8,6 +8,7 @@
   height: 100%;
   width: 100%;
   overflow: hidden;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 .frame--with-right {
@@ -20,4 +21,10 @@
 
 .frame--collapsed {
   grid-template-columns: 56px minmax(0, 1fr);
+}
+
+@media (max-width: 767px) {
+  .frame {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

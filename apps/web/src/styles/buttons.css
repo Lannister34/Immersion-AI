@@ -61,3 +61,32 @@
   padding: 3px 7px;
   font-size: var(--fz-xs);
 }
+
+@media (max-width: 767px) {
+  .btn {
+    min-height: 36px;
+  }
+
+  .btn--icon {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .btn--xs {
+    min-width: 32px;
+    min-height: 32px;
+    justify-content: center;
+  }
+
+  .btn__label {
+    border: 0;
+    clip: rect(0, 0, 0, 0);
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
+}

@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect, useRef } from 'react';
 
 import {
   BookIcon,
@@ -11,6 +11,7 @@ import {
   SettingsIcon,
   TheaterIcon,
   UserIcon,
+  XIcon,
 } from '../../shared/ui/icons';
 
 export type RuntimeBadgeStatus = 'running' | 'stopped' | 'starting' | 'error';
@@ -37,12 +38,13 @@ interface SidebarNavItem {
 interface SidebarLinkProps {
   item: SidebarNavItem;
   count?: number | undefined;
+  onNavigate: () => void;
 }
 
-function SidebarLink({ item, count }: SidebarLinkProps) {
+function SidebarLink({ item, count, onNavigate }: SidebarLinkProps) {
   const IconComponent = item.icon;
   return (
-    <Link activeProps={{ 'aria-current': 'page' }} className="sb__link" to={item.to}>
+    <Link activeProps={{ 'aria-current': 'page' }} className="sb__link" onClick={onNavigate} to={item.to}>
       <span className="sb__icon">
         <IconComponent size={16} />
       </span>
@@ -65,6 +67,8 @@ const systemItems: SidebarNavItem[] = [
 ];
 
 interface SidebarProps {
+  isMobileOpen: boolean;
+  onMobileClose: () => void;
   runtime: RuntimeBadge;
   persona?: PersonaBadge | undefined;
   workspaceCounts?: Partial<Record<SidebarLinkPath, number | undefined>> | undefined;
@@ -77,53 +81,78 @@ const dotClassByStatus: Record<RuntimeBadgeStatus, string> = {
   error: 'dot dot--danger',
 };
 
-export function Sidebar({ runtime, persona, workspaceCounts }: SidebarProps) {
+export function Sidebar({ isMobileOpen, onMobileClose, runtime, persona, workspaceCounts }: SidebarProps) {
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!isMobileOpen) {
+      return;
+    }
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+    return () => opener?.focus();
+  }, [isMobileOpen]);
+
   return (
-    <aside className="sb">
-      <div className="sb__brand">
-        <div className="sb__logo">AI</div>
-        <div className="sb__brand-name">Immersion</div>
-        <span className="sb__brand-meta">v0.4</span>
-      </div>
+    <>
+      {isMobileOpen ? (
+        <button aria-hidden="true" className="sb-backdrop" onClick={onMobileClose} tabIndex={-1} type="button" />
+      ) : null}
+      <aside className="sb" data-mobile-open={isMobileOpen ? 'true' : 'false'}>
+        <div className="sb__brand">
+          <div className="sb__logo">AI</div>
+          <div className="sb__brand-name">Immersion</div>
+          <span className="sb__brand-meta">v0.4</span>
+          <button
+            aria-label="Закрыть меню"
+            className="btn btn--icon sb__close"
+            onClick={onMobileClose}
+            ref={closeButtonRef}
+            type="button"
+          >
+            <XIcon size={16} />
+          </button>
+        </div>
 
-      <div className="sb__section">Воркспейс</div>
-      <nav className="sb__nav">
-        {workspaceItems.map((item) => (
-          <SidebarLink count={workspaceCounts?.[item.to]} item={item} key={item.to} />
-        ))}
-      </nav>
+        <div className="sb__section">Воркспейс</div>
+        <nav className="sb__nav">
+          {workspaceItems.map((item) => (
+            <SidebarLink count={workspaceCounts?.[item.to]} item={item} key={item.to} onNavigate={onMobileClose} />
+          ))}
+        </nav>
 
-      <div className="sb__section">Система</div>
-      <nav className="sb__nav">
-        {systemItems.map((item) => (
-          <SidebarLink item={item} key={item.to} />
-        ))}
-      </nav>
+        <div className="sb__section">Система</div>
+        <nav className="sb__nav">
+          {systemItems.map((item) => (
+            <SidebarLink item={item} key={item.to} onNavigate={onMobileClose} />
+          ))}
+        </nav>
 
-      <div className="sb__spacer" />
+        <div className="sb__spacer" />
 
-      <div className="sb__footer">
-        <Link className="sb__status" title="Открыть /server" to="/server">
-          <span className={dotClassByStatus[runtime.status]} />
-          <div className="sb__status-text">
-            <strong className="truncate">{runtime.label}</strong>
-            {runtime.detail ? <span className="truncate">{runtime.detail}</span> : null}
-          </div>
-          <ChevronRightIcon size={14} />
-        </Link>
-        {persona ? (
-          <Link className="sb__user" title="Открыть настройки профиля" to="/settings">
-            <div className="sb__avatar">{persona.initial}</div>
-            <div className="truncate" style={{ flex: 1, minWidth: 0 }}>
-              <div className="truncate" style={{ fontWeight: 600, fontSize: 'var(--fz-sm)' }}>
-                {persona.name}
-              </div>
-              <div style={{ color: 'var(--muted-dim)', fontSize: 'var(--fz-2xs)' }}>ваш профиль</div>
+        <div className="sb__footer">
+          <Link className="sb__status" onClick={onMobileClose} title="Открыть /server" to="/server">
+            <span className={dotClassByStatus[runtime.status]} />
+            <div className="sb__status-text">
+              <strong className="truncate">{runtime.label}</strong>
+              {runtime.detail ? <span className="truncate">{runtime.detail}</span> : null}
             </div>
-            <EditIcon size={13} />
+            <ChevronRightIcon size={14} />
           </Link>
-        ) : null}
-      </div>
-    </aside>
+          {persona ? (
+            <Link className="sb__user" onClick={onMobileClose} title="Открыть настройки профиля" to="/settings">
+              <div className="sb__avatar">{persona.initial}</div>
+              <div className="truncate" style={{ flex: 1, minWidth: 0 }}>
+                <div className="truncate" style={{ fontWeight: 600, fontSize: 'var(--fz-sm)' }}>
+                  {persona.name}
+                </div>
+                <div style={{ color: 'var(--muted-dim)', fontSize: 'var(--fz-2xs)' }}>ваш профиль</div>
+              </div>
+              <EditIcon size={13} />
+            </Link>
+          ) : null}
+        </div>
+      </aside>
+    </>
   );
 }
