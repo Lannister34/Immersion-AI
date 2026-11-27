@@ -77,9 +77,8 @@ export function CharacterCard({ character }: CharacterCardProps) {
         <div style={{ fontSize: 'var(--fz-xs)' }}>
           {character.chatCount > 0 ? (
             <Link
-              className="muted"
+              className="muted char-card__chats"
               search={{ character: character.name }}
-              style={{ position: 'relative', zIndex: 2 }}
               title="Показать чаты с этим персонажем"
               to="/chat"
             >

@@ -99,3 +99,11 @@ select:disabled {
   background: var(--surface);
   letter-spacing: 0.02em;
 }
+
+@media (max-width: 767px) {
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 20px;
+    height: 20px;
+  }
+}

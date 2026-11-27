@@ -41,7 +41,7 @@ export function ContextTab({
         </span>
         <textarea
           autoComplete="off"
-          className="textarea"
+          className="textarea context-tab__instructions"
           id="chat-additional-instructions"
           maxLength={20_000}
           onChange={(event) => {
@@ -50,7 +50,6 @@ export function ContextTab({
           }}
           placeholder="Например: усилить описания насилия, дракон отвечает коротко и без вежливости."
           rows={4}
-          style={{ fontSize: 'var(--fz-xs)', lineHeight: 1.5, minHeight: 74 }}
           value={form.draft.additionalInstructions}
         />
         {hasInstructions && isManualPrompt ? (

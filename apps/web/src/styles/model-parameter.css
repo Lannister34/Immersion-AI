@@ -125,4 +125,20 @@
     height: 36px;
     font-size: var(--fz-lg);
   }
+
+  .rp-param__undo {
+    width: 32px;
+    height: 32px;
+  }
+
+  .rp-param__value {
+    width: 76px;
+    min-height: 36px;
+    font-size: 16px;
+  }
+
+  .rp-param__select {
+    min-height: 36px;
+    font-size: 16px;
+  }
 }

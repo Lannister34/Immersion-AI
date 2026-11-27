@@ -94,7 +94,7 @@ export function ServerLogsCard({ status }: ServerLogsCardProps) {
     <section className="card" style={{ padding: 0, overflow: 'hidden' }}>
       <div className="between" style={{ padding: '12px 14px' }}>
         <button
-          className="row gap-8"
+          className="row gap-8 server-logs__toggle"
           onClick={() => setExpanded((current) => !current)}
           style={{
             background: 'transparent',

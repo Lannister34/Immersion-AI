@@ -16,13 +16,12 @@ export function PromptTemplateCard({ disabled, onChange, value }: PromptTemplate
       </div>
       <textarea
         autoComplete="off"
-        className="textarea mono"
+        className="textarea mono prompt-template-card__input"
         disabled={disabled}
         maxLength={20_000}
         onChange={(event) => onChange(event.currentTarget.value)}
         placeholder="Например: Reply as {{char}} and do not speak for {{user}}."
         rows={10}
-        style={{ fontSize: 'var(--fz-xs)', lineHeight: 1.55, minHeight: 220 }}
         value={value}
       />
       <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>

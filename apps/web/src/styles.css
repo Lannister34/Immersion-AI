@@ -49,3 +49,6 @@
 @import "./styles/runtime-status.css";
 @import "./styles/runtime-models.css";
 @import "./styles/runtime-model.css";
+@import "./styles/context-tab.css";
+@import "./styles/prompt-template-card.css";
+@import "./styles/server-logs.css";

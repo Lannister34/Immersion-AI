@@ -3,6 +3,11 @@
   transition: opacity 0.15s ease;
 }
 
+.char-card__chats {
+  position: relative;
+  z-index: 2;
+}
+
 .card-hover:hover .char-card__actions,
 .char-card__actions:focus-within {
   opacity: 1;
@@ -11,5 +16,12 @@
 @media (hover: none) and (pointer: coarse) {
   .char-card__actions {
     opacity: 1;
+  }
+}
+
+@media (max-width: 767px) {
+  .char-card__chats {
+    display: inline-block;
+    padding: 9px 0;
   }
 }
