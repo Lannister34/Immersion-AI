@@ -1,5 +1,6 @@
 export const settingsModuleId = 'settings' as const;
 
+export { resolveActiveSamplerPreset } from './application/active-sampler-preset.js';
 export { ReplyLimitExceedsContextError } from './application/reply-limit-exceeds-context-error.js';
 export { readStoredReplyTokenLimit } from './application/stored-reply-token-limit.js';
 export type {

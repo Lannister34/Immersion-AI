@@ -1,6 +1,8 @@
 import {
   type CreateSamplerPresetCommand,
+  DEFAULT_SAMPLING_PARAMETERS,
   DeleteSamplerPresetResponseSchema,
+  SamplerPresetInputSchema,
   SamplerPresetMutationResponseSchema,
   SetActiveSamplerPresetResponseSchema,
   SettingsOverviewResponseSchema,
@@ -245,5 +247,24 @@ describe('sampler preset routes', () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({ code: 'validation_error' });
     expect(await snapshotDataRoot(dataRoot)).toEqual(before);
+  });
+});
+
+describe('Default preset on a fresh install', () => {
+  const api = useTestApi();
+
+  it('shows the contracts default sampling values for Default on a fresh install', async () => {
+    const response = await api().app.inject({ method: 'GET', url: '/api/settings/overview' });
+
+    expect(response.statusCode).toBe(200);
+    const payload = SettingsOverviewResponseSchema.parse(response.json());
+    expect(payload.sampler.activePresetId).toBe('default');
+    expect(payload.sampler.presets).toEqual([{ id: 'default', name: 'Default', ...DEFAULT_SAMPLING_PARAMETERS }]);
+  });
+});
+
+describe('DEFAULT_SAMPLING_PARAMETERS', () => {
+  it('accepts the default sampling values as a preset input', () => {
+    expect(SamplerPresetInputSchema.safeParse({ ...DEFAULT_SAMPLING_PARAMETERS, name: 'Default' }).success).toBe(true);
   });
 });

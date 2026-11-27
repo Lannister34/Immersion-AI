@@ -4,7 +4,7 @@ import type {
   ContinueChatReplyCommand,
   StartChatReplyCommand,
 } from '@immersion/contracts/generation';
-import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
+import type { ResponseLanguage, SettingsOverviewResponse } from '@immersion/contracts/settings';
 import type { ReplyChannel } from '@immersion/domain/generation';
 
 import type { Clock } from '../../../platform/clock/clock.js';
@@ -59,9 +59,7 @@ const CONTINUE_REPLY_INSTRUCTION = [
   'output only the continuation text.',
 ].join(' ');
 
-function buildContinuationLanguageSentence(
-  responseLanguage: SettingsOverviewResponse['profile']['responseLanguage'],
-): string {
+function buildContinuationLanguageSentence(responseLanguage: ResponseLanguage): string {
   if (responseLanguage === 'ru') {
     return 'Write the continuation in Russian.';
   }

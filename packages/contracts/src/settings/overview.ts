@@ -3,7 +3,10 @@ import { z } from 'zod';
 import { ReplyTokenLimitSchema } from '../common/reply-token-limit.js';
 
 export const ResponseLanguageSchema = z.enum(['ru', 'en', 'none']);
+export type ResponseLanguage = z.infer<typeof ResponseLanguageSchema>;
+
 export const ContextTrimStrategySchema = z.enum(['trim_middle', 'trim_start']);
+export type ContextTrimStrategy = z.infer<typeof ContextTrimStrategySchema>;
 
 export const MessageFormattingSchema = z.object({
   actionsItalic: z.boolean(),
@@ -20,6 +23,7 @@ export const SettingsProfileSchema = z.object({
   thinkingEnabled: z.boolean(),
   messageFormatting: MessageFormattingSchema,
 });
+export type SettingsProfile = z.infer<typeof SettingsProfileSchema>;
 
 export const SamplerPresetSummarySchema = z.object({
   contextTrimStrategy: ContextTrimStrategySchema,
@@ -35,11 +39,13 @@ export const SamplerPresetSummarySchema = z.object({
   topK: z.number().int().nonnegative(),
   topP: z.number().nonnegative(),
 });
+export type SamplerPresetSummary = z.infer<typeof SamplerPresetSummarySchema>;
 
 export const ModelPresetBindingDtoSchema = z.object({
   modelName: z.string().min(1),
   presetId: z.string().min(1),
 });
+export type ModelPresetBindingDto = z.infer<typeof ModelPresetBindingDtoSchema>;
 
 export const SettingsSamplerOverviewSchema = z.object({
   activePresetId: z.string(),
@@ -47,6 +53,7 @@ export const SettingsSamplerOverviewSchema = z.object({
   presets: z.array(SamplerPresetSummarySchema),
   modelBindingCount: z.number().int().nonnegative(),
 });
+export type SettingsSamplerOverview = z.infer<typeof SettingsSamplerOverviewSchema>;
 
 export const SettingsOverviewResponseSchema = z.object({
   profile: SettingsProfileSchema,

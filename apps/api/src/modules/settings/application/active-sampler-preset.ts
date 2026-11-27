@@ -1,8 +1,6 @@
-import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
+import type { SamplerPresetSummary, SettingsOverviewResponse } from '@immersion/contracts/settings';
 
-export type ActiveSamplerPreset = SettingsOverviewResponse['sampler']['presets'][number];
-
-export function resolveActiveSamplerPreset(settings: SettingsOverviewResponse): ActiveSamplerPreset {
+export function resolveActiveSamplerPreset(settings: SettingsOverviewResponse): SamplerPresetSummary {
   const activePreset = settings.sampler.presets.find((preset) => preset.id === settings.sampler.activePresetId);
 
   if (activePreset) {
@@ -21,7 +19,7 @@ export function resolveActiveSamplerPreset(settings: SettingsOverviewResponse): 
 export function resolveSamplerPresetForModel(
   settings: SettingsOverviewResponse,
   modelName: string | null,
-): ActiveSamplerPreset {
+): SamplerPresetSummary {
   const normalizedModelName = modelName?.trim();
 
   if (!normalizedModelName) {

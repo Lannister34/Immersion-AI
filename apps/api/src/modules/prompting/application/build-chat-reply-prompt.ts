@@ -1,9 +1,13 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
 import type { ContextBudgetStatus } from '@immersion/contracts/generation';
-import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
+import type {
+  ContextTrimStrategy,
+  ResponseLanguage,
+  SamplerPresetSummary,
+  SettingsOverviewResponse,
+} from '@immersion/contracts/settings';
 import { computePromptBudget, type PromptBudget, type PromptCharacterSnapshot } from '@immersion/domain/prompting';
 
-import type { ActiveSamplerPreset } from '../../settings/application/active-sampler-preset.js';
 import { assembleBasePrompt, type BasePromptAssemblyResult } from './assemble-base-prompt.js';
 import { buildPromptInputSnapshot, type PromptTranscriptRole } from './prompt-input-snapshot.js';
 import { countTokensHeuristic, type TokenCounter, type TokenCountMethod } from './token-counter.js';
@@ -43,7 +47,7 @@ export interface BuildChatReplyPromptInput {
   character?: PromptCharacterSnapshot | null;
   characterScenarioContent?: string | null;
   lorebookSections?: string[];
-  samplerPreset: ActiveSamplerPreset;
+  samplerPreset: SamplerPresetSummary;
   serverContextSize?: number | null;
   session: ChatSessionDto;
   settings: SettingsOverviewResponse;
@@ -72,7 +76,7 @@ function toPromptTranscriptRole(role: ChatSessionDto['messages'][number]['role']
   return role;
 }
 
-function getLanguageInstruction(responseLanguage: SettingsOverviewResponse['profile']['responseLanguage']) {
+function getLanguageInstruction(responseLanguage: ResponseLanguage) {
   if (responseLanguage === 'ru') {
     return 'Answer in Russian unless the user explicitly asks for another language.';
   }
@@ -222,7 +226,7 @@ function keepFixedParts(
 function trimTranscriptToContextBudget(
   countedMessages: CountedPromptMessage[],
   budget: PromptBudget,
-  trimStrategy: ActiveSamplerPreset['contextTrimStrategy'],
+  trimStrategy: ContextTrimStrategy,
   pinnedTailCount: number,
 ): BudgetedTranscript {
   if (budget.kind === 'unbounded') {
