@@ -86,6 +86,7 @@ export function createApiModules(dependencies: ApiDependencies): ApiModules {
     scenarios,
     profile: settings,
     samplerPresets: settings,
+    logger,
   });
 
   return {

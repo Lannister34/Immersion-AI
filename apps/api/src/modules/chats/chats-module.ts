@@ -1,6 +1,7 @@
 import type { ChatSessionDto, ChatSummaryDto, GetChatSessionResponse } from '@immersion/contracts/chats';
 import type { FastifyPluginAsync } from 'fastify';
 
+import type { LogPort } from '../../platform/logging/log-port.js';
 import { appendChatMessages } from './application/append-chat-messages.js';
 import { readChatAttachmentDataUrl, resolveChatAttachments } from './application/chat-attachments.js';
 import type { AppendChatMessageInput, ChatMessageAttachmentRecord } from './application/chat-records.js';
@@ -14,7 +15,9 @@ import { type TruncateChatMessagesCommand, truncateChatMessages } from './applic
 import { type UpdateChatTitleInput, updateChatTitle } from './application/update-chat-title.js';
 import { type ChatsRoutesDependencies, createChatsRoutes } from './interface/http/routes.js';
 
-export type ChatsModuleDependencies = ChatsRoutesDependencies;
+export interface ChatsModuleDependencies extends ChatsRoutesDependencies {
+  readonly logger: LogPort;
+}
 
 export interface ChatsModule {
   readonly routes: FastifyPluginAsync;

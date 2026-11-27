@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import {
+  BranchChatResponseSchema,
   CreateChatResponseSchema,
   GetChatSessionResponseSchema,
   UploadChatAttachmentResponseSchema,
@@ -284,6 +285,77 @@ describe('chat attachments', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ code: 'chat_attachment_not_found' });
+  });
+
+  it('serves a branch attachment after the source chat is deleted', async () => {
+    const { app, modules } = api();
+    const source = await createChat(app);
+    const attachment = await uploadPng(app, source.id);
+    await modules.chats.appendChatMessages(source.id, [
+      {
+        attachments: [{ id: attachment.id, mimeType: 'image/png' }],
+        content: 'Что на картинке?',
+        createdAt: '2026-01-01T00:00:01.000Z',
+        role: 'user',
+      },
+    ]);
+
+    const branched = await app.inject({
+      method: 'POST',
+      url: `/api/chats/${source.id}/branch`,
+      payload: { throughMessageIndex: 1 },
+    });
+    expect(branched.statusCode).toBe(201);
+    const branch = BranchChatResponseSchema.parse(branched.json()).chat;
+    const deleted = await app.inject({ method: 'DELETE', url: `/api/chats/${source.id}` });
+    expect(deleted.statusCode).toBe(204);
+
+    const session = GetChatSessionResponseSchema.parse(
+      (await app.inject({ method: 'GET', url: `/api/chats/${branch.id}` })).json(),
+    );
+    const branchAttachment = session.messages[0]?.attachments[0];
+    expect(branchAttachment).toEqual({
+      id: attachment.id,
+      mimeType: 'image/png',
+      url: `/api/chats/${branch.id}/attachments/${attachment.id}`,
+    });
+    const download = await app.inject({ method: 'GET', url: branchAttachment?.url ?? '' });
+    expect(download.statusCode).toBe(200);
+    expect(download.rawPayload.equals(buildPng())).toBe(true);
+  });
+
+  it('logs when a message image file is missing and leaves it out of the prompt', async () => {
+    const { app, dataRoot, http, logs, modules } = api();
+    http.on('POST', `${PROVIDER_URL}/v1/chat/completions`, () =>
+      Response.json({ choices: [{ message: { content: 'Картинки нет.' } }] }),
+    );
+    const chat = await createChat(app);
+    const attachment = await uploadPng(app, chat.id);
+    await modules.chats.appendChatMessages(chat.id, [
+      {
+        attachments: [{ id: attachment.id, mimeType: 'image/png' }],
+        content: 'Что на картинке?',
+        createdAt: '2026-01-01T00:00:01.000Z',
+        role: 'user',
+      },
+    ]);
+    await fs.rm(path.join(dataRoot, 'chats', '_no_character_', `${chat.id}.files`, attachment.id));
+
+    await expect(modules.chats.readChatAttachmentDataUrl(chat.id, attachment.id)).resolves.toBeNull();
+    const answered = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply',
+      payload: { chatId: chat.id, mode: 'answer' },
+    });
+
+    expect(answered.statusCode).toBe(200);
+    expect(JSON.stringify(http.requests[0]?.json(ChatCompletionRequestBodySchema))).not.toContain('image_url');
+    expect(
+      logs.lines.filter((line) => line.msg === 'Chat attachment file is missing; the image is left out of the prompt'),
+    ).toEqual([
+      expect.objectContaining({ attachmentId: attachment.id, chatId: chat.id, level: 'warn' }),
+      expect.objectContaining({ attachmentId: attachment.id, chatId: chat.id, level: 'warn' }),
+    ]);
   });
 
   it('removes stored attachments together with the chat', async () => {
