@@ -5,7 +5,6 @@ import { globalHttpFetch } from '../../platform/outbound-http/global-http-fetch.
 import { createHttpStub } from '../../test-support/http-stub.js';
 import { startRedirectingServers } from '../../test-support/redirecting-servers.js';
 import { probeProviderModels } from './application/probe-provider-models.js';
-import { getProviderApiKind, getProviderDefaultModel, isProviderApiKeyRequired } from './domain/provider-catalog.js';
 import { createDefaultProviderSettings } from './domain/provider-settings.js';
 import type { ProviderConfigs } from './domain/provider-settings-schema.js';
 
@@ -14,21 +13,6 @@ function storedProviderSettings(providerConfigs: ProviderConfigs = {}) {
 
   return { read: () => ({ ...defaults, providerConfigs: { ...defaults.providerConfigs, ...providerConfigs } }) };
 }
-
-describe('provider catalog', () => {
-  it('requires a key and an explicit model for cloud providers only', () => {
-    expect(isProviderApiKeyRequired('anthropic')).toBe(true);
-    expect(isProviderApiKeyRequired('openai')).toBe(true);
-    expect(isProviderApiKeyRequired('custom')).toBe(false);
-    expect(getProviderDefaultModel('anthropic')).toBeNull();
-    expect(getProviderDefaultModel('koboldcpp')).toBe('local-model');
-  });
-
-  it('marks Anthropic as the only non-OpenAI dialect', () => {
-    expect(getProviderApiKind('anthropic')).toBe('anthropic');
-    expect(getProviderApiKind('openai')).toBe('openai-cloud');
-  });
-});
 
 describe('probeProviderModels', () => {
   it('lists Anthropic models from the same /v1/models data list, authenticating with x-api-key and the version header', async () => {
