@@ -102,9 +102,10 @@ export function createApiDependencies(config: ApiConfig, overrides: ApiDependenc
       overrides.characterStore ??
       createFileCharacterStore({ directory: path.join(config.dataRoot, 'characters'), logger }),
     lorebookStore:
-      overrides.lorebookStore ?? createFileLorebookStore({ directory: path.join(config.dataRoot, 'worlds') }),
+      overrides.lorebookStore ?? createFileLorebookStore({ directory: path.join(config.dataRoot, 'worlds'), logger }),
     scenarioStore:
-      overrides.scenarioStore ?? createFileScenarioStore({ directory: path.join(config.dataRoot, 'scenarios') }),
+      overrides.scenarioStore ??
+      createFileScenarioStore({ directory: path.join(config.dataRoot, 'scenarios'), logger }),
     chatRepository,
     chatIndex:
       overrides.chatIndex ??

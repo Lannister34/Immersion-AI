@@ -1,6 +1,7 @@
 export * from './errors.js';
 export * from './file-id.js';
 export * from './health.js';
+export * from './plain-file-name.js';
 export * from './reply-token-limit.js';
 export {
   CHAT_IMPORT_MAX_BYTES,

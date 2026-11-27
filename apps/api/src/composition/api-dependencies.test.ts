@@ -88,8 +88,8 @@ describe('createApiDependencies', () => {
     const generationJobs = new InMemoryGenerationJobRegistry({ clock });
     const visionProbe: VisionProbe = { getVisionSupport: () => Promise.resolve('supported') };
     const characterStore = createFileCharacterStore({ directory: path.join(projectRoot, 'персонажи'), logger });
-    const lorebookStore = createFileLorebookStore({ directory: path.join(projectRoot, 'миры') });
-    const scenarioStore = createFileScenarioStore({ directory: path.join(projectRoot, 'сценарии') });
+    const lorebookStore = createFileLorebookStore({ directory: path.join(projectRoot, 'миры'), logger });
+    const scenarioStore = createFileScenarioStore({ directory: path.join(projectRoot, 'сценарии'), logger });
     const userSettings = createInMemoryUserSettings();
     const runtimeProcess = new FakeRuntimeProcess({ defaultModelsDir: path.join(projectRoot, 'models') });
     const modelScanner = new ModelDirectoryScanner({ clock });

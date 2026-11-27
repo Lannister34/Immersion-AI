@@ -1,4 +1,5 @@
 import cors from '@fastify/cors';
+import { PLAIN_FILE_NAME_MAX_LENGTH } from '@immersion/contracts/common';
 import Fastify, {
   type FastifyInstance,
   type RawReplyDefaultExpression,
@@ -25,6 +26,7 @@ export function buildApiApp(dependencies: ApiDependencies, modules: ApiModules):
   const app = Fastify({
     bodyLimit: API_BODY_LIMIT_BYTES,
     loggerInstance: dependencies.logger,
+    routerOptions: { maxParamLength: PLAIN_FILE_NAME_MAX_LENGTH },
   });
 
   installProblemHandler(app, { table: apiProblems });

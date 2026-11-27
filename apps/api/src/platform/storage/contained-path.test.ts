@@ -11,6 +11,7 @@ describe('resolveContainedFilePath', () => {
   it.each([
     'scenario.json',
     'Анонимный чат.json',
+    'Mr..json',
   ])('resolves the plain file name %j to a direct child of the directory', (fileId) => {
     expect(resolveContainedFilePath(directory, fileId)).toBe(path.join(directory, fileId));
   });
@@ -34,6 +35,16 @@ describe('resolveContainedFilePath', () => {
   });
 
   it.each(['', '.', '..', '.hidden.json'])('rejects %j, which is empty or starts with a dot', (fileId) => {
+    expect(() => resolveContainedFilePath(directory, fileId)).toThrow(UnsafeRepositoryFileIdError);
+  });
+
+  it.each([
+    'notes.json:hidden',
+    'evil.json.',
+    'evil.json ',
+    'tab\tname.json',
+    `${'a'.repeat(196)}.json`,
+  ])('rejects %j, which Windows would write to a stream, strip, or the contract would not read back', (fileId) => {
     expect(() => resolveContainedFilePath(directory, fileId)).toThrow(UnsafeRepositoryFileIdError);
   });
 

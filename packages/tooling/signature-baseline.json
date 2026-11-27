@@ -75,6 +75,5 @@
   "apps/web/src/test-support/create-test-query-client.ts": "explicit-return-type:1",
   "apps/web/tests/restore-data-root.ts": "explicit-return-type:1",
   "apps/web/tests/smoke-data-root-name.ts": "explicit-return-type:2",
-  "apps/web/tests/smoke-data-root.ts": "explicit-return-type:3",
-  "packages/contracts/src/common/file-id.ts": "explicit-return-type:1"
+  "apps/web/tests/smoke-data-root.ts": "explicit-return-type:3"
 }
