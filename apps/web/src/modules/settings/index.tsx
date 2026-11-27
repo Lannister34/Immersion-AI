@@ -68,8 +68,8 @@ export function SettingsScreen() {
             </div>
           </div>
         </div>
-        <div className="page__body" style={{ display: 'grid', gridTemplateColumns: '220px minmax(0,1fr)', gap: 24 }}>
-          <nav className="col gap-2" style={{ alignSelf: 'start', position: 'sticky', top: 0 }}>
+        <div className="page__body settings-layout">
+          <nav className="col gap-2 settings-layout__nav">
             {SECTIONS.map((section) => {
               const Icon = section.icon;
               return (

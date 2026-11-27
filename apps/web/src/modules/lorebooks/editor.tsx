@@ -270,7 +270,7 @@ export function LorebookEditorScreen({ lorebookId }: LorebookEditorScreenProps) 
         title="Удалить файл лорбука"
         type="button"
       >
-        <TrashIcon size={14} /> Удалить
+        <TrashIcon size={14} /> <span className="btn__label">Удалить</span>
       </button>
     );
   }

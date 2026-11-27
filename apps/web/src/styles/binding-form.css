@@ -1,0 +1,23 @@
+.binding-form {
+  align-items: flex-end;
+}
+
+.binding-form__model {
+  flex: 1;
+}
+
+.binding-form__preset {
+  min-width: 200px;
+}
+
+@media (max-width: 767px) {
+  .binding-form {
+    flex-wrap: wrap;
+  }
+
+  .binding-form__model,
+  .binding-form__preset {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}

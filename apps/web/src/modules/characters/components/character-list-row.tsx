@@ -63,7 +63,7 @@ export function CharacterListRow({ character }: CharacterListRowProps) {
           <span className="muted">—</span>
         )}
       </td>
-      <td className="muted mono tnum" style={{ fontSize: 'var(--fz-xs)' }}>
+      <td className="muted mono tnum tbl__secondary" style={{ fontSize: 'var(--fz-xs)' }}>
         {formatRelative(character.updatedAt)}
       </td>
       <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>

@@ -61,3 +61,10 @@
     overflow-wrap: anywhere;
   }
 }
+
+@media (max-width: 767px) {
+  button.pill {
+    min-height: 32px;
+    padding: 4px 10px;
+  }
+}

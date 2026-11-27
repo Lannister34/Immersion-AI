@@ -1,0 +1,30 @@
+.runtime-status {
+  padding: 18px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 18px;
+  align-items: center;
+}
+
+.runtime-status__facts {
+  font-size: var(--fz-xs);
+}
+
+@media (max-width: 767px) {
+  .runtime-status {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .runtime-status__title,
+  .runtime-status__facts {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .runtime-status__actions {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+  }
+}

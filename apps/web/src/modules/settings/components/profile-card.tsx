@@ -103,13 +103,13 @@ export function ProfileCard({ data }: ProfileCardProps) {
   return (
     <>
       <form className="card" id="profile" onSubmit={onSubmit} style={{ padding: 18, display: 'grid', gap: 14 }}>
-        <div className="between">
+        <div className="between settings-card__head">
           <h2 style={{ margin: 0, fontSize: 'var(--fz-xl)', fontWeight: 600 }}>Профиль / Persona</h2>
           <span className="muted" style={{ fontSize: 'var(--fz-xs)' }}>
             как вы представляете себя в чатах
           </span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '96px 1fr', gap: 18, alignItems: 'start' }}>
+        <div className="profile-card__identity">
           <div
             className="avatar avatar--96"
             style={{ background: 'var(--accent-soft)', color: 'var(--accent)', border: '1px solid var(--hairline)' }}
@@ -145,7 +145,7 @@ export function ProfileCard({ data }: ProfileCardProps) {
           </div>
         </div>
         <div className="divider" />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div className="settings-card__pair">
           <div className="field">
             <label htmlFor="profile-response-language">Язык ответа модели</label>
             <select

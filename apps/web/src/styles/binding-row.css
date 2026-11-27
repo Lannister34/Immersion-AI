@@ -1,0 +1,25 @@
+.binding-row__model {
+  flex: 1;
+  font-size: var(--fz-sm);
+}
+
+.binding-row__preset {
+  flex: 0 0 220px;
+  width: 220px;
+}
+
+@media (max-width: 767px) {
+  .binding-row {
+    flex-wrap: wrap;
+  }
+
+  .binding-row__model {
+    flex: 1 1 100%;
+  }
+
+  .binding-row__preset {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+  }
+}

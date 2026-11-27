@@ -133,7 +133,7 @@ export function SamplerCard({ data }: SamplerCardProps) {
 
   return (
     <section className="card" id="sampler" style={{ padding: 18, display: 'grid', gap: 14 }}>
-      <div className="between">
+      <div className="between settings-card__head">
         <h2 style={{ margin: 0, fontSize: 'var(--fz-xl)', fontWeight: 600 }}>Sampler Presets</h2>
         <button
           className="btn btn--ghost-bordered btn--xs"
@@ -177,7 +177,7 @@ export function SamplerCard({ data }: SamplerCardProps) {
         ) : null}
       </div>
       <form className="col gap-12" noValidate onSubmit={onSubmit}>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
+        <div className="sampler-card__naming">
           <div className="field">
             <label htmlFor="sampler-name">Название</label>
             <input
@@ -210,7 +210,7 @@ export function SamplerCard({ data }: SamplerCardProps) {
             </select>
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+        <div className="sampler-card__numbers">
           <NumberField
             id="sampler-temperature"
             label="temperature"
@@ -293,7 +293,10 @@ export function SamplerCard({ data }: SamplerCardProps) {
           value={form.maxTokens}
         />
         {mutationErrorMessage ? <ErrorBanner>{mutationErrorMessage}</ErrorBanner> : null}
-        <div className="row gap-8" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <div
+          className="row gap-8 sampler-card__footer"
+          style={{ justifyContent: 'space-between', alignItems: 'center' }}
+        >
           <div className="row gap-8">
             {!isCreating && selectedPreset ? (
               <>

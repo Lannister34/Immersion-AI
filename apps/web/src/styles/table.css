@@ -24,3 +24,27 @@
 .tbl tr:hover td {
   background: var(--surface);
 }
+
+.tbl__actions {
+  width: 200px;
+}
+
+@media (max-width: 767px) {
+  .tbl th,
+  .tbl td {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .tbl td {
+    overflow-wrap: anywhere;
+  }
+
+  .tbl__secondary {
+    display: none;
+  }
+
+  .tbl__actions {
+    width: auto;
+  }
+}

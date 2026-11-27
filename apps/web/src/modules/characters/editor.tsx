@@ -367,7 +367,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
           title={isDirty ? 'Сначала сохрани изменения' : 'Создать новый чат с этим персонажем'}
           type="button"
         >
-          <ChatIcon size={14} /> {startChatMutation.isPending ? '…' : 'Начать чат'}
+          <ChatIcon size={14} /> <span className="btn__label">{startChatMutation.isPending ? '…' : 'Начать чат'}</span>
         </button>
         <button
           className="btn"
@@ -376,7 +376,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
           title="Удалить файл персонажа"
           type="button"
         >
-          <TrashIcon size={14} /> Удалить
+          <TrashIcon size={14} /> <span className="btn__label">Удалить</span>
         </button>
       </>
     );
@@ -443,15 +443,7 @@ export function CharacterEditorScreen({ characterId }: CharacterEditorScreenProp
               <p>Проверьте rewrite API и повторите попытку.</p>
             </div>
           ) : (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'minmax(0, 1fr) 300px',
-                gap: 18,
-                maxWidth: 1280,
-                margin: '0 auto',
-              }}
-            >
+            <div className="editor-columns">
               <form className="col gap-12" id="character-editor-form" onSubmit={handleSubmit}>
                 <DraftRestoredNotice
                   busy={saveMutation.isPending || deleteMutation.isPending}

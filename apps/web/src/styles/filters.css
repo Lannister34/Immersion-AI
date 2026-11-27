@@ -26,6 +26,7 @@
 
 @media (max-width: 767px) {
   .filter-chip {
+    min-height: 32px;
     max-width: 100%;
     overflow-wrap: anywhere;
   }

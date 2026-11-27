@@ -1,0 +1,11 @@
+.prompt-template-card__input {
+  font-size: var(--fz-xs);
+  line-height: 1.55;
+  min-height: 220px;
+}
+
+@media (max-width: 767px) {
+  .prompt-template-card__input {
+    font-size: 16px;
+  }
+}

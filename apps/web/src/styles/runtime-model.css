@@ -1,0 +1,9 @@
+.runtime-model__path {
+  font-size: var(--fz-2xs);
+}
+
+@media (max-width: 767px) {
+  .runtime-model > svg {
+    flex: none;
+  }
+}
