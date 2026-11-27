@@ -1,4 +1,5 @@
 import { CharacterIdSchema } from '@immersion/contracts/characters';
+import { isForbiddenFileNameCharacter } from '@immersion/contracts/common';
 import { describe, expect, it } from 'vitest';
 
 import { FILE_BASE_NAME_MAX_CODE_POINTS, FILE_BASE_NAME_MAX_UTF8_BYTES, fileBaseNameFrom } from './file-base-name.js';
@@ -51,6 +52,20 @@ describe('fileBaseNameFrom', () => {
     expect(FILE_BASE_NAME_MAX_UTF8_BYTES).toBe(200);
     expect(derived).toBe(EMOJI.repeat(50));
     expect(Buffer.byteLength(`_${derived}-xxxxxxxx.jsonl`, 'utf8')).toBeLessThanOrEqual(255);
+  });
+
+  it('replaces every character the plain file name rule forbids', () => {
+    const asciiAndSurrogates = [
+      ...Array.from({ length: 0x80 }, (_unused, codePoint) => String.fromCharCode(codePoint)),
+      LONE_HIGH_SURROGATE,
+      '\uDC09',
+    ];
+    const forbidden = asciiAndSurrogates.filter(isForbiddenFileNameCharacter);
+
+    expect(forbidden).toHaveLength(0x20 + 4 + 2);
+    for (const character of forbidden) {
+      expect(fileBaseNameFrom(`a${character}b`, FALLBACK), JSON.stringify(character)).toBe('a_b');
+    }
   });
 
   it('every derived name satisfies the library id schema, with and without a suffix and as a chat export', () => {

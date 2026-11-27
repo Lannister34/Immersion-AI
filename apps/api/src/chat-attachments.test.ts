@@ -380,6 +380,7 @@ describe('chat attachments', () => {
       { file: 'trailing-dot.png.', mime: 'image/png' },
       { file: 'nested/inner.png', mime: 'image/png' },
       { file: `tab\tname.png`, mime: 'image/png' },
+      { file: '\uD83D.png', mime: 'image/png' },
     ];
     const lines = [
       { chat_metadata: { createdAt: '2026-01-01T00:00:00.000Z', title: 'Чужие вложения' }, user_name: 'Тестер' },
@@ -404,6 +405,7 @@ describe('chat attachments', () => {
       expect.objectContaining({ chatId: 'foreign-attachments', fileName: 'trailing-dot.png.' }),
       expect.objectContaining({ chatId: 'foreign-attachments', fileName: 'nested/inner.png' }),
       expect.objectContaining({ chatId: 'foreign-attachments', fileName: 'tab\tname.png' }),
+      expect.objectContaining({ chatId: 'foreign-attachments', fileName: '\uD83D.png' }),
     ]);
   });
 

@@ -35,6 +35,8 @@ describe('isPlainFileName', () => {
     ['a DEL', `a${String.fromCharCode(0x7f)}b.json`],
     ['a trailing dot', 'evil.json.'],
     ['a trailing space', 'evil.json '],
+    ['a lone high surrogate', '\uD83D.png'],
+    ['a lone low surrogate', 'a\uDC09.png'],
   ])('rejects %s', (_case, value) => {
     expect(isPlainFileName(value)).toBe(false);
   });
