@@ -1,4 +1,11 @@
-import { type SettingsOverviewResponse, SettingsOverviewResponseSchema } from '@immersion/contracts/settings';
+import {
+  type ContextTrimStrategy,
+  DEFAULT_SAMPLING_PARAMETERS,
+  type ModelPresetBindingDto,
+  type SamplerPresetSummary,
+  type SettingsOverviewResponse,
+  SettingsOverviewResponseSchema,
+} from '@immersion/contracts/settings';
 
 import { DEFAULT_USER_NAME } from './get-profile-user-name.js';
 import { readStoredReplyTokenLimit } from './stored-reply-token-limit.js';
@@ -9,19 +16,10 @@ export interface GetSettingsOverviewDependencies {
 }
 
 const DEFAULT_SAMPLER_PRESET = {
-  contextTrimStrategy: 'trim_middle',
   id: 'default',
-  maxContextLength: 8192,
-  maxTokens: 'unlimited',
-  minP: 0.02,
   name: 'Default',
-  presencePenalty: 0,
-  repeatPenalty: 1.05,
-  repeatPenaltyRange: 2048,
-  temperature: 1,
-  topK: 0,
-  topP: 1,
-} satisfies SettingsOverviewResponse['sampler']['presets'][number];
+  ...DEFAULT_SAMPLING_PARAMETERS,
+} satisfies SamplerPresetSummary;
 
 function getString(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback;
@@ -60,16 +58,11 @@ function getNonNegativeNumber(value: unknown, fallback: number) {
   return parsed >= 0 ? parsed : fallback;
 }
 
-function getContextTrimStrategy(
-  value: unknown,
-): SettingsOverviewResponse['sampler']['presets'][number]['contextTrimStrategy'] {
+function getContextTrimStrategy(value: unknown): ContextTrimStrategy {
   return value === 'trim_start' ? 'trim_start' : 'trim_middle';
 }
 
-function getModelBindings(
-  value: unknown,
-  presets: SettingsOverviewResponse['sampler']['presets'],
-): SettingsOverviewResponse['sampler']['modelBindings'] {
+function getModelBindings(value: unknown, presets: SamplerPresetSummary[]): ModelPresetBindingDto[] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return [];
   }

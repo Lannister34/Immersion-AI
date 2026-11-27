@@ -1,14 +1,11 @@
 import {
-  type SettingsProfileSchema,
+  type SettingsProfile,
   type UpdateSettingsProfileCommand,
   type UpdateSettingsProfileResponse,
   UpdateSettingsProfileResponseSchema,
 } from '@immersion/contracts/settings';
-import type { z } from 'zod';
 
 import type { UserSettingsDocument } from './user-settings-document.js';
-
-type SettingsProfile = z.infer<typeof SettingsProfileSchema>;
 
 export interface UpdateSettingsProfileDependencies {
   readonly userSettings: Pick<UserSettingsDocument, 'update'>;

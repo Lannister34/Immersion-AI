@@ -1,8 +1,7 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
-import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
+import type { SamplerPresetSummary, SettingsOverviewResponse } from '@immersion/contracts/settings';
 import type { PromptCharacterSnapshot } from '@immersion/domain/prompting';
 import { describe, expect, it } from 'vitest';
-import type { ActiveSamplerPreset } from '../settings/application/active-sampler-preset.js';
 import { buildChatReplyPrompt, buildChatReplyPromptBundle } from './application/build-chat-reply-prompt.js';
 
 const settings: SettingsOverviewResponse = {
@@ -31,7 +30,7 @@ const roleplayCharacter: PromptCharacterSnapshot = {
   systemPrompt: null,
 };
 
-const defaultSamplerPreset: ActiveSamplerPreset = {
+const defaultSamplerPreset: SamplerPresetSummary = {
   contextTrimStrategy: 'trim_middle',
   id: 'default',
   maxContextLength: 8192,

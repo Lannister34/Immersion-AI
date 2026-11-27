@@ -1,7 +1,6 @@
 import type { ChatSessionDto } from '@immersion/contracts/chats';
-import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
+import type { SamplerPresetSummary, SettingsOverviewResponse } from '@immersion/contracts/settings';
 import { describe, expect, it } from 'vitest';
-import type { ActiveSamplerPreset } from '../settings/application/active-sampler-preset.js';
 import { buildChatReplyPromptBundleWithTokenCounter } from './application/build-chat-reply-prompt.js';
 import type { TokenCounter } from './application/token-counter.js';
 
@@ -23,7 +22,7 @@ const settings: SettingsOverviewResponse = {
   },
 };
 
-const defaultSamplerPreset: ActiveSamplerPreset = {
+const defaultSamplerPreset: SamplerPresetSummary = {
   contextTrimStrategy: 'trim_middle',
   id: 'default',
   maxContextLength: 8192,

@@ -1,11 +1,12 @@
 import type { ChatGenerationSettingsDto, ChatSamplingOverridesDto } from '@immersion/contracts/chats';
 import type { ReplyTokenLimit } from '@immersion/contracts/common';
-import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
+import type {
+  ContextTrimStrategy,
+  SamplerPresetSummary,
+  SettingsOverviewResponse,
+} from '@immersion/contracts/settings';
 
-import {
-  type ActiveSamplerPreset,
-  resolveActiveSamplerPreset,
-} from '../../settings/application/active-sampler-preset.js';
+import { resolveActiveSamplerPreset } from '../../settings/index.js';
 
 export type SamplerPresetResolutionSource = 'active_preset' | 'chat_preset' | 'model_binding';
 
@@ -23,7 +24,7 @@ export interface AppliedChatSamplingOverrides {
 }
 
 export interface ResolvedChatGenerationSamplingSettings {
-  contextTrimStrategy: ActiveSamplerPreset['contextTrimStrategy'];
+  contextTrimStrategy: ContextTrimStrategy;
   maxContextLength: number;
   maxTokens: ReplyTokenLimit;
   minP: number;
@@ -40,7 +41,7 @@ export interface ResolvedChatGenerationSettings {
   ignoredChatSamplerPresetId: string | null;
   modelBindingPresetId: string | null;
   modelName: string | null;
-  samplerPreset: ActiveSamplerPreset;
+  samplerPreset: SamplerPresetSummary;
   samplerPresetSource: SamplerPresetResolutionSource;
   sampling: ResolvedChatGenerationSamplingSettings;
 }
@@ -55,7 +56,7 @@ export class InvalidChatGenerationSettingsResolutionError extends Error {
 interface SamplerPresetResolution {
   ignoredChatSamplerPresetId: string | null;
   modelBindingPresetId: string | null;
-  preset: ActiveSamplerPreset;
+  preset: SamplerPresetSummary;
   source: SamplerPresetResolutionSource;
 }
 

@@ -4,7 +4,7 @@ import {
   type GenerateFirstMessageResponse,
   GenerateFirstMessageResponseSchema,
 } from '@immersion/contracts/generation';
-import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
+import type { ResponseLanguage } from '@immersion/contracts/settings';
 
 import type { Clock } from '../../../platform/clock/clock.js';
 import { ChatNotFoundError, ChatTranscriptNotEmptyError } from '../../chats/index.js';
@@ -30,10 +30,7 @@ export interface GenerateFirstMessageDependencies {
   readonly tokenCounter: TokenCounter;
 }
 
-function buildLanguageSentence(
-  responseLanguage: SettingsOverviewResponse['profile']['responseLanguage'],
-  hasCharacterContext: boolean,
-): string | null {
+function buildLanguageSentence(responseLanguage: ResponseLanguage, hasCharacterContext: boolean): string | null {
   if (responseLanguage === 'ru') {
     return 'Write it in Russian.';
   }
@@ -52,7 +49,7 @@ function buildLanguageSentence(
 function buildOpeningInstruction(
   session: ChatSessionDto,
   characterName: string | null,
-  responseLanguage: SettingsOverviewResponse['profile']['responseLanguage'],
+  responseLanguage: ResponseLanguage,
 ): string {
   const sentences =
     characterName !== null

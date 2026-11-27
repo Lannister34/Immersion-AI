@@ -10,6 +10,7 @@ export const ProviderModeSchema = z.enum(['builtin', 'external']);
 export type ProviderMode = z.infer<typeof ProviderModeSchema>;
 
 export const ProviderFieldTypeSchema = z.enum(['text', 'password']);
+export type ProviderFieldType = z.infer<typeof ProviderFieldTypeSchema>;
 
 export const ProviderFieldSchema = z.object({
   key: z.string().min(1),

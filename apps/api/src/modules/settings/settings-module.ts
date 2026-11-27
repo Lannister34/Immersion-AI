@@ -1,7 +1,7 @@
-import type { SettingsOverviewResponse } from '@immersion/contracts/settings';
+import type { SamplerPresetSummary, SettingsOverviewResponse } from '@immersion/contracts/settings';
 import type { FastifyPluginAsync } from 'fastify';
 
-import { type ActiveSamplerPreset, resolveSamplerPresetForModel } from './application/active-sampler-preset.js';
+import { resolveSamplerPresetForModel } from './application/active-sampler-preset.js';
 import { getProfileUserName } from './application/get-profile-user-name.js';
 import { getSettingsOverview } from './application/get-settings-overview.js';
 import { createSettingsRoutes, type SettingsRoutesDependencies } from './interface/http/routes.js';
@@ -12,8 +12,8 @@ export interface SettingsModule {
   readonly routes: FastifyPluginAsync;
   getSettingsOverview(): SettingsOverviewResponse;
   getProfileUserName(): string;
-  findSamplerPreset(presetId: string): ActiveSamplerPreset | null;
-  resolveSamplerPresetForModel(modelName: string | null): ActiveSamplerPreset;
+  findSamplerPreset(presetId: string): SamplerPresetSummary | null;
+  resolveSamplerPresetForModel(modelName: string | null): SamplerPresetSummary;
 }
 
 export function createSettingsModule(dependencies: SettingsModuleDependencies): SettingsModule {
