@@ -1,4 +1,4 @@
-import type { ChatSessionDto } from '@immersion/contracts/chats';
+import type { ChatMessageAttachmentDto, ChatSessionDto } from '@immersion/contracts/chats';
 import type { ListGenerationJobsResponse, StartChatReplyGenerationJobResponse } from '@immersion/contracts/generation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useReducer } from 'react';
@@ -20,7 +20,7 @@ import { generationReadinessQueryKey } from './generation-readiness-query';
 import { useGenerationJobEvents } from './use-generation-job-events';
 
 interface StartChatReplyGenerationMutationVariables {
-  attachmentIds: string[];
+  attachments: ChatMessageAttachmentDto[];
   message: string;
 }
 
@@ -72,14 +72,14 @@ export function useChatReplyGeneration(chatId: string) {
   };
 
   const startGenerationMutation = useMutation({
-    mutationFn: ({ attachmentIds, message }: StartChatReplyGenerationMutationVariables) =>
+    mutationFn: ({ attachments, message }: StartChatReplyGenerationMutationVariables) =>
       startChatReplyGenerationJob({
-        ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
+        ...(attachments.length > 0 ? { attachmentIds: attachments.map((attachment) => attachment.id) } : {}),
         chatId,
         message,
         mode: 'reply',
       }),
-    onMutate: async ({ message }): Promise<StartChatReplyGenerationContext> => {
+    onMutate: async ({ attachments, message }): Promise<StartChatReplyGenerationContext> => {
       await queryClient.cancelQueries({
         queryKey: chatSessionQueryKey(chatId),
       });
@@ -90,6 +90,7 @@ export function useChatReplyGeneration(chatId: string) {
         queryClient.setQueryData(
           chatSessionQueryKey(chatId),
           appendOptimisticUserMessage(previousSession, {
+            attachments,
             content: message,
             createdAt: new Date().toISOString(),
             id: createOptimisticMessageId(),
@@ -178,11 +179,12 @@ export function useChatReplyGeneration(chatId: string) {
       answerGenerationMutation.isPending ||
       regenerateGenerationMutation.isPending ||
       Boolean(activeGenerationJob && isActiveGenerationJob(activeGenerationJob)),
+    isSendingMessage: startGenerationMutation.isPending,
     latestJob: latestGenerationJob,
     regenerate: () => regenerateGenerationMutation.mutateAsync(),
-    start: (message: string, attachmentIds: string[] = []) =>
+    start: (message: string, attachments: ChatMessageAttachmentDto[] = []) =>
       startGenerationMutation.mutateAsync({
-        attachmentIds,
+        attachments,
         message,
       }),
   };

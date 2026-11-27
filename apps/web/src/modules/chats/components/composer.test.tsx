@@ -47,7 +47,6 @@ async function renderComposer(props: Partial<ComposerProps> = {}) {
       onOpenSettings={ignore}
       onRemoveAttachment={ignore}
       onSubmit={ignore}
-      sendHint={null}
       value="Держим курс на маяк"
       {...props}
     />,

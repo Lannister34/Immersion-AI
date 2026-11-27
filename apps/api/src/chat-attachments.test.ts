@@ -7,10 +7,12 @@ import {
   UploadChatAttachmentResponseSchema,
 } from '@immersion/contracts/chats';
 import { IMAGE_UPLOAD_MAX_BYTES, IMAGE_UPLOAD_MAX_MEGABYTES } from '@immersion/contracts/common';
+import { StartChatReplyGenerationJobResponseSchema } from '@immersion/contracts/generation';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { snapshotDataRoot } from './test-support/data-root-snapshot.js';
+import { waitForGenerationJob } from './test-support/generation-jobs.js';
 import { buildPng } from './test-support/png-image.js';
 import type { TestApi } from './test-support/test-api.js';
 import { useTestApi } from './test-support/use-test-api.js';
@@ -173,6 +175,101 @@ describe('chat attachments', () => {
     const userMessage = session.messages.find((message) => message.role === 'user');
 
     expect(userMessage?.attachments).toEqual([{ id: attachment.id, mimeType: 'image/png', url: attachment.url }]);
+  });
+
+  it('sends a message that has only an image as an image part without a text part, and keeps it for the answer', async () => {
+    const { app, http } = api();
+    http.once('POST', `${PROVIDER_URL}/v1/chat/completions`, () =>
+      Response.json({ error: 'provider failed' }, { status: 500 }),
+    );
+    const chat = await createChat(app);
+    const attachment = await uploadPng(app, chat.id);
+    const imageOnlyTurn = {
+      content: [{ image_url: { url: `data:image/png;base64,${buildPng().toString('base64')}` }, type: 'image_url' }],
+      role: 'user',
+    };
+
+    const failed = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply',
+      payload: { attachmentIds: [attachment.id], chatId: chat.id, message: '  ' },
+    });
+
+    expect(failed.statusCode).toBe(502);
+    expect(http.requests[0]?.json(ChatCompletionRequestBodySchema).messages.at(-1)).toEqual(imageOnlyTurn);
+
+    const afterFailure = GetChatSessionResponseSchema.parse(
+      (await app.inject({ method: 'GET', url: `/api/chats/${chat.id}` })).json(),
+    );
+    expect(afterFailure.messages.at(-1)).toMatchObject({
+      attachments: [{ id: attachment.id, mimeType: 'image/png', url: attachment.url }],
+      content: '',
+      role: 'user',
+    });
+
+    http.on('POST', `${PROVIDER_URL}/v1/chat/completions`, () =>
+      Response.json({ choices: [{ message: { content: 'Чёрный пиксель.' } }] }),
+    );
+    const answered = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply',
+      payload: { chatId: chat.id, mode: 'answer' },
+    });
+
+    expect(answered.statusCode).toBe(200);
+    expect(http.requests[1]?.json(ChatCompletionRequestBodySchema).messages.at(-1)).toEqual(imageOnlyTurn);
+    const afterAnswer = GetChatSessionResponseSchema.parse(
+      (await app.inject({ method: 'GET', url: `/api/chats/${chat.id}` })).json(),
+    );
+    expect(afterAnswer.messages.map(({ content, role }) => ({ content, role }))).toEqual([
+      { content: '', role: 'user' },
+      { content: 'Чёрный пиксель.', role: 'assistant' },
+    ]);
+  });
+
+  it('runs a reply job for a message that has only an image, as the web sends it', async () => {
+    const testApi = api();
+    testApi.http.on('POST', `${PROVIDER_URL}/v1/chat/completions`, () =>
+      Response.json({ choices: [{ message: { content: 'Чёрный пиксель.' } }] }),
+    );
+    const chat = await createChat(testApi.app);
+    const attachment = await uploadPng(testApi.app, chat.id);
+
+    const started = await testApi.app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply-jobs',
+      payload: { attachmentIds: [attachment.id], chatId: chat.id, message: '', mode: 'reply' },
+    });
+
+    expect(started.statusCode).toBe(202);
+    const { job, session } = StartChatReplyGenerationJobResponseSchema.parse(started.json());
+    expect(session.messages.at(-1)).toMatchObject({ attachments: [{ id: attachment.id }], content: '', role: 'user' });
+
+    await waitForGenerationJob(testApi, job.id, 'completed');
+
+    expect(testApi.http.requests[0]?.json(ChatCompletionRequestBodySchema).messages.at(-1)).toEqual({
+      content: [{ image_url: { url: `data:image/png;base64,${buildPng().toString('base64')}` }, type: 'image_url' }],
+      role: 'user',
+    });
+    const after = GetChatSessionResponseSchema.parse(
+      (await testApi.app.inject({ method: 'GET', url: `/api/chats/${chat.id}` })).json(),
+    );
+    expect(after.messages.at(-1)).toMatchObject({ content: 'Чёрный пиксель.', role: 'assistant' });
+  });
+
+  it('refuses a message that has neither text nor images without calling the provider', async () => {
+    const { app, http } = api();
+    const chat = await createChat(app);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply',
+      payload: { attachmentIds: [], chatId: chat.id, message: ' \n ' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: 'validation_error' });
+    expect(http.requests).toEqual([]);
   });
 
   it('refuses to send an attachment that does not belong to the chat', async () => {

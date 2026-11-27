@@ -18,6 +18,7 @@ export interface ChatAttachmentsDraft {
   error: string | null;
   isUploading: boolean;
   remove: (attachmentId: string) => void;
+  restore: (attachments: ChatMessageAttachmentDto[]) => void;
 }
 
 export function useChatAttachments(chatId: string): ChatAttachmentsDraft {
@@ -78,6 +79,9 @@ export function useChatAttachments(chatId: string): ChatAttachmentsDraft {
     remove: (attachmentId) => {
       setAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
       setPickError(null);
+    },
+    restore: (restored) => {
+      setAttachments(restored);
     },
   };
 }

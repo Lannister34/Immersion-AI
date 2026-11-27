@@ -1044,6 +1044,7 @@ describe('generation routes', () => {
     const chat = await createChat();
     const invalidCommands = [
       { url: '/api/generation/chat-reply-jobs', payload: { chatId: chat.id, message: '   ' } },
+      { url: '/api/generation/chat-reply-jobs', payload: { attachmentIds: [], chatId: chat.id, message: '' } },
       { url: '/api/generation/chat-reply-jobs/regenerate', payload: { chatId: 42 } },
     ];
 
