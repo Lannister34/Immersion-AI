@@ -30,6 +30,7 @@ async function renderComposer(props: Partial<ComposerProps> = {}) {
       attachmentsError={null}
       attachmentsHint="Прикрепить изображение"
       attachmentsNotice={null}
+      attachmentsUnavailableReason="Загруженная модель работает только с текстом."
       canAnswer={false}
       canAttachImages
       canContinue={false}
@@ -39,6 +40,7 @@ async function renderComposer(props: Partial<ComposerProps> = {}) {
       isUploadingAttachment={false}
       onAnswer={ignore}
       onAttachFiles={ignore}
+      onAttachmentsNotice={ignore}
       onCancel={ignore}
       onChange={ignore}
       onContinue={ignore}
@@ -47,6 +49,7 @@ async function renderComposer(props: Partial<ComposerProps> = {}) {
       onOpenSettings={ignore}
       onRemoveAttachment={ignore}
       onSubmit={ignore}
+      sendRefusal={null}
       value="Держим курс на маяк"
       {...props}
     />,
@@ -80,9 +83,69 @@ describe('Composer', () => {
     const image = new File(['x'], 'маяк.png', { type: 'image/png' });
 
     fireEvent.paste(screen.getByRole('textbox'), {
-      clipboardData: { files: [image, new File(['x'], 'лоция.txt', { type: 'text/plain' })] },
+      clipboardData: { files: [image, new File(['x'], 'лоция.txt', { type: 'text/plain' })], types: ['Files'] },
     });
 
     expect(onAttachFiles).toHaveBeenCalledExactlyOnceWith([image]);
+  });
+
+  it('says why a pasted image is not attached instead of ignoring it', async () => {
+    const onAttachFiles = vi.fn<ComposerProps['onAttachFiles']>();
+    const onAttachmentsNotice = vi.fn<ComposerProps['onAttachmentsNotice']>();
+    await renderComposer({ canAttachImages: false, onAttachFiles, onAttachmentsNotice });
+
+    fireEvent.paste(screen.getByRole('textbox'), {
+      clipboardData: { files: [new File(['x'], 'маяк.png', { type: 'image/png' })], types: ['Files'] },
+    });
+
+    expect(onAttachFiles).not.toHaveBeenCalled();
+    expect(onAttachmentsNotice).toHaveBeenCalledExactlyOnceWith('Загруженная модель работает только с текстом.');
+  });
+
+  it('lets text pasted beside an image reach the textarea when the image cannot be attached', async () => {
+    const onAttachmentsNotice = vi.fn<ComposerProps['onAttachmentsNotice']>();
+    await renderComposer({ canAttachImages: false, onAttachmentsNotice });
+
+    const pasted = fireEvent.paste(screen.getByRole('textbox'), {
+      clipboardData: {
+        files: [new File(['x'], 'ячейки.png', { type: 'image/png' })],
+        types: ['text/plain', 'text/html', 'Files'],
+      },
+    });
+
+    expect(pasted).toBe(true);
+    expect(onAttachmentsNotice).toHaveBeenCalledExactlyOnceWith('Загруженная модель работает только с текстом.');
+  });
+
+  it('leaves a paste with no image to the textarea', async () => {
+    const onAttachmentsNotice = vi.fn<ComposerProps['onAttachmentsNotice']>();
+    await renderComposer({ canAttachImages: false, onAttachmentsNotice });
+
+    const pasted = fireEvent.paste(screen.getByRole('textbox'), { clipboardData: { files: [] } });
+
+    expect(pasted).toBe(true);
+    expect(onAttachmentsNotice).not.toHaveBeenCalled();
+  });
+
+  it('shows why the draft cannot be sent', async () => {
+    await renderComposer({ canSend: false, sendRefusal: 'Уберите изображения.' });
+
+    expect(screen.getByRole('alert').textContent).toBe('Уберите изображения.');
+  });
+
+  it('marks an attached image whose file is gone and still lets it be removed', async () => {
+    const onRemoveAttachment = vi.fn<ComposerProps['onRemoveAttachment']>();
+    const { container } = await renderComposer({
+      attachments: [{ id: 'missing.png', mimeType: 'image/png', url: '/api/chats/chat-1/attachments/missing.png' }],
+      onRemoveAttachment,
+    });
+
+    const image = container.querySelector('.composer-thumb img');
+    if (!image) throw new Error('the attached image is not shown');
+    fireEvent.error(image);
+
+    expect(screen.getByText('нет файла')).toBeTruthy();
+    fireEvent.click(screen.getByTitle('Убрать изображение'));
+    expect(onRemoveAttachment).toHaveBeenCalledExactlyOnceWith('missing.png');
   });
 });

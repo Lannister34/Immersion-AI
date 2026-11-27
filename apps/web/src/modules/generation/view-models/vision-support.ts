@@ -7,7 +7,15 @@ export interface VisionSupportViewModel {
   tone: 'muted' | 'ok';
 }
 
-const VISION_SUPPORT_VIEW: Record<VisionSupport, VisionSupportViewModel> = {
+export type VisionSupportState = VisionSupport | 'model-not-ready';
+
+const VISION_SUPPORT_VIEW: Record<VisionSupportState, VisionSupportViewModel> = {
+  'model-not-ready': {
+    allowsImages: true,
+    hint: 'Модель ещё не готова. Изображения можно прикрепить сейчас, а отправить — когда модель запустится.',
+    label: 'Изображения: модель не готова',
+    tone: 'muted',
+  },
   supported: {
     allowsImages: true,
     hint: 'Модель принимает изображения — их можно прикреплять к сообщению.',
@@ -28,6 +36,6 @@ const VISION_SUPPORT_VIEW: Record<VisionSupport, VisionSupportViewModel> = {
   },
 };
 
-export function describeVisionSupport(support: VisionSupport | undefined): VisionSupportViewModel {
+export function describeVisionSupport(support: VisionSupportState | undefined): VisionSupportViewModel {
   return VISION_SUPPORT_VIEW[support ?? 'unknown'];
 }

@@ -1,5 +1,5 @@
 import type { ChatMessageAttachmentDto } from '@immersion/contracts/chats';
-import { type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent, useRef } from 'react';
+import { type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent, useRef, useState } from 'react';
 
 import { createApiUrl } from '../../../shared/api/client';
 import {
@@ -14,17 +14,20 @@ import {
 } from '../../../shared/ui/icons';
 import { formatContextEstimate } from '../view-models/context-estimate';
 import type { ContextStats } from '../view-models/context-stats';
+import { planImageDrop } from '../view-models/image-drop';
 import { isImageFile } from '../view-models/is-image-file';
 
 export interface ComposerProps {
-  attachments: ChatMessageAttachmentDto[];
+  attachments: readonly ChatMessageAttachmentDto[];
   attachmentsHint: string;
   attachmentsError: string | null;
   attachmentsNotice: string | null;
+  attachmentsUnavailableReason: string;
   blockReason?: string | undefined;
   canAttachImages: boolean;
   isUploadingAttachment: boolean;
   onAttachFiles: (files: readonly File[]) => void;
+  onAttachmentsNotice: (notice: string | null) => void;
   onRemoveAttachment: (attachmentId: string) => void;
   canAnswer: boolean;
   canContinue: boolean;
@@ -39,7 +42,35 @@ export interface ComposerProps {
   onOpenContext: () => void;
   onOpenSettings: () => void;
   onSubmit: (event?: FormEvent) => void;
+  sendRefusal: string | null;
   value: string;
+}
+
+interface ComposerThumbProps {
+  attachment: ChatMessageAttachmentDto;
+  onRemove: () => void;
+}
+
+function ComposerThumb({ attachment, onRemove }: ComposerThumbProps) {
+  const [isMissing, setIsMissing] = useState(false);
+
+  return (
+    <span className="composer-thumb" data-missing={isMissing ? 'true' : 'false'}>
+      {isMissing ? (
+        <span
+          className="composer-thumb__missing"
+          title="Изображение не открывается — возможно, файл удалён. Уберите его и приложите заново."
+        >
+          нет файла
+        </span>
+      ) : (
+        <img alt="" onError={() => setIsMissing(true)} src={createApiUrl(attachment.url)} />
+      )}
+      <button className="composer-thumb__remove" onClick={onRemove} title="Убрать изображение" type="button">
+        <XIcon size={10} />
+      </button>
+    </span>
+  );
 }
 
 export function Composer({
@@ -47,10 +78,12 @@ export function Composer({
   attachmentsError,
   attachmentsHint,
   attachmentsNotice,
+  attachmentsUnavailableReason,
   blockReason,
   canAttachImages,
   isUploadingAttachment,
   onAttachFiles,
+  onAttachmentsNotice,
   onRemoveAttachment,
   canAnswer,
   canContinue,
@@ -65,6 +98,7 @@ export function Composer({
   onOpenContext,
   onOpenSettings,
   onSubmit,
+  sendRefusal,
   value,
 }: ComposerProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -77,16 +111,20 @@ export function Composer({
   };
 
   const attachPastedImages = (event: ClipboardEvent<HTMLTextAreaElement>) => {
-    if (!canAttachImages) {
+    const files = Array.from(event.clipboardData.files);
+
+    if (!files.some(isImageFile)) {
       return;
     }
 
-    const pasted = Array.from(event.clipboardData.files).filter(isImageFile);
-
-    if (pasted.length > 0) {
+    const plan = planImageDrop({ canAttachImages, files, unavailableReason: attachmentsUnavailableReason });
+    if (plan.images.length > 0 || !event.clipboardData.types.includes('text/plain')) {
       event.preventDefault();
-      onAttachFiles(pasted);
     }
+    if (plan.images.length > 0) {
+      onAttachFiles(plan.images);
+    }
+    onAttachmentsNotice(plan.notice);
   };
 
   return (
@@ -98,17 +136,11 @@ export function Composer({
       {attachments.length > 0 ? (
         <div className="row gap-6" style={{ flexWrap: 'wrap' }}>
           {attachments.map((attachment) => (
-            <span className="composer-thumb" key={attachment.id}>
-              <img alt="" src={createApiUrl(attachment.url)} />
-              <button
-                className="composer-thumb__remove"
-                onClick={() => onRemoveAttachment(attachment.id)}
-                title="Убрать изображение"
-                type="button"
-              >
-                <XIcon size={10} />
-              </button>
-            </span>
+            <ComposerThumb
+              attachment={attachment}
+              key={attachment.id}
+              onRemove={() => onRemoveAttachment(attachment.id)}
+            />
           ))}
         </div>
       ) : null}
@@ -203,6 +235,11 @@ export function Composer({
           )}
         </div>
       </div>
+      {sendRefusal ? (
+        <div role="alert" style={{ color: 'var(--danger)', fontSize: 'var(--fz-2xs)' }}>
+          {sendRefusal}
+        </div>
+      ) : null}
       {attachmentsNotice ? (
         <div className="muted" style={{ fontSize: 'var(--fz-2xs)' }}>
           {attachmentsNotice}

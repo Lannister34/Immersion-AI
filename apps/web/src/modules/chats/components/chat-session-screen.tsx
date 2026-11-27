@@ -27,7 +27,7 @@ import {
 } from '../../generation';
 import { settingsOverviewQueryOptions } from '../../settings';
 import { useBranchChat } from '../mutations/use-branch-chat';
-import { useChatAttachments } from '../mutations/use-chat-attachments';
+import { SEND_FAILED_MESSAGE, useChatDraft } from '../mutations/use-chat-draft';
 import { useDeleteChat } from '../mutations/use-delete-chat';
 import { useDeleteChatMessage } from '../mutations/use-delete-chat-message';
 import { useUpdateChatMessage } from '../mutations/use-update-chat-message';
@@ -71,9 +71,9 @@ function describeGenerateTitleError(error: unknown): string | null {
 const ignoreErrorShownByGenerationState = (): void => undefined;
 
 export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
-  const [draftMessage, setDraftMessage] = useState('');
   const [editing, setEditing] = useState<MessageEditTarget | null>(null);
-  const attachmentsDraft = useChatAttachments(chatId);
+  const draft = useChatDraft(chatId);
+  const draftMessage = draft.text;
   const [dropNotice, setDropNotice] = useState<string | null>(null);
   const debouncedDraftMessage = useDebouncedValue(draftMessage, 400);
   const panelTab = useUiShellStore((state) => state.chatRightPanelTab);
@@ -189,11 +189,8 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const jobErrorMessage =
     chatReplyGeneration.latestJob?.status === 'failed' ? chatReplyGeneration.latestJob.error?.message : undefined;
   const generationErrorMessage = chatReplyGeneration.error
-    ? getApiErrorMessage(
-        chatReplyGeneration.error,
-        'Не удалось получить ответ модели. Проверьте API и повторите попытку.',
-      )
-    : jobErrorMessage;
+    ? getApiErrorMessage(chatReplyGeneration.error, SEND_FAILED_MESSAGE)
+    : (draft.sendError ?? jobErrorMessage);
   const deleteChatErrorMessage = deleteChatMutation.error
     ? getApiErrorMessage(deleteChatMutation.error, 'Не удалось удалить чат.')
     : null;
@@ -207,7 +204,11 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
 
   const blockReason = generationAvailability.blockReason;
   const isStreaming = Boolean(chatReplyGeneration.activeJob);
-  const vision = describeVisionSupport(generationReadinessQuery.data?.visionSupport);
+  const vision = describeVisionSupport(
+    generationAvailability.isBlocked ? 'model-not-ready' : generationReadinessQuery.data?.visionSupport,
+  );
+  const isSendingMessage = draft.isSending || chatReplyGeneration.isSendingMessage;
+  const isReplyStarting = chatReplyGeneration.isPending || draft.isSending;
   const showReasoning = settingsOverviewQuery.data?.profile.thinkingEnabled ?? true;
   const messageActions = deriveMessageActions({
     blockReason,
@@ -216,18 +217,18 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
     isGeneratingFirstMessage: generateFirstMessageMutation.isPending,
     isMutatingMessages:
       updateMessageMutation.isPending || deleteMessageMutation.isPending || branchChatMutation.isPending,
-    isReplyStarting: chatReplyGeneration.isPending,
+    isReplyStarting,
     messages: session.messages,
   });
   const composerActions = deriveComposerActions({
-    attachmentCount: attachmentsDraft.attachments.length,
+    attachmentCount: draft.attachments.length,
     blockReason,
     hasActiveJob: isStreaming,
     isEditingMessage: editing !== null,
     isGeneratingFirstMessage: generateFirstMessageMutation.isPending,
-    isReplyStarting: chatReplyGeneration.isPending,
-    isSendingMessage: chatReplyGeneration.isSendingMessage,
-    isUploadingAttachment: attachmentsDraft.isUploading,
+    isReplyStarting,
+    isSendingMessage,
+    isUploadingAttachment: draft.uploadingCount > 0,
     modelAcceptsImages: vision.allowsImages,
     text: draftMessage,
   });
@@ -237,23 +238,15 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
   const onSubmit = async (event?: FormEvent) => {
     event?.preventDefault();
     if (!canSend) return;
-    const message = draftMessage;
-    const attachments = attachmentsDraft.attachments;
-    setDraftMessage('');
-    attachmentsDraft.clear();
     setDropNotice(null);
-    try {
-      await chatReplyGeneration.start(message, attachments);
-    } catch {
-      setDraftMessage(message);
-      attachmentsDraft.restore(attachments);
-    }
+    await draft.send(chatReplyGeneration.start);
   };
 
   const attachFiles = (files: readonly File[]) => {
     setDropNotice(null);
-    attachmentsDraft.attach(files);
+    draft.attach(files);
   };
+  const attachmentsUnavailableReason = vision.allowsImages ? 'Дождитесь отправки сообщения.' : vision.hint;
 
   const onContinue = async () => {
     if (!canContinue) return;
@@ -400,9 +393,7 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
             minHeight: 0,
             overflow: 'hidden',
           }}
-          unavailableReason={
-            blockReason ?? (chatReplyGeneration.isSendingMessage ? 'Дождитесь отправки сообщения.' : vision.hint)
-          }
+          unavailableReason={attachmentsUnavailableReason}
         >
           <ChatHeader
             avatarUrl={session.characterAvatarUrl}
@@ -517,28 +508,31 @@ export function ChatSessionScreen({ chatId }: ChatSessionScreenProps) {
                 </div>
               ) : null}
               <Composer
-                attachments={attachmentsDraft.attachments}
-                attachmentsError={attachmentsDraft.error}
+                attachments={draft.attachments}
+                attachmentsError={draft.attachmentsError}
                 attachmentsHint={vision.hint}
                 attachmentsNotice={dropNotice}
+                attachmentsUnavailableReason={attachmentsUnavailableReason}
                 blockReason={blockReason}
                 canAttachImages={canAttachImages}
-                isUploadingAttachment={attachmentsDraft.isUploading}
+                isUploadingAttachment={draft.uploadingCount > 0}
                 onAttachFiles={attachFiles}
-                onRemoveAttachment={attachmentsDraft.remove}
+                onAttachmentsNotice={setDropNotice}
+                onRemoveAttachment={draft.remove}
                 canAnswer={canAnswer}
                 canContinue={canContinue}
                 canSend={canSend}
                 draftStats={draftTokenStats}
                 isStreaming={isStreaming}
                 onCancel={chatReplyGeneration.cancel}
-                onChange={(event) => setDraftMessage(event.currentTarget.value)}
+                onChange={(event) => draft.setText(event.currentTarget.value)}
                 onAnswer={() => void onAnswer()}
                 onContinue={() => void onContinue()}
                 onKeyDown={onComposerKeyDown}
                 onOpenContext={() => openPanelTab('context')}
                 onOpenSettings={() => openPanelTab('model')}
                 onSubmit={onSubmit}
+                sendRefusal={composerActions.sendRefusal}
                 value={draftMessage}
               />
             </div>
