@@ -797,6 +797,39 @@ describe('generation routes', () => {
     expect(systemMessage?.content).not.toContain('Не должно сработать.');
   });
 
+  it('replies in a chat linked to a scenario and a lorebook whose stored ids are not plain file names, without them', async () => {
+    const worldsDir = path.join(api().dataRoot, 'worlds');
+    await fs.mkdir(worldsDir, { recursive: true });
+    await fs.writeFile(
+      path.join(worldsDir, 'Studio.json'),
+      JSON.stringify({ entries: [{ content: 'Студия керамики.', keys: ['Меандр'] }], name: 'Студия' }),
+      'utf8',
+    );
+    const chatsDir = path.join(api().dataRoot, 'chats', '_no_character_');
+    await fs.mkdir(chatsDir, { recursive: true });
+    const header = {
+      chat_metadata: { createdAt: '2026-01-01T00:00:00.000Z', title: 'Чужие ссылки' },
+      lorebook_ids: ['tab\tname.json', 'Studio.json'],
+      scenario_id: 'notes.json:hidden',
+      user_name: 'Тестер',
+    };
+    await fs.writeFile(path.join(chatsDir, 'foreign-links.jsonl'), `${JSON.stringify(header)}\n`, 'utf8');
+    answerWith('Ответ.');
+
+    const reply = await api().app.inject({
+      method: 'POST',
+      url: '/api/generation/chat-reply',
+      payload: { chatId: 'foreign-links', message: 'Расскажи про Меандр.' },
+    });
+
+    expect(reply.statusCode).toBe(200);
+    expect(JSON.stringify(sentBody().messages)).toContain('Студия керамики.');
+    expect(api().logs.lines.filter((line) => line.level === 'warn')).toEqual([
+      expect.objectContaining({ fileName: 'notes.json:hidden' }),
+      expect.objectContaining({ fileName: 'tab\tname.json' }),
+    ]);
+  });
+
   it('keeps the generic helper prompt for chats without a character', async () => {
     const chat = await createChat();
 

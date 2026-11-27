@@ -1,18 +1,9 @@
 import { z } from 'zod';
 
-const NULL_CHARACTER = String.fromCharCode(0);
+import { isPlainFileName } from './plain-file-name.js';
 
-const FORBIDDEN_FILE_ID_SEQUENCES = ['\\', '/', ':', '..', NULL_CHARACTER] as const;
-
-export function createFileIdSchema(label: string) {
-  return z
-    .string()
-    .min(1)
-    .max(200)
-    .refine(
-      (value) => !value.startsWith('.') && FORBIDDEN_FILE_ID_SEQUENCES.every((sequence) => !value.includes(sequence)),
-      {
-        message: `${label} must be a plain file name without path separators.`,
-      },
-    );
+export function createFileIdSchema(label: string): z.ZodString {
+  return z.string().refine(isPlainFileName, {
+    message: `${label} must be a plain file name without path separators.`,
+  });
 }

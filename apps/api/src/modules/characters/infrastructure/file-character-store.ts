@@ -8,6 +8,11 @@ import { isErrnoCode } from '../../../platform/errno-code.js';
 import type { LogPort } from '../../../platform/logging/log-port.js';
 import { writeFileAtomically, writeJsonFileAtomically } from '../../../platform/storage/atomic-file.js';
 import { resolveContainedFilePath } from '../../../platform/storage/contained-path.js';
+import { fileBaseNameFrom } from '../../../platform/storage/file-base-name.js';
+import {
+  createListedFileNameFilter,
+  type ListedFileNameFilter,
+} from '../../../platform/storage/listed-file-name-filter.js';
 import type { CharacterFields, CharacterStore, CharacterSummaryRecord } from '../application/character-store.js';
 import {
   extractPngCharacterCard,
@@ -96,7 +101,11 @@ function toStoredCharacter(fields: CharacterFields, createdAt: string, updatedAt
   };
 }
 
-async function migrateLegacyPngCharacterCards(directory: string, entries: string[]): Promise<string[]> {
+async function migrateLegacyPngCharacterCards(
+  directory: string,
+  entries: string[],
+  isListed: ListedFileNameFilter,
+): Promise<string[]> {
   const jsonBaseNames = new Set(entries.filter(isJsonEntry).map(baseNameOf));
   const created: string[] = [];
 
@@ -104,6 +113,8 @@ async function migrateLegacyPngCharacterCards(directory: string, entries: string
     if (!entry.toLowerCase().endsWith('.png')) continue;
     const base = baseNameOf(entry);
     if (jsonBaseNames.has(base)) continue;
+    const jsonEntry = `${base}${JSON_EXTENSION}`;
+    if (!isListed(entry, jsonEntry)) continue;
 
     const filePath = path.join(directory, entry);
     let stats: Awaited<ReturnType<typeof fs.stat>>;
@@ -126,7 +137,6 @@ async function migrateLegacyPngCharacterCards(directory: string, entries: string
     }
 
     const savedAt = stats.mtime.toISOString();
-    const jsonEntry = `${base}${JSON_EXTENSION}`;
     await writeJsonFileAtomically(
       resolveContainedFilePath(directory, jsonEntry),
       toStoredCharacter(
@@ -148,17 +158,6 @@ async function migrateLegacyPngCharacterCards(directory: string, entries: string
   }
 
   return created;
-}
-
-function sanitizeBaseName(name: string): string {
-  const collapsed = name
-    .trim()
-    .replace(/[\\/:*?"<>|]+/gu, '_')
-    .replace(/\s+/gu, '_')
-    .replace(/\.{2,}/gu, '.')
-    .replace(/^\.+/u, '');
-  const trimmed = collapsed.length > 0 ? collapsed : 'character';
-  return trimmed.length > 80 ? trimmed.slice(0, 80) : trimmed;
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
@@ -210,6 +209,8 @@ function toSummaryRecord({ filePath: _filePath, ...summary }: CharacterFileEntry
 }
 
 export function createFileCharacterStore({ directory, logger }: FileCharacterStoreOptions): CharacterStore {
+  const isListed = createListedFileNameFilter({ directory, logger });
+
   function resolveCharacterFilePath(id: string): string {
     return resolveContainedFilePath(directory, id);
   }
@@ -259,11 +260,11 @@ export function createFileCharacterStore({ directory, logger }: FileCharacterSto
       throw error;
     }
 
-    const migrated = await migrateLegacyPngCharacterCards(directory, entries);
+    const migrated = await migrateLegacyPngCharacterCards(directory, entries, isListed);
     const summaries: CharacterFileEntry[] = [];
 
     for (const entry of [...entries, ...migrated]) {
-      if (!isJsonEntry(entry)) continue;
+      if (!isJsonEntry(entry) || !isListed(entry)) continue;
 
       const filePath = path.join(directory, entry);
       let stats: Awaited<ReturnType<typeof fs.stat>>;
@@ -364,7 +365,7 @@ export function createFileCharacterStore({ directory, logger }: FileCharacterSto
 
     async createCharacter(fields, savedAt) {
       await fs.mkdir(directory, { recursive: true });
-      const id = await generateUniqueId(directory, sanitizeBaseName(fields.name));
+      const id = await generateUniqueId(directory, fileBaseNameFrom(fields.name, 'character'));
       return writeCharacter(id, fields, savedAt);
     },
 

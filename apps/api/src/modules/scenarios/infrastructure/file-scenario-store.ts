@@ -5,14 +5,18 @@ import path from 'node:path';
 import type { ScenarioDetailDto, ScenarioSummaryDto } from '@immersion/contracts/scenarios';
 
 import { isErrnoCode } from '../../../platform/errno-code.js';
+import type { LogPort } from '../../../platform/logging/log-port.js';
 import { writeJsonFileAtomically } from '../../../platform/storage/atomic-file.js';
 import { resolveContainedFilePath } from '../../../platform/storage/contained-path.js';
+import { fileBaseNameFrom } from '../../../platform/storage/file-base-name.js';
+import { createListedFileNameFilter } from '../../../platform/storage/listed-file-name-filter.js';
 import type { ScenarioFields, ScenarioStore } from '../application/scenario-store.js';
 
 const FILE_EXTENSION = '.json';
 
 export interface FileScenarioStoreOptions {
   readonly directory: string;
+  readonly logger: LogPort;
 }
 
 interface StoredScenario {
@@ -57,17 +61,6 @@ function summaryFromStored(id: string, stored: StoredScenario, fallbackUpdatedAt
   };
 }
 
-function sanitizeBaseName(name: string): string {
-  const collapsed = name
-    .trim()
-    .replace(/[\\/:*?"<>|]+/gu, '_')
-    .replace(/\s+/gu, '_')
-    .replace(/\.{2,}/gu, '.')
-    .replace(/^\.+/u, '');
-  const trimmed = collapsed.length > 0 ? collapsed : 'scenario';
-  return trimmed.length > 80 ? trimmed.slice(0, 80) : trimmed;
-}
-
 async function generateUniqueId(directory: string, base: string): Promise<string> {
   const baseId = `${base}${FILE_EXTENSION}`;
   try {
@@ -92,7 +85,9 @@ function detailFromStored(id: string, stored: StoredScenario, fallbackUpdatedAt:
   };
 }
 
-export function createFileScenarioStore({ directory }: FileScenarioStoreOptions): ScenarioStore {
+export function createFileScenarioStore({ directory, logger }: FileScenarioStoreOptions): ScenarioStore {
+  const isListed = createListedFileNameFilter({ directory, logger });
+
   function resolveScenarioFilePath(id: string): string {
     return resolveContainedFilePath(directory, id);
   }
@@ -146,7 +141,7 @@ export function createFileScenarioStore({ directory }: FileScenarioStoreOptions)
 
       const summaries: ScenarioSummaryDto[] = [];
       for (const entry of entries) {
-        if (!entry.toLowerCase().endsWith('.json')) continue;
+        if (!entry.toLowerCase().endsWith('.json') || !isListed(entry)) continue;
         const filePath = path.join(directory, entry);
         let raw: string;
         let stats: Awaited<ReturnType<typeof fs.stat>>;
@@ -170,6 +165,7 @@ export function createFileScenarioStore({ directory }: FileScenarioStoreOptions)
     },
 
     async readScenarioDetail(id) {
+      if (!isListed(id)) return null;
       const filePath = resolveScenarioFilePath(id);
       let raw: string;
       let stats: Awaited<ReturnType<typeof fs.stat>>;
@@ -192,7 +188,7 @@ export function createFileScenarioStore({ directory }: FileScenarioStoreOptions)
 
     async createScenario(fields, savedAt) {
       await fs.mkdir(directory, { recursive: true });
-      const id = await generateUniqueId(directory, sanitizeBaseName(fields.name));
+      const id = await generateUniqueId(directory, fileBaseNameFrom(fields.name, 'scenario'));
       return writeScenario(id, fields, savedAt);
     },
 

@@ -528,21 +528,6 @@ describe('library CRUD routes', () => {
       expect(missingResponse.statusCode).toBe(404);
     });
 
-    it('reports a stored lorebook that breaks the response contract as a server error', async () => {
-      const worldsDir = path.join(api().dataRoot, 'worlds');
-      await fs.mkdir(worldsDir, { recursive: true });
-      await fs.writeFile(path.join(worldsDir, 'Mr..json'), JSON.stringify({ name: 'Mr.', entries: [] }), 'utf8');
-
-      const { app, logs } = api();
-      const response = await app.inject({ method: 'GET', url: '/api/lorebooks' });
-
-      expect(response.statusCode).toBe(500);
-      expect(response.json()).toEqual({ code: 'internal_error', message: 'Unexpected error.' });
-      expect(logs.lines).toContainEqual(
-        expect.objectContaining({ err: expect.objectContaining({ type: 'ZodError' }), level: 'error' }),
-      );
-    });
-
     it('rejects a lorebook body that is not JSON with 400 invalid_request and writes nothing', async () => {
       const { app, dataRoot } = api();
       const entriesBefore = await fs.readdir(dataRoot);

@@ -5,14 +5,18 @@ import path from 'node:path';
 import type { LorebookDetailDto, LorebookEntryDto, LorebookSummaryDto } from '@immersion/contracts/lorebooks';
 
 import { isErrnoCode } from '../../../platform/errno-code.js';
+import type { LogPort } from '../../../platform/logging/log-port.js';
 import { writeJsonFileAtomically } from '../../../platform/storage/atomic-file.js';
 import { resolveContainedFilePath } from '../../../platform/storage/contained-path.js';
+import { fileBaseNameFrom } from '../../../platform/storage/file-base-name.js';
+import { createListedFileNameFilter } from '../../../platform/storage/listed-file-name-filter.js';
 import type { LorebookFields, LorebookStore } from '../application/lorebook-store.js';
 
 const FILE_EXTENSION = '.json';
 
 export interface FileLorebookStoreOptions {
   readonly directory: string;
+  readonly logger: LogPort;
 }
 
 interface StoredLorebookEntry {
@@ -48,17 +52,6 @@ function countEntries(value: unknown): number {
   if (Array.isArray(value)) return value.length;
   if (value && typeof value === 'object') return Object.keys(value as Record<string, unknown>).length;
   return 0;
-}
-
-function sanitizeBaseName(name: string): string {
-  const collapsed = name
-    .trim()
-    .replace(/[\\/:*?"<>|]+/gu, '_')
-    .replace(/\s+/gu, '_')
-    .replace(/\.{2,}/gu, '.')
-    .replace(/^\.+/u, '');
-  const trimmed = collapsed.length > 0 ? collapsed : 'lorebook';
-  return trimmed.length > 80 ? trimmed.slice(0, 80) : trimmed;
 }
 
 async function generateUniqueId(directory: string, base: string): Promise<string> {
@@ -122,7 +115,9 @@ function detailFromStored(id: string, stored: StoredLorebook, fallbackUpdatedAt:
   };
 }
 
-export function createFileLorebookStore({ directory }: FileLorebookStoreOptions): LorebookStore {
+export function createFileLorebookStore({ directory, logger }: FileLorebookStoreOptions): LorebookStore {
+  const isListed = createListedFileNameFilter({ directory, logger });
+
   function resolveLorebookFilePath(id: string): string {
     return resolveContainedFilePath(directory, id);
   }
@@ -170,7 +165,7 @@ export function createFileLorebookStore({ directory }: FileLorebookStoreOptions)
 
       const summaries: LorebookSummaryDto[] = [];
       for (const entry of entries) {
-        if (!entry.toLowerCase().endsWith('.json')) continue;
+        if (!entry.toLowerCase().endsWith('.json') || !isListed(entry)) continue;
         const filePath = path.join(directory, entry);
         let raw: string;
         let stats: Awaited<ReturnType<typeof fs.stat>>;
@@ -201,6 +196,7 @@ export function createFileLorebookStore({ directory }: FileLorebookStoreOptions)
     },
 
     async readLorebookDetail(id) {
+      if (!isListed(id)) return null;
       const filePath = resolveLorebookFilePath(id);
       let raw: string;
       let stats: Awaited<ReturnType<typeof fs.stat>>;
@@ -223,7 +219,7 @@ export function createFileLorebookStore({ directory }: FileLorebookStoreOptions)
 
     async createLorebook(fields, savedAt) {
       await fs.mkdir(directory, { recursive: true });
-      const id = await generateUniqueId(directory, sanitizeBaseName(fields.name));
+      const id = await generateUniqueId(directory, fileBaseNameFrom(fields.name, 'lorebook'));
       return writeLorebook(id, fields, savedAt);
     },
 

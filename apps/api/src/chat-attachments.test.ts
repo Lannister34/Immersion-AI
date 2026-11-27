@@ -370,4 +370,82 @@ describe('chat attachments', () => {
     expect(deleted.statusCode).toBe(204);
     await expect(fs.access(attachmentsDir)).rejects.toThrow();
   });
+
+  it('opens a stored chat whose message names an attachment that is not a plain file name, leaving that one out', async () => {
+    const { app, dataRoot } = api();
+    const chatsDirectory = path.join(dataRoot, 'chats', '_no_character_');
+    await fs.mkdir(chatsDirectory, { recursive: true });
+    const attachments = [
+      { file: 'kept.png', mime: 'image/png' },
+      { file: 'trailing-dot.png.', mime: 'image/png' },
+      { file: 'nested/inner.png', mime: 'image/png' },
+      { file: `tab\tname.png`, mime: 'image/png' },
+    ];
+    const lines = [
+      { chat_metadata: { createdAt: '2026-01-01T00:00:00.000Z', title: 'Чужие вложения' }, user_name: 'Тестер' },
+      { extra: { attachments }, is_user: true, mes: 'Смотри.', send_date: '2026-01-01T00:00:01.000Z' },
+    ];
+    await fs.writeFile(
+      path.join(chatsDirectory, 'foreign-attachments.jsonl'),
+      `${lines.map((line) => JSON.stringify(line)).join('\n')}\n`,
+      'utf8',
+    );
+
+    const response = await app.inject({ method: 'GET', url: '/api/chats/foreign-attachments' });
+    const reread = await app.inject({ method: 'GET', url: '/api/chats/foreign-attachments' });
+
+    expect(response.statusCode).toBe(200);
+    expect(reread.statusCode).toBe(200);
+    const session = GetChatSessionResponseSchema.parse(response.json());
+    expect(session.messages.map((message) => message.attachments.map((attachment) => attachment.id))).toEqual([
+      ['kept.png'],
+    ]);
+    expect(api().logs.lines.filter((line) => line.level === 'warn')).toEqual([
+      expect.objectContaining({ chatId: 'foreign-attachments', fileName: 'trailing-dot.png.' }),
+      expect.objectContaining({ chatId: 'foreign-attachments', fileName: 'nested/inner.png' }),
+      expect.objectContaining({ chatId: 'foreign-attachments', fileName: 'tab\tname.png' }),
+    ]);
+  });
+
+  it('branches a stored chat whose message names an attachment that is not a plain file name, copying only the valid one', async () => {
+    const { app, dataRoot } = api();
+    const chatsDirectory = path.join(dataRoot, 'chats', '_no_character_');
+    await fs.mkdir(path.join(chatsDirectory, 'foreign-source.files'), { recursive: true });
+    await fs.writeFile(path.join(chatsDirectory, 'foreign-source.files', 'kept.png'), buildPng());
+    const attachments = [
+      { file: 'kept.png', mime: 'image/png' },
+      { file: 'trailing-dot.png.', mime: 'image/png' },
+      { file: 'nested/inner.png', mime: 'image/png' },
+    ];
+    const lines = [
+      { chat_metadata: { createdAt: '2026-01-01T00:00:00.000Z', title: 'Чужие вложения' }, user_name: 'Тестер' },
+      { extra: { attachments }, is_user: true, mes: 'Смотри.', send_date: '2026-01-01T00:00:01.000Z' },
+    ];
+    await fs.writeFile(
+      path.join(chatsDirectory, 'foreign-source.jsonl'),
+      `${lines.map((line) => JSON.stringify(line)).join('\n')}\n`,
+      'utf8',
+    );
+
+    const branched = await app.inject({
+      method: 'POST',
+      url: '/api/chats/foreign-source/branch',
+      payload: { throughMessageIndex: 1 },
+    });
+
+    expect(branched.statusCode).toBe(201);
+    const branch = BranchChatResponseSchema.parse(branched.json()).chat;
+    const session = GetChatSessionResponseSchema.parse(
+      (await app.inject({ method: 'GET', url: `/api/chats/${branch.id}` })).json(),
+    );
+    expect(session.messages.map((message) => message.attachments.map((attachment) => attachment.id))).toEqual([
+      ['kept.png'],
+    ]);
+    expect(await fs.readdir(path.join(chatsDirectory, `${branch.id}.files`))).toEqual(['kept.png']);
+    expect(
+      api()
+        .logs.lines.filter((line) => line.level === 'warn' && line.chatId === 'foreign-source')
+        .map((line) => line.fileName),
+    ).toEqual(['trailing-dot.png.', 'nested/inner.png']);
+  });
 });

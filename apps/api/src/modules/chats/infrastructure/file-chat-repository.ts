@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { ChatGenerationSettingsDtoSchema } from '@immersion/contracts/chats';
+import { isPlainFileName } from '@immersion/contracts/common';
 
 import type { KeyedSerialQueue } from '../../../platform/concurrency/keyed-serial-queue.js';
 import { isErrnoCode } from '../../../platform/errno-code.js';
@@ -262,7 +263,12 @@ function parseStoredChatLine(line: string, filePath: string, lineNumber: number)
   } satisfies StoredChatLine;
 }
 
-function getStoredAttachments(line: StoredChatLine): ChatMessageAttachmentRecord[] {
+type SkippedAttachmentListener = (fileName: string) => void;
+
+function getStoredAttachments(
+  line: StoredChatLine,
+  onSkippedAttachment: SkippedAttachmentListener,
+): ChatMessageAttachmentRecord[] {
   const extra = line.extra;
   if (!extra || typeof extra !== 'object' || Array.isArray(extra)) {
     return [];
@@ -286,17 +292,27 @@ function getStoredAttachments(line: StoredChatLine): ChatMessageAttachmentRecord
       return [];
     }
 
+    if (!isPlainFileName(file)) {
+      onSkippedAttachment(file);
+      return [];
+    }
+
     return [{ id: file, mimeType: mime } satisfies ChatMessageAttachmentRecord];
   });
 }
 
-function collectStoredAttachmentIds(messageLines: readonly string[], filePath: string, firstLineNumber: number) {
+function collectStoredAttachmentIds(
+  messageLines: readonly string[],
+  filePath: string,
+  firstLineNumber: number,
+  onSkippedAttachment: SkippedAttachmentListener,
+) {
   const attachmentIds = new Set<string>();
 
   messageLines.forEach((line, index) => {
     const storedLine = parseStoredChatLine(line, filePath, firstLineNumber + index);
 
-    for (const attachment of storedLine ? getStoredAttachments(storedLine) : []) {
+    for (const attachment of storedLine ? getStoredAttachments(storedLine, onSkippedAttachment) : []) {
       attachmentIds.add(attachment.id);
     }
   });
@@ -515,7 +531,11 @@ export function parseChatTranscriptLeniently(
   return { header, messages, skippedLines };
 }
 
-async function readChatFile(filePath: string, chatId: string): Promise<ChatSessionRecord | null> {
+async function readChatFile(
+  filePath: string,
+  chatId: string,
+  onSkippedAttachment: SkippedAttachmentListener,
+): Promise<ChatSessionRecord | null> {
   let rawContent: string;
   let stats: Awaited<ReturnType<typeof fs.stat>>;
 
@@ -549,7 +569,7 @@ async function readChatFile(filePath: string, chatId: string): Promise<ChatSessi
 
     return [
       {
-        attachments: getStoredAttachments(storedLine),
+        attachments: getStoredAttachments(storedLine, onSkippedAttachment),
         id: `${chatId}:${index + 1}`,
         reasoning: getStoredReasoning(storedLine),
         role: getMessageRole(storedLine),
@@ -603,6 +623,7 @@ export class FileChatRepository implements ChatRepository {
   private readonly chatsDirectory: string;
   private readonly logger: LogPort;
   private readonly writeQueue: KeyedSerialQueue<string>;
+  private readonly warnedAttachments = new Set<string>();
 
   constructor({ chatsDirectory, logger, writeQueue }: FileChatRepositoryDependencies) {
     this.chatsDirectory = chatsDirectory;
@@ -742,7 +763,12 @@ export class FileChatRepository implements ChatRepository {
       };
       const nextLines = [JSON.stringify(newHeader), ...keptMessageLines];
       const newFilePath = this.chatFilePath(input.newChatId);
-      const attachmentIds = collectStoredAttachmentIds(keptMessageLines, sourceFilePath, sourceHeader ? 2 : 1);
+      const attachmentIds = collectStoredAttachmentIds(
+        keptMessageLines,
+        sourceFilePath,
+        sourceHeader ? 2 : 1,
+        (fileName) => this.warnSkippedAttachment(input.sourceChatId, fileName),
+      );
 
       await fs.mkdir(this.chatsDirectory, { recursive: true });
       await this.linkBranchAttachments(input.sourceChatId, input.newChatId, attachmentIds);
@@ -1341,6 +1367,17 @@ export class FileChatRepository implements ChatRepository {
   }
 
   private readChat(chatId: string): Promise<ChatSessionRecord | null> {
-    return readChatFile(this.chatFilePath(chatId), chatId);
+    return readChatFile(this.chatFilePath(chatId), chatId, (fileName) => this.warnSkippedAttachment(chatId, fileName));
+  }
+
+  private warnSkippedAttachment(chatId: string, fileName: string): void {
+    const key = JSON.stringify([chatId, fileName]);
+    if (this.warnedAttachments.has(key)) return;
+
+    this.warnedAttachments.add(key);
+    this.logger.warn(
+      { chatId, fileName },
+      'Chat read: left out a stored attachment whose name is not a plain file name',
+    );
   }
 }
