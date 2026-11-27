@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { beforeEach, describe, expect, it, onTestFinished } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createKeyedSerialQueue } from '../../../platform/concurrency/keyed-serial-queue.js';
 import { type CapturingLogger, createCapturingLogger } from '../../../test-support/capturing-logger.js';
@@ -407,6 +407,233 @@ describe('FileChatRepository', () => {
         title: 'Orphan (ветка)',
       }),
     ).resolves.toBeNull();
+  });
+
+  describe('forking a chat with images', () => {
+    const SOURCE_CHAT_ID = 'source-with-images';
+    const BRANCH_CHAT_ID = 'branch-with-images';
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    function attachmentsDirectoryOf(chatId: string) {
+      return path.join(chatsDirectory, `${chatId}.files`);
+    }
+
+    function pngAttachment(id: string) {
+      return { id, mimeType: 'image/png' as const };
+    }
+
+    async function createSourceChat(
+      repository: FileChatRepository,
+      storedFiles: Readonly<Record<string, string>>,
+      messageAttachmentIds: readonly (readonly string[])[],
+    ) {
+      await repository.createGenericChat({
+        id: SOURCE_CHAT_ID,
+        title: 'Картинки',
+        userName: 'Tester',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      });
+      for (const [attachmentId, content] of Object.entries(storedFiles)) {
+        await repository.writeChatAttachment(SOURCE_CHAT_ID, attachmentId, Buffer.from(content));
+      }
+      await repository.appendGenericChatMessages(
+        SOURCE_CHAT_ID,
+        messageAttachmentIds.map((attachmentIds, index) => ({
+          attachments: attachmentIds.map(pngAttachment),
+          content: `message ${index + 1}`,
+          createdAt: `2026-01-01T00:00:0${index + 1}.000Z`,
+          role: index % 2 === 0 ? 'user' : 'assistant',
+        })),
+      );
+    }
+
+    function forkThrough(repository: FileChatRepository, throughIndex: number) {
+      return repository.forkGenericChat({
+        createdAt: '2026-01-01T01:00:00.000Z',
+        newChatId: BRANCH_CHAT_ID,
+        sourceChatId: SOURCE_CHAT_ID,
+        throughIndex,
+        title: 'Картинки (ветка)',
+      });
+    }
+
+    function warningsAbout(attachmentId: string) {
+      return logs.lines.filter((line) => line.level === 'warn' && Object.values(line).includes(attachmentId));
+    }
+
+    it('forks a chat together with the attachment files its kept messages reference', async () => {
+      const repository = createRepository();
+      await createSourceChat(repository, { 'a.png': 'first image', 'b.png': 'second image', 'tail.png': 'tail' }, [
+        ['a.png'],
+        ['a.png', 'b.png'],
+        ['tail.png'],
+      ]);
+
+      await expect(forkThrough(repository, 2)).resolves.toMatchObject({ id: BRANCH_CHAT_ID });
+
+      expect((await fs.readdir(attachmentsDirectoryOf(BRANCH_CHAT_ID))).sort()).toEqual(['a.png', 'b.png']);
+      expect((await fs.stat(path.join(attachmentsDirectoryOf(BRANCH_CHAT_ID), 'a.png'))).nlink).toBe(2);
+      const branch = await repository.getGenericChatSession(BRANCH_CHAT_ID);
+      expect(branch?.messages.map((message) => message.attachments.map((attachment) => attachment.id))).toEqual([
+        ['a.png'],
+        ['a.png', 'b.png'],
+      ]);
+
+      await expect(repository.deleteGenericChat(SOURCE_CHAT_ID)).resolves.toBe(true);
+
+      expect((await repository.readChatAttachment(BRANCH_CHAT_ID, 'a.png'))?.toString()).toBe('first image');
+      expect((await repository.readChatAttachment(BRANCH_CHAT_ID, 'b.png'))?.toString()).toBe('second image');
+    });
+
+    it('keeps the source images when the branch is deleted', async () => {
+      const repository = createRepository();
+      await createSourceChat(repository, { 'a.png': 'first image' }, [['a.png']]);
+      await forkThrough(repository, 1);
+
+      await expect(repository.deleteGenericChat(BRANCH_CHAT_ID)).resolves.toBe(true);
+
+      expect((await repository.readChatAttachment(SOURCE_CHAT_ID, 'a.png'))?.toString()).toBe('first image');
+    });
+
+    it('copies the attachment files when the filesystem cannot hard-link them', async () => {
+      const repository = createRepository();
+      await createSourceChat(repository, { 'a.png': 'first image' }, [['a.png']]);
+      vi.spyOn(fs, 'link').mockRejectedValue(Object.assign(new Error('EXDEV: link'), { code: 'EXDEV' }));
+
+      await forkThrough(repository, 1);
+      await repository.deleteGenericChat(SOURCE_CHAT_ID);
+
+      expect((await fs.stat(path.join(attachmentsDirectoryOf(BRANCH_CHAT_ID), 'a.png'))).nlink).toBe(1);
+      expect((await repository.readChatAttachment(BRANCH_CHAT_ID, 'a.png'))?.toString()).toBe('first image');
+    });
+
+    it('forks a chat whose source attachment is already missing and logs the dangling reference', async () => {
+      const repository = createRepository();
+      await createSourceChat(repository, { 'a.png': 'first image' }, [['a.png', 'missing.png']]);
+
+      await expect(forkThrough(repository, 1)).resolves.toMatchObject({ id: BRANCH_CHAT_ID });
+
+      expect(await fs.readdir(attachmentsDirectoryOf(BRANCH_CHAT_ID))).toEqual(['a.png']);
+      const branch = await repository.getGenericChatSession(BRANCH_CHAT_ID);
+      expect(branch?.messages[0]?.attachments.map((attachment) => attachment.id)).toEqual(['a.png', 'missing.png']);
+      expect(warningsAbout('missing.png')).toEqual([
+        expect.objectContaining({
+          chatId: SOURCE_CHAT_ID,
+          msg: 'Branch source attachment is missing; the branch keeps a dangling reference',
+        }),
+      ]);
+    });
+
+    it('forks a chat without images without creating an attachment folder', async () => {
+      const repository = createRepository();
+      await createSourceChat(repository, {}, [[], []]);
+
+      await forkThrough(repository, 2);
+
+      expect((await fs.readdir(chatsDirectory)).sort()).toEqual([`${BRANCH_CHAT_ID}.jsonl`, `${SOURCE_CHAT_ID}.jsonl`]);
+    });
+
+    it.each([
+      '../outside.png',
+      '..\\outside.png',
+      'nested/inner.png',
+      'C:outside.png',
+      '.hidden.png',
+      'x\u0000.png',
+      `${'ж'.repeat(130)}.png`,
+      `${'a'.repeat(300)}.png`,
+    ])('forks a chat whose stored attachment name %j is not a plain file name, and writes nothing outside the branch folder', async (hostileId) => {
+      const repository = createRepository();
+      await fs.mkdir(chatsDirectory, { recursive: true });
+      await fs.writeFile(path.join(chatsDirectory, 'outside.png'), 'planted');
+      await createSourceChat(repository, { 'фото 1.png': 'plain image' }, [['фото 1.png', hostileId]]);
+      const entriesBefore = (await fs.readdir(chatsDirectory)).sort();
+
+      await expect(forkThrough(repository, 1)).resolves.toMatchObject({ id: BRANCH_CHAT_ID });
+
+      expect(await fs.readdir(attachmentsDirectoryOf(BRANCH_CHAT_ID))).toEqual(['фото 1.png']);
+      expect((await fs.readdir(chatsDirectory)).sort()).toEqual(
+        [...entriesBefore, `${BRANCH_CHAT_ID}.files`, `${BRANCH_CHAT_ID}.jsonl`].sort(),
+      );
+      await expect(fs.readFile(path.join(chatsDirectory, 'outside.png'), 'utf8')).resolves.toBe('planted');
+      expect(warningsAbout(hostileId)).not.toEqual([]);
+    });
+
+    it('forks a chat whose stored attachment name is longer than the filesystem allows', async () => {
+      const repository = createRepository();
+      const longId = `${'ж'.repeat(130)}.png`;
+      await createSourceChat(repository, { 'a.png': 'first image' }, [['a.png', longId]]);
+      const realLink = fs.link;
+      vi.spyOn(fs, 'link').mockImplementation(async (existingPath, newPath) =>
+        path.basename(String(newPath)) === longId
+          ? Promise.reject(Object.assign(new Error('ENAMETOOLONG: link'), { code: 'ENAMETOOLONG' }))
+          : realLink(existingPath, newPath),
+      );
+
+      await expect(forkThrough(repository, 1)).resolves.toMatchObject({ id: BRANCH_CHAT_ID });
+
+      expect(await fs.readdir(attachmentsDirectoryOf(BRANCH_CHAT_ID))).toEqual(['a.png']);
+      expect(warningsAbout(longId)).toEqual([
+        expect.objectContaining({
+          msg: 'Branch source attachment name is not a plain file name; the branch keeps a dangling reference',
+        }),
+      ]);
+    });
+
+    it('forks a chat whose messages name one image in two letter cases', async () => {
+      const repository = createRepository();
+      await createSourceChat(repository, { 'Photo.png': 'image' }, [['Photo.png'], ['photo.png']]);
+
+      await expect(forkThrough(repository, 2)).resolves.toMatchObject({ id: BRANCH_CHAT_ID });
+
+      expect((await repository.readChatAttachment(BRANCH_CHAT_ID, 'Photo.png'))?.toString()).toBe('image');
+    });
+
+    it('removes the branch attachment folder and creates no branch when an image cannot be linked', async () => {
+      const repository = createRepository();
+      await createSourceChat(repository, { 'a.png': 'first image', 'b.png': 'second image' }, [['a.png', 'b.png']]);
+      const realLink = fs.link;
+      vi.spyOn(fs, 'link').mockImplementation(async (existingPath, newPath) =>
+        path.basename(String(newPath)) === 'b.png'
+          ? Promise.reject(Object.assign(new Error('EIO: link'), { code: 'EIO' }))
+          : realLink(existingPath, newPath),
+      );
+
+      await expect(forkThrough(repository, 1)).rejects.toMatchObject({ code: 'EIO' });
+
+      expect((await fs.readdir(chatsDirectory)).sort()).toEqual([`${SOURCE_CHAT_ID}.files`, `${SOURCE_CHAT_ID}.jsonl`]);
+      expect((await fs.readdir(attachmentsDirectoryOf(SOURCE_CHAT_ID))).sort()).toEqual(['a.png', 'b.png']);
+    });
+
+    it('removes the branch attachment folder when the branch transcript cannot be written', async () => {
+      const repository = createRepository();
+      await createSourceChat(repository, { 'a.png': 'first image' }, [['a.png']]);
+      const realRename = fs.rename;
+      vi.spyOn(fs, 'rename').mockImplementation(async (oldPath, newPath) =>
+        path.basename(String(newPath)) === `${BRANCH_CHAT_ID}.jsonl`
+          ? Promise.reject(Object.assign(new Error('ENOSPC: rename'), { code: 'ENOSPC' }))
+          : realRename(oldPath, newPath),
+      );
+
+      await expect(forkThrough(repository, 1)).rejects.toMatchObject({ code: 'ENOSPC' });
+
+      expect((await fs.readdir(chatsDirectory)).sort()).toEqual([`${SOURCE_CHAT_ID}.files`, `${SOURCE_CHAT_ID}.jsonl`]);
+    });
+
+    it('refuses to fork into an attachment folder it did not create and leaves that folder alone', async () => {
+      const repository = createRepository();
+      await createSourceChat(repository, { 'a.png': 'first image' }, [['a.png']]);
+      await fs.mkdir(attachmentsDirectoryOf(BRANCH_CHAT_ID));
+      await fs.writeFile(path.join(attachmentsDirectoryOf(BRANCH_CHAT_ID), 'kept.png'), 'not ours');
+
+      await expect(forkThrough(repository, 1)).rejects.toMatchObject({ code: 'EEXIST' });
+
+      expect(await fs.readdir(attachmentsDirectoryOf(BRANCH_CHAT_ID))).toEqual(['kept.png']);
+      await expect(fs.access(resolveChatFilePath(BRANCH_CHAT_ID))).rejects.toMatchObject({ code: 'ENOENT' });
+    });
   });
 
   it('deletes a chat file and reports true', async () => {

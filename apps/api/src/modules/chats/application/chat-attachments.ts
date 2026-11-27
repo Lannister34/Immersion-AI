@@ -8,6 +8,7 @@ import {
 } from '@immersion/contracts/chats';
 import { IMAGE_UPLOAD_MAX_BYTES, IMAGE_UPLOAD_MAX_MEGABYTES } from '@immersion/contracts/common';
 
+import type { LogPort } from '../../../platform/logging/log-port.js';
 import { ChatNotFoundError } from './append-chat-messages.js';
 import type { ChatAttachmentMimeTypeRecord, ChatMessageAttachmentRecord } from './chat-records.js';
 import type { ChatRepository } from './chat-repository.js';
@@ -72,6 +73,10 @@ function detectImageMimeType(bytes: Buffer): ChatAttachmentMimeTypeRecord | null
 
 export interface ChatAttachmentReaderDependencies {
   readonly chatRepository: Pick<ChatRepository, 'readChatAttachment'>;
+}
+
+export interface ChatAttachmentDataUrlDependencies extends ChatAttachmentReaderDependencies {
+  readonly logger: LogPort;
 }
 
 export interface UploadChatAttachmentDependencies {
@@ -176,11 +181,12 @@ export async function resolveChatAttachments(
 
 export async function readChatAttachmentDataUrl(
   { attachmentId, chatId }: ChatAttachmentQuery,
-  { chatRepository }: ChatAttachmentReaderDependencies,
+  { chatRepository, logger }: ChatAttachmentDataUrlDependencies,
 ): Promise<string | null> {
   const bytes = await chatRepository.readChatAttachment(chatId, attachmentId);
 
   if (!bytes) {
+    logger.warn({ attachmentId, chatId }, 'Chat attachment file is missing; the image is left out of the prompt');
     return null;
   }
 

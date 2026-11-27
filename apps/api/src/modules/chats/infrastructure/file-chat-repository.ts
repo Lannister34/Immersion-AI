@@ -7,7 +7,8 @@ import type { KeyedSerialQueue } from '../../../platform/concurrency/keyed-seria
 import { isErrnoCode } from '../../../platform/errno-code.js';
 import type { LogPort } from '../../../platform/logging/log-port.js';
 import { writeFileAtomically } from '../../../platform/storage/atomic-file.js';
-import { resolveContainedFilePath } from '../../../platform/storage/contained-path.js';
+import { resolveContainedFilePath, UnsafeRepositoryFileIdError } from '../../../platform/storage/contained-path.js';
+import { linkOrCopyFile } from '../../../platform/storage/link-or-copy-file.js';
 import { readStoredReplyTokenLimit } from '../../settings/index.js';
 import {
   ChatLastMessageChangedError,
@@ -287,6 +288,28 @@ function getStoredAttachments(line: StoredChatLine): ChatMessageAttachmentRecord
 
     return [{ id: file, mimeType: mime } satisfies ChatMessageAttachmentRecord];
   });
+}
+
+function collectStoredAttachmentIds(messageLines: readonly string[], filePath: string, firstLineNumber: number) {
+  const attachmentIds = new Set<string>();
+
+  messageLines.forEach((line, index) => {
+    const storedLine = parseStoredChatLine(line, filePath, firstLineNumber + index);
+
+    for (const attachment of storedLine ? getStoredAttachments(storedLine) : []) {
+      attachmentIds.add(attachment.id);
+    }
+  });
+
+  return [...attachmentIds];
+}
+
+const UNUSABLE_FILE_NAME_CODES = ['ERR_INVALID_ARG_VALUE', 'EINVAL', 'ENAMETOOLONG'] as const;
+
+function isUnusableFileName(error: unknown): boolean {
+  return (
+    error instanceof UnsafeRepositoryFileIdError || UNUSABLE_FILE_NAME_CODES.some((code) => isErrnoCode(error, code))
+  );
 }
 
 function getStoredReasoning(line: StoredChatLine): string | null {
@@ -719,9 +742,19 @@ export class FileChatRepository implements ChatRepository {
       };
       const nextLines = [JSON.stringify(newHeader), ...keptMessageLines];
       const newFilePath = this.chatFilePath(input.newChatId);
+      const attachmentIds = collectStoredAttachmentIds(keptMessageLines, sourceFilePath, sourceHeader ? 2 : 1);
 
       await fs.mkdir(this.chatsDirectory, { recursive: true });
-      await writeFileAtomically(newFilePath, `${nextLines.join('\n')}\n`);
+      await this.linkBranchAttachments(input.sourceChatId, input.newChatId, attachmentIds);
+
+      try {
+        await writeFileAtomically(newFilePath, `${nextLines.join('\n')}\n`);
+      } catch (error) {
+        if (attachmentIds.length > 0) {
+          await this.removeUnclaimedBranchAttachments(input.newChatId);
+        }
+        throw error;
+      }
 
       const newSession = await this.readChat(input.newChatId);
       return newSession?.chat ?? null;
@@ -1245,6 +1278,66 @@ export class FileChatRepository implements ChatRepository {
 
   private chatAttachmentPath(chatId: string, attachmentId: string): string {
     return resolveContainedFilePath(this.chatAttachmentsDirectory(chatId), attachmentId);
+  }
+
+  private async linkBranchAttachments(
+    sourceChatId: string,
+    newChatId: string,
+    attachmentIds: readonly string[],
+  ): Promise<void> {
+    if (attachmentIds.length === 0) {
+      return;
+    }
+
+    await fs.mkdir(this.chatAttachmentsDirectory(newChatId));
+
+    try {
+      for (const attachmentId of attachmentIds) {
+        await this.linkBranchAttachment(sourceChatId, newChatId, attachmentId);
+      }
+    } catch (error) {
+      await this.removeUnclaimedBranchAttachments(newChatId);
+      throw error;
+    }
+  }
+
+  private async linkBranchAttachment(sourceChatId: string, newChatId: string, attachmentId: string): Promise<void> {
+    try {
+      await linkOrCopyFile(
+        this.chatAttachmentPath(sourceChatId, attachmentId),
+        this.chatAttachmentPath(newChatId, attachmentId),
+      );
+    } catch (error) {
+      if (isErrnoCode(error, 'EEXIST')) {
+        return;
+      }
+      if (isErrnoCode(error, 'ENOENT')) {
+        this.logger.warn(
+          { attachmentId, chatId: sourceChatId },
+          'Branch source attachment is missing; the branch keeps a dangling reference',
+        );
+        return;
+      }
+      if (isUnusableFileName(error)) {
+        this.logger.warn(
+          { attachmentId, chatId: sourceChatId },
+          'Branch source attachment name is not a plain file name; the branch keeps a dangling reference',
+        );
+        return;
+      }
+      throw error;
+    }
+  }
+
+  private async removeUnclaimedBranchAttachments(newChatId: string): Promise<void> {
+    try {
+      await fs.rm(this.chatAttachmentsDirectory(newChatId), { force: true, recursive: true });
+    } catch (error) {
+      this.logger.warn(
+        { chatId: newChatId, err: error },
+        'Could not remove the attachment folder of a branch that was not created',
+      );
+    }
   }
 
   private readChat(chatId: string): Promise<ChatSessionRecord | null> {
